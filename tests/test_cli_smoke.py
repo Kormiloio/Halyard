@@ -3,6 +3,7 @@
 These do not exercise behavior — that's what the v0 task tests will do. They
 just guarantee that the CLI app constructs and exposes the expected commands.
 """
+
 from __future__ import annotations
 
 from typer.testing import CliRunner
