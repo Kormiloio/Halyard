@@ -5,10 +5,18 @@ conventions so each change proposal doesn't have to re-explain them.
 
 ## Mission
 
-Halyard is a plain-text, agent-native financial OS for freelancers and
-one-person businesses. Time, expenses, clients, projects, and invoices live
-as plain-text files on the user's machine. An AI agent (Claude) reads and
-writes those files on the user's behalf.
+Halyard is AI work intelligence infrastructure. It captures where AI work
+happens — time, tokens, models, cost, project attribution — and turns that
+data into actionable intelligence for individuals and organizations alike.
+
+For the solo developer or freelancer: time, AI spend, and invoices as plain
+text on your machine, operated by Claude. For engineering teams and
+enterprises: unified visibility into AI investment, productivity, and cost
+allocation across the organization.
+
+The individual experience is the entry point. The enterprise layer is
+optional, additive, and built on the same open data format. An AI agent
+(Claude) reads and writes the files on the user's behalf at every tier.
 
 ## Non-negotiables
 
@@ -41,10 +49,11 @@ my-business/
 ├── halyard.toml          # business name, currency, invoice counter
 ├── clients.toml          # array of clients
 ├── projects.toml         # array of projects (linked to client_slug)
-├── time.timeclock        # hledger timeclock format
-├── ledger.beancount      # Beancount ledger (added in v1)
+├── time.timeclock        # hledger timeclock format (human time)
+├── ai-sessions.log       # AI usage events: tokens, model, cost (added in v1)
+├── ledger.beancount      # Beancount ledger (added in v2)
 ├── invoices/             # generated invoice .md and .pdf files
-├── expenses/             # raw bank/receipt CSVs (added in v1)
+├── expenses/             # raw bank/receipt CSVs (added in v2)
 ├── templates/            # optional user overrides
 │   └── invoice.md.j2
 └── .gitignore
@@ -52,6 +61,10 @@ my-business/
 
 Per-user agent state (skills, API keys, active timer) lives in
 `~/.halyard/`, not in the project folder.
+
+`ai-sessions.log` is append-only, plain text, open format — the same
+local-first guarantee as `time.timeclock`. The cloud sync and enterprise
+layers read from this file; they do not replace it.
 
 ## Stack defaults
 

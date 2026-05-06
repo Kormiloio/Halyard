@@ -22,6 +22,7 @@ def test_init_creates_all_files(tmp_path: Path, monkeypatch: object) -> None:
     assert (tmp_path / "clients.toml").exists()
     assert (tmp_path / "projects.toml").exists()
     assert (tmp_path / "time.timeclock").exists()
+    assert (tmp_path / "ai-sessions.log").exists()
     assert (tmp_path / "invoices").is_dir()
     assert (tmp_path / ".gitignore").exists()
 
@@ -42,7 +43,7 @@ def test_init_prints_next_steps(tmp_path: Path, monkeypatch: object) -> None:
 
     assert "halyard.toml" in result.output
     assert "clients.toml" in result.output
-    assert "halyard log" in result.output
+    assert "halyard" in result.output
 
 
 def test_init_existing_project_exits_nonzero(tmp_path: Path, monkeypatch: object) -> None:
