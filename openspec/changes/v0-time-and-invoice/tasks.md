@@ -18,12 +18,12 @@ task, update both the code and tick the box here.
        `TimeclockEntry`, `Invoice`
 - [ ] 2.2 TOML readers/writers for `halyard.toml`, `clients.toml`,
        `projects.toml` (round-trip safe; preserves comments where possible)
-- [ ] 2.3 Implement `halyard init` — creates the full project layout from
+- [x] 2.3 Implement `halyard init` — creates the full project layout from
        sensible defaults
 
 ## 3. Time tracking
 
-- [ ] 3.1 Implement `halyard start <slug>` and `halyard stop`, including the
+- [x] 3.1 Implement `halyard start <slug>` and `halyard stop`, including the
        `~/.halyard/active` state file
 - [ ] 3.2 Implement `halyard log <text>`: send to Claude, render the
        proposal, prompt for approval, append on confirm
