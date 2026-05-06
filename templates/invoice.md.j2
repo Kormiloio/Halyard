@@ -1,0 +1,43 @@
+{# Default Halyard invoice template.
+   Rendered to markdown, then converted to PDF via typst.
+   Users can override this by creating templates/invoice.md.j2 in their
+   project directory. -#}
+---
+invoice_number: {{ invoice.invoice_number }}
+client_slug: {{ invoice.client_slug }}
+issue_date: {{ invoice.issue_date }}
+due_date: {{ invoice.due_date }}
+currency: {{ invoice.currency }}
+total: {{ "%.2f"|format(invoice.total) }}
+---
+
+# Invoice {{ invoice.invoice_number }}
+
+**{{ business.name }}**
+Issued: {{ invoice.issue_date }}
+Due: {{ invoice.due_date }}
+
+## Bill to
+
+**{{ client.name }}**
+{%- if client.address %}
+{{ client.address }}
+{%- endif %}
+{%- if client.email %}
+{{ client.email }}
+{%- endif %}
+
+## Line items
+
+| Description | Hours | Rate | Amount |
+|---|---:|---:|---:|
+{%- for item in invoice.line_items %}
+| {{ item.description }} | {{ "%.2f"|format(item.hours) }} | {{ invoice.currency }} {{ "%.2f"|format(item.rate) }} | {{ invoice.currency }} {{ "%.2f"|format(item.amount) }} |
+{%- endfor %}
+
+**Total: {{ invoice.currency }} {{ "%.2f"|format(invoice.total) }}**
+
+---
+
+Payable within {{ (invoice.due_date - invoice.issue_date).days }} days.
+Thank you for your business.
