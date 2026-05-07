@@ -13,27 +13,27 @@ Implementation checklist for v2 — AI Work Ledger.
 
 ## 2. Cost allocation
 
-- [ ] 2.1 Implement direct API cost aggregation from `ai-sessions.log`.
-- [ ] 2.2 Implement credit cost conversion when configured exchange rates exist.
-- [ ] 2.3 Implement seat allocation by active minutes.
-- [ ] 2.4 Implement seat allocation by session count.
-- [ ] 2.5 Mark allocated and inferred costs distinctly in report data.
+- [x] 2.1 Implement direct API cost aggregation from `ai-sessions.log`.
+- [x] 2.2 Implement credit cost conversion when configured exchange rates exist.
+- [x] 2.3 Implement seat allocation by active minutes.
+- [x] 2.4 Implement seat allocation by session count.
+- [x] 2.5 Mark allocated and inferred costs distinctly in report data.
 
 ## 3. Attribution
 
-- [ ] 3.1 Join AI sessions to project records through `project=client:project`.
-- [ ] 3.2 Detect unattributed sessions and surface them in reports.
-- [ ] 3.3 Infer attribution from overlapping `time.timeclock` windows.
+- [x] 3.1 Join AI sessions to project records through `project=client:project`.
+- [x] 3.2 Detect unattributed sessions and surface them in reports.
+- [x] 3.3 Infer attribution from overlapping `time.timeclock` windows.
 - [x] 3.4 Add a confirmation flow for inferred attribution before writing any
       corrections.
 
 ## 4. Combined reporting
 
-- [ ] 4.1 Extend `halyard report` with project/client/date filters.
-- [ ] 4.2 Show human hours and AI usage in one project summary.
-- [ ] 4.3 Show direct API cost, allocated plan cost, and total AI cost.
-- [ ] 4.4 Show breakdowns by tool and model.
-- [ ] 4.5 Add tests for empty plans, direct API costs, seat allocation, credits,
+- [x] 4.1 Extend `halyard report` with project/client/date filters.
+- [x] 4.2 Show human hours and AI usage in one project summary.
+- [x] 4.3 Show direct API cost, allocated plan cost, and total AI cost.
+- [x] 4.4 Show breakdowns by tool and model.
+- [x] 4.5 Add tests for empty plans, direct API costs, seat allocation, credits,
       and unattributed sessions.
 
 ## 5. Invoice evidence
