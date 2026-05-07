@@ -72,7 +72,8 @@
 - [x] Key bindings: `d`, `w`, `m`, `a` (time window); `p` (project toggle);
   `q` (quit)
 - [x] Key binding: `b` (branch modal)
-- [ ] Key bindings: `?` (help); `ctrl+c` explicit quit
+- [x] Key binding: `?` (help)
+- [ ] Key binding: `ctrl+c` explicit quit
 - [ ] Handle `ProjectSelected` message: swap SessionFeed for ProjectPane
 - [x] Handle `BranchSelected` message: set `branch_filter`, update header
 - [x] `app.tcss` CSS file with budget color classes and layout rules

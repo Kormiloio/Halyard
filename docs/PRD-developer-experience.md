@@ -223,12 +223,13 @@ First vertical slice implemented.
 - `SessionStore` loads `ai-sessions.log`, tails appended lines with
   `watchfiles`, and filters by time window, project scope, and branch tag.
 - Keyboard shortcuts for `d`/`w`/`m`/`a` time windows, `p` project scope, and
-  `b` branch filter, and `q` quit are wired.
+  `b` branch filter, `?` help, and `q` quit are wired.
 - The branch filter modal lists branch tags by recency; Enter applies a branch
   filter and Escape clears it.
+- The help modal gives an in-app keyboard reference and dismisses with Escape.
 
-Still pending: project drill-down, help panel, new-row highlighting, richer
-budget/project detail views, and explicit log rotation re-open behavior.
+Still pending: project drill-down, new-row highlighting, richer budget/project
+detail views, and explicit log rotation re-open behavior.
 
 ### The gap
 

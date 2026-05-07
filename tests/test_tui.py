@@ -216,6 +216,42 @@ def test_escape_clears_branch_filter(tmp_path: Path) -> None:
     asyncio.run(run())
 
 
+def test_help_key_opens_help_modal(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+    from halyard.tui.widgets.help_modal import HelpModal
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            await pilot.press("?")
+            assert isinstance(pilot.app.screen, HelpModal)
+
+    asyncio.run(run())
+
+
+def test_help_escape_dismisses_modal(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+    from halyard.tui.widgets.help_modal import HelpModal
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            await pilot.press("?")
+            assert isinstance(pilot.app.screen, HelpModal)
+            await pilot.press("escape")
+            assert not isinstance(pilot.app.screen, HelpModal)
+
+    asyncio.run(run())
+
+
 def test_budget_pane_renders_limits(monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("textual")
     from halyard.budget import BudgetStatus

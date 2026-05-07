@@ -34,6 +34,7 @@ class HalyardApp(App[None]):
         ("a", "set_time_window('all')", "all"),
         ("p", "toggle_project_scope", "project"),
         ("b", "open_branch_modal", "branch"),
+        ("?", "open_help_modal", "help"),
         ("escape", "clear_branch_filter", "clear branch"),
         ("q", "quit", "quit"),
     ]
@@ -97,6 +98,11 @@ class HalyardApp(App[None]):
         if self.branch_filter is not None:
             self.branch_filter = None
             self.refresh_views()
+
+    def action_open_help_modal(self) -> None:
+        from halyard.tui.widgets.help_modal import HelpModal
+
+        self.push_screen(HelpModal())
 
     def on_branch_modal_branch_selected(self, message: BranchModal.BranchSelected) -> None:
         self.branch_filter = message.branch
