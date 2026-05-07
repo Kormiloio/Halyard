@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from textual.widgets import Static
 
 from halyard.ai_log import AiSession
 from halyard.tui.formatters import cost_str, duration_str, tool_icon, truncate
+
+_NEW_ARRIVAL_SECONDS = 30
 
 
 class SessionFeed(Static):
@@ -13,19 +17,23 @@ class SessionFeed(Static):
 
     session_count = 0
     selected_index = 0
+    last_rendered_text = ""
 
     def render_sessions(self, sessions: list[AiSession], selected_index: int = 0) -> None:
         self.session_count = len(sessions)
         self.selected_index = selected_index
         if not sessions:
-            self.update("No sessions captured yet.")
+            self.last_rendered_text = "No sessions captured yet."
+            self.update(self.last_rendered_text)
             return
 
+        now = datetime.now()
         lines = ["Session Feed", ""]
         for index, session in enumerate(sessions[:50]):
             tokens = session.input_tokens + session.output_tokens
             project = session.project or "(unattributed)"
-            marker = ">" if index == selected_index else " "
+            is_new = (now - session.end).total_seconds() < _NEW_ARRIVAL_SECONDS
+            marker = ">" if index == selected_index else ("+" if is_new else " ")
             line = (
                 f"{marker} {tool_icon(session.tool)} "
                 f"{truncate(session.model, 20):20} "
@@ -35,4 +43,5 @@ class SessionFeed(Static):
                 f"{cost_str(session.cost_usd):>9}"
             )
             lines.append(line)
-        self.update("\n".join(lines))
+        self.last_rendered_text = "\n".join(lines)
+        self.update(self.last_rendered_text)

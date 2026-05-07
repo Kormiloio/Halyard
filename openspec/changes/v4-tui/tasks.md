@@ -27,7 +27,7 @@
   - [x] Track byte offset; read only new lines on each change event
   - [x] Parse with `AiSession.from_log_line()`; skip None (quarantine handled upstream)
   - [x] Append valid sessions to session list for app refresh
-- [ ] Handle full log file rotation: detect DELETED event, re-open at new path
+- [x] Handle full log file rotation: detect DELETED event, re-open at new path
 - [x] `filter(time_window, project_scope, branch) -> list[AiSession]` — pure filter
   function (does not mutate store)
 
@@ -36,7 +36,7 @@
 - [x] Refreshes from store sessions + active filters
 - [x] Each row: tool icon, model (truncated), project, duration, tokens, cost
 - [x] Newest sessions at top
-- [ ] New arrivals briefly highlighted
+- [x] New arrivals briefly highlighted
 - [x] `Enter` on a row: opens project detail for the selected row
 
 ### `src/halyard/tui/widgets/project_pane.py`
@@ -44,7 +44,7 @@
 - [x] Sessions list filtered to selected project
 - [x] Per-model cost breakdown bar chart (ASCII bars)
 - [x] Today's and month-to-date spend
-- [ ] Budget limits in project detail
+- [x] Budget limits in project detail
 - [x] `Escape` returns to session feed
 
 ### `src/halyard/tui/widgets/budget_pane.py`
@@ -74,7 +74,7 @@
   `q` (quit)
 - [x] Key binding: `b` (branch modal)
 - [x] Key binding: `?` (help)
-- [ ] Key binding: `ctrl+c` explicit quit
+- [x] Key binding: `ctrl+c` explicit quit
 - [x] Handle project selection: swap SessionFeed for ProjectPane
 - [x] Handle `BranchSelected` message: set `branch_filter`, update header
 - [x] `app.tcss` CSS file with budget color classes and layout rules

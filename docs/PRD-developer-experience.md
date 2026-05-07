@@ -228,11 +228,11 @@ First vertical slice implemented.
   filter and Escape clears it.
 - The help modal gives an in-app keyboard reference and dismisses with Escape.
 - The session feed supports row selection; Enter opens a project detail pane
-  with project sessions, model mix, and today/month spend, and Escape returns
-  to the feed.
+  with project sessions, model mix, today/month spend vs budget limits, and
+  Escape returns to the feed.
 
-Still pending: new-row highlighting, budget limits inside project detail, richer
-project detail visuals, and explicit log rotation re-open behavior.
+Still pending: new-row highlighting, richer project detail visuals, and
+explicit log rotation re-open behavior.
 
 ### The gap
 

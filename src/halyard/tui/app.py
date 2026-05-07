@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.widgets import Footer, Header, Static
@@ -41,6 +42,7 @@ class HalyardApp(App[None]):
         ("enter", "open_project_detail", "detail"),
         ("escape", "escape", "back"),
         ("q", "quit", "quit"),
+        Binding("ctrl+c", "quit", show=False),
     ]
 
     time_window: reactive[TimeWindow] = reactive("month")
@@ -221,7 +223,11 @@ async def _watch_events(store: SessionStore) -> AsyncIterator[bool]:
         if log_deleted:
             store.sessions = []
             store._offset = 0
-            yield False
+            if store.log_path.exists():
+                store.load()
+                yield True
+            else:
+                yield False
         else:
             if store.log_path.exists():
                 store.read_new_lines()

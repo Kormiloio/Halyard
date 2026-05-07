@@ -8,7 +8,8 @@ from datetime import datetime
 from textual.widgets import Static
 
 from halyard.ai_log import AiSession
-from halyard.tui.formatters import cost_str, duration_str, tool_icon, truncate
+from halyard.budget import load_budgets
+from halyard.tui.formatters import budget_css_class, cost_str, duration_str, tool_icon, truncate
 
 
 class ProjectPane(Static):
@@ -33,7 +34,7 @@ class ProjectPane(Static):
         lines = [
             f"Project: {project}",
             f"Sessions: {len(sessions)}",
-            f"Today: {cost_str(today_spend)}  Month: {cost_str(month_spend)}",
+            _budget_line(project, today_spend, month_spend),
             "",
             "Models",
         ]
@@ -71,3 +72,20 @@ def _model_lines(sessions: list[AiSession]) -> list[str]:
         bar = "#" * max(1, min(20, pct // 5)) if cost > 0 else "-"
         lines.append(f"{truncate(model, 18):18} {count:>3} {cost_str(cost):>9} {pct:>3}% {bar}")
     return lines
+
+
+def _budget_line(project: str, today_spend: float, month_spend: float) -> str:
+    budget = load_budgets().get(project)
+    if budget is None:
+        return f"Today: {cost_str(today_spend)} / -  Month: {cost_str(month_spend)} / -"
+    day = _limit_text(today_spend, budget.daily_usd)
+    month = _limit_text(month_spend, budget.monthly_usd)
+    day_class = budget_css_class(today_spend, budget.daily_usd)
+    month_class = budget_css_class(month_spend, budget.monthly_usd)
+    return f"Today: [{day_class}]{day}[/{day_class}]  Month: [{month_class}]{month}[/{month_class}]"
+
+
+def _limit_text(spend: float, limit: float | None) -> str:
+    if limit is None:
+        return f"{cost_str(spend)} / -"
+    return f"{cost_str(spend)} / {cost_str(limit)}"

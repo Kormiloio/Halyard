@@ -204,6 +204,66 @@ def test_enter_opens_project_detail(tmp_path: Path) -> None:
     asyncio.run(run())
 
 
+def test_project_detail_renders_budget_limits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("textual")
+    from halyard.budget import ProjectBudget
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+    from halyard.tui.widgets import project_pane
+    from halyard.tui.widgets.project_pane import ProjectPane
+
+    monkeypatch.setattr(
+        project_pane,
+        "load_budgets",
+        lambda: {"acme:auth": ProjectBudget(daily_usd=2.0, monthly_usd=10.0)},
+    )
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")
+        store.sessions = [
+            _session(
+                start=datetime.now(),
+                project="acme:auth",
+                cost_usd=1.25,
+            )
+        ]
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            await pilot.press("enter")
+            text = pilot.app.query_one(ProjectPane).last_rendered_text
+            assert "$1.2500 / $2.0000" in text
+            assert "$1.2500 / $10.0000" in text
+
+    asyncio.run(run())
+
+
+def test_project_detail_renders_missing_budget_limits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+    from halyard.tui.widgets import project_pane
+    from halyard.tui.widgets.project_pane import ProjectPane
+
+    monkeypatch.setattr(project_pane, "load_budgets", lambda: {})
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")
+        store.sessions = [_session(start=datetime.now(), project="acme:auth", cost_usd=1.25)]
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            await pilot.press("enter")
+            text = pilot.app.query_one(ProjectPane).last_rendered_text
+            assert "Today: $1.2500 / -  Month: $1.2500 / -" in text
+
+    asyncio.run(run())
+
+
 def test_escape_returns_from_project_detail(tmp_path: Path) -> None:
     pytest.importorskip("textual")
     from halyard.tui.app import HalyardApp
@@ -311,6 +371,56 @@ def test_help_escape_dismisses_modal(tmp_path: Path) -> None:
             assert not isinstance(pilot.app.screen, HelpModal)
 
     asyncio.run(run())
+
+
+def test_session_feed_highlights_new_arrival(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.widgets.session_feed import SessionFeed
+
+    feed = SessionFeed()
+    # old session at index 0 (selected, shows ">"), recent at index 1 (should show "+")
+    old = _session(start=datetime(2026, 1, 1), project="acme:old")
+    recent = _session(start=datetime.now() - timedelta(seconds=10))
+    feed.render_sessions([old, recent], selected_index=0)
+    assert "+" in feed.last_rendered_text
+
+
+def test_session_feed_no_highlight_for_old_session(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.widgets.session_feed import SessionFeed
+
+    feed = SessionFeed()
+    old1 = _session(start=datetime(2026, 1, 1), project="acme:old1")
+    old2 = _session(start=datetime(2026, 1, 2), project="acme:old2")
+    feed.render_sessions([old1, old2], selected_index=0)
+    assert "+" not in feed.last_rendered_text
+
+
+def test_store_reload_after_log_rotation(tmp_path: Path) -> None:
+    from halyard.ai_log import HEADER, append_session
+    from halyard.tui.store import SessionStore
+
+    log = tmp_path / "ai-sessions.log"
+    log.write_text(HEADER)
+    append_session(tmp_path, _session(project="acme:before"))
+
+    store = SessionStore(log)
+    store.load()
+    assert len(store.sessions) == 1
+
+    # simulate rotation: delete and recreate with new session
+    log.unlink()
+    log.write_text(HEADER)
+    append_session(tmp_path, _session(project="acme:after"))
+
+    # app's _watch_events does: clear, then store.load() if file exists
+    store.sessions = []
+    store._offset = 0
+    if store.log_path.exists():
+        store.load()
+
+    assert len(store.sessions) == 1
+    assert store.sessions[0].project == "acme:after"
 
 
 def test_budget_pane_renders_limits(monkeypatch: pytest.MonkeyPatch) -> None:
