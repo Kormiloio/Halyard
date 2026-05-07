@@ -5,11 +5,11 @@ Implementation checklist for v2 — AI Work Ledger.
 ## 1. Product and schema foundation
 
 - [x] 1.1 Write product PRD for the AI Work Ledger.
-- [ ] 1.2 Define `ai-plans.toml` schema with plan, seat, credit, and allocation
+- [x] 1.2 Define `ai-plans.toml` schema with plan, seat, credit, and allocation
       fields.
-- [ ] 1.3 Add Pydantic models for AI plans and allocation rules.
-- [ ] 1.4 Add TOML reader for `ai-plans.toml`.
-- [ ] 1.5 Update `halyard init` to create a commented `ai-plans.toml` template.
+- [x] 1.3 Add Pydantic models for AI plans and allocation rules.
+- [x] 1.4 Add TOML reader for `ai-plans.toml`.
+- [x] 1.5 Update \`halyard init\` to create a commented \`ai-plans.toml\` template.
 
 ## 2. Cost allocation
 

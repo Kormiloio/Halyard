@@ -150,13 +150,13 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 | Change | Description |
 |--------|-------------|
 | [`v0-time-and-invoice`](./openspec/changes/v0-time-and-invoice/) | Project skeleton + human time tracking |
-| [`v1-ai-intelligence`](./openspec/changes/v1-ai-intelligence/) | AI session schema + Claude Code collector + local reports |
-| [`v1.5-multi-tool-collectors`](./openspec/changes/v1.5-multi-tool-collectors/) | Cursor, Gemini CLI, and Codex collectors |
+| [`v1-ai-intelligence`](./openspec/changes/archive/2026-05-07-v1-ai-intelligence/) | AI session schema + Claude Code collector + local reports |
+| [`v1.5-multi-tool-collectors`](./openspec/changes/archive/2026-05-07-v1.5-multi-tool-collectors/) | Cursor, Gemini CLI, and Codex collectors |
 | [`v2-ai-work-ledger`](./openspec/changes/v2-ai-work-ledger/) | Beancount ledger + plan cost allocation |
 | [`v2-local-activity-dashboard`](./openspec/changes/v2-local-activity-dashboard/) | Glass Cockpit local dashboard |
-| [`v2.1-dynamic-pricing`](./openspec/changes/v2.1-dynamic-pricing/) | `halyard update-pricing` — live pricing table sync |
-| [`v2.2-budget-limits`](./openspec/changes/v2.2-budget-limits/) | Per-project daily/monthly budget alerts |
-| [`v2.3-gemini-history`](./openspec/changes/v2.3-gemini-history/) | Gemini history file enrichment + `halyard import-gemini` |
+| [`v2.1-dynamic-pricing`](./openspec/changes/archive/2026-05-07-v2.1-dynamic-pricing/) | `halyard update-pricing` — live pricing table sync |
+| [`v2.2-budget-limits`](./openspec/changes/archive/2026-05-07-v2.2-budget-limits/) | Per-project daily/monthly budget alerts |
+| [`v2.3-gemini-history`](./openspec/changes/archive/2026-05-07-v2.3-gemini-history/) | Gemini history file enrichment + `halyard import-gemini` |
 
 ### In progress
 

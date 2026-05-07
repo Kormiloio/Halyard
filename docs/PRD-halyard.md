@@ -1,7 +1,28 @@
 # PRD: Halyard
 
 **Status:** Living document — update as the product direction evolves.  
-**Last meaningful update:** May 2026
+**Last meaningful update:** May 7, 2026
+
+---
+
+## Status — May 7, 2026
+
+Halyard has reached **v0.1 / v1.5 maturity**.
+
+- **Time Tracking**: `halyard start/stop` and `halyard invoice` are fully
+  functional for human time.
+- **AI Capture**: Production-ready collectors for **Claude Code**, **Cursor**,
+  **Gemini CLI**, and **Codex App** are implemented with ambient project
+  attribution.
+- **Analytics**: `halyard report` and `halyard dashboard` provide local
+  visibility into human time and AI spend.
+- **Data Integrity**: Canonical serialization, malformed record quarantine,
+  and recovery of unattributed sessions are active.
+- **Log Querying**: `halyard log` provides a provider-neutral local query
+  agent for work metadata.
+
+Next milestones: Full SDK-backed AI agent (Claude tool-use loop), and the
+transition to the Beancount-backed AI Work Ledger (v2).
 
 ---
 

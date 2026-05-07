@@ -1,5 +1,13 @@
 # PRD: Halyard AI Work Ledger
 
+**Status — May 7, 2026:**
+The AI session infrastructure (v1) and multi-tool collectors (v1.5) are fully
+implemented. The product is now moving into the ledger phase (v2), including
+the `ai-plans.toml` configuration and the transition to a Beancount-backed
+accounting engine.
+
+---
+
 ## Summary
 
 Halyard should become the local-first ledger for AI-assisted work: human time,

@@ -14,9 +14,9 @@ task, update both the code and tick the box here.
 
 ## 2. Data model
 
-- [ ] 2.1 Pydantic models: `HalyardConfig`, `Client`, `Project`, `LineItem`,
+- [x] 2.1 Pydantic models: `HalyardConfig`, `Client`, `Project`, `LineItem`,
        `TimeclockEntry`, `Invoice`
-- [ ] 2.2 TOML readers/writers for `halyard.toml`, `clients.toml`,
+- [x] 2.2 TOML readers/writers for `halyard.toml`, `clients.toml`,
        `projects.toml` (round-trip safe; preserves comments where possible)
 - [x] 2.3 Implement `halyard init` — creates the full project layout from
        sensible defaults
@@ -28,20 +28,20 @@ task, update both the code and tick the box here.
        `~/.halyard/active` state file
 - [ ] 3.2 Implement `halyard log <text>`: send to Claude, render the
        proposal, prompt for approval, append on confirm
-- [ ] 3.3 dateparser integration for "this morning", "yesterday", "last
+- [x] 3.3 dateparser integration for "this morning", "yesterday", "last
        Tuesday", etc., with a fixed reference timezone (the user's local)
-- [ ] 3.4 Timeclock parser/writer with round-trip safety (formatting,
+- [x] 3.4 Timeclock parser/writer with round-trip safety (formatting,
        comments)
 
 ## 4. Invoicing
 
-- [ ] 4.1 Default Jinja invoice template — clean, professional, renders
+- [x] 4.1 Default Jinja invoice template — clean, professional, renders
        well at letter and A4
-- [ ] 4.2 Implement `halyard invoice <client>` with `--month`, `--from`,
+- [x] 4.2 Implement `halyard invoice <client>` with `--month`, `--from`,
        `--to` flags
-- [ ] 4.3 typst PDF rendering pipeline (subprocess; verify install on first
+- [x] 4.3 typst PDF rendering pipeline (subprocess; verify install on first
        run with a friendly error if missing)
-- [ ] 4.4 Invoice number sequencing in `halyard.toml` per the spec scenarios
+- [x] 4.4 Invoice number sequencing in `halyard.toml` per the spec scenarios
 - [ ] 4.5 Open the PDF after generation using the platform-default viewer
 
 ## 5. Agent loop

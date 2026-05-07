@@ -66,6 +66,16 @@ Per-user agent state (skills, API keys, active timer) lives in
 local-first guarantee as `time.timeclock`. The cloud sync and enterprise
 layers read from this file; they do not replace it.
 
+## Active focus (May 2026)
+
+- **v0.1 — Log and Invoice:** Closing the loop on human time reporting and
+  log querying via local metadata. Next: SDK-backed agent REPL.
+- **v2.4 — Data Integrity:** Ensuring no AI sessions are lost or dropped.
+  Quarantine for malformed logs and interactive recovery for unattributed
+  sessions are live.
+- **v2 — AI Work Ledger:** Architecting the Beancount ledger and plan-based
+  cost allocation (seats vs credits vs API).
+
 ## Stack defaults
 
 - **Language:** Python 3.11+
