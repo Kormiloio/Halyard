@@ -63,6 +63,7 @@ def sync_project(project_dir: Path, hub_dir: Path | None = None) -> SyncResult:
     result.skipped = skipped
 
     import getpass
+
     try:
         synced_by = getpass.getuser()
     except Exception:

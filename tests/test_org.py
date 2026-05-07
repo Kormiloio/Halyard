@@ -457,7 +457,7 @@ def test_sync_project_inserts_sessions(tmp_path: Path):
 
 
 def test_sync_project_idempotent(tmp_path: Path):
-    (tmp_path / "org.toml").write_text("[org]\nid = \"acme\"\nname = \"Acme\"\n")
+    (tmp_path / "org.toml").write_text('[org]\nid = "acme"\nname = "Acme"\n')
     s = _session(user="unknown@example.com")
     (tmp_path / AI_LOG_FILENAME).write_text(s.to_log_line() + "\n")
 
@@ -476,7 +476,7 @@ def test_sync_project_missing_org_toml_returns_error(tmp_path: Path):
 
 
 def test_sync_project_missing_log_returns_error(tmp_path: Path):
-    (tmp_path / "org.toml").write_text("[org]\nid = \"acme\"\nname = \"Acme\"\n")
+    (tmp_path / "org.toml").write_text('[org]\nid = "acme"\nname = "Acme"\n')
     result = sync_project(tmp_path, hub_dir=tmp_path)
     assert len(result.errors) == 1
     assert "ai-sessions.log" in result.errors[0]
@@ -548,8 +548,8 @@ def test_read_cost_center_config_parses(tmp_path: Path):
 
 def test_read_project_cost_centers(tmp_path: Path):
     (tmp_path / "projects.toml").write_text(
-        "[[project]]\nslug = \"acme:auth\"\nclient_slug = \"acme\"\n"
-        "name = \"Auth\"\ncost_center = \"CC-042\"\n"
+        '[[project]]\nslug = "acme:auth"\nclient_slug = "acme"\n'
+        'name = "Auth"\ncost_center = "CC-042"\n'
     )
     result = read_project_cost_centers(tmp_path)
     assert result == {"acme:auth": "CC-042"}
@@ -576,7 +576,7 @@ def test_record_and_read_sync_audit(tmp_path: Path):
 
 
 def test_sync_project_records_audit(tmp_path: Path):
-    (tmp_path / "org.toml").write_text("[org]\nid = \"acme\"\nname = \"Acme\"\n")
+    (tmp_path / "org.toml").write_text('[org]\nid = "acme"\nname = "Acme"\n')
     s = _session()
     (tmp_path / AI_LOG_FILENAME).write_text(s.to_log_line() + "\n")
     sync_project(tmp_path, hub_dir=tmp_path)

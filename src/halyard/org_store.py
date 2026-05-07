@@ -230,7 +230,7 @@ def team_monthly_rollup(
 ) -> list[dict]:  # type: ignore[type-arg]
     """Return per-team cost and session summary for a billing month."""
     period_start = f"{year:04d}-{month:02d}-01"
-    period_end = f"{year:04d}-{month+1:02d}-01" if month < 12 else f"{year+1:04d}-01-01"
+    period_end = f"{year:04d}-{month + 1:02d}-01" if month < 12 else f"{year + 1:04d}-01-01"
 
     where = "org_id = ? AND start_ts >= ? AND start_ts < ?"
     params: list[object] = [org_id, period_start, period_end]
@@ -269,7 +269,7 @@ def project_monthly_rollup(
     team_id: str | None = None,
 ) -> list[dict]:  # type: ignore[type-arg]
     period_start = f"{year:04d}-{month:02d}-01"
-    period_end = f"{year:04d}-{month+1:02d}-01" if month < 12 else f"{year+1:04d}-01-01"
+    period_end = f"{year:04d}-{month + 1:02d}-01" if month < 12 else f"{year + 1:04d}-01-01"
 
     where = "org_id = ? AND start_ts >= ? AND start_ts < ? AND project_id != ''"
     params: list[object] = [org_id, period_start, period_end]
@@ -310,7 +310,7 @@ def user_monthly_rollup(
     team_id: str | None = None,
 ) -> list[dict]:  # type: ignore[type-arg]
     period_start = f"{year:04d}-{month:02d}-01"
-    period_end = f"{year:04d}-{month+1:02d}-01" if month < 12 else f"{year+1:04d}-01-01"
+    period_end = f"{year:04d}-{month + 1:02d}-01" if month < 12 else f"{year + 1:04d}-01-01"
 
     where = "org_id = ? AND start_ts >= ? AND start_ts < ?"
     params: list[object] = [org_id, period_start, period_end]
@@ -346,7 +346,7 @@ def org_monthly_summary(
 ) -> dict:  # type: ignore[type-arg]
     """Top-level org summary for the CIO view."""
     period_start = f"{year:04d}-{month:02d}-01"
-    period_end = f"{year:04d}-{month+1:02d}-01" if month < 12 else f"{year+1:04d}-01-01"
+    period_end = f"{year:04d}-{month + 1:02d}-01" if month < 12 else f"{year + 1:04d}-01-01"
 
     with _connect(db_path) as conn:
         row = conn.execute(
@@ -402,7 +402,7 @@ def governance_gaps(
 ) -> dict:  # type: ignore[type-arg]
     """Return governance health data: unattributed rates, missing-cost sessions."""
     period_start = f"{year:04d}-{month:02d}-01"
-    period_end = f"{year:04d}-{month+1:02d}-01" if month < 12 else f"{year+1:04d}-01-01"
+    period_end = f"{year:04d}-{month + 1:02d}-01" if month < 12 else f"{year + 1:04d}-01-01"
 
     with _connect(db_path) as conn:
         team_rows = conn.execute(
@@ -452,7 +452,7 @@ def finance_export(
 ) -> list[dict]:  # type: ignore[type-arg]
     """Rows for the finance cost-center export CSV."""
     period_start = f"{year:04d}-{month:02d}-01"
-    period_end = f"{year:04d}-{month+1:02d}-01" if month < 12 else f"{year+1:04d}-01-01"
+    period_end = f"{year:04d}-{month + 1:02d}-01" if month < 12 else f"{year + 1:04d}-01-01"
 
     with _connect(db_path) as conn:
         rows = conn.execute(

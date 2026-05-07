@@ -1285,10 +1285,10 @@ def org_init(
 
     org_toml_path.write_text(
         f'[org]\nid = "{org_id}"\nname = "{org_name or org_id}"\n\n'
-        "# [[department]]\n# id = \"engineering\"\n# name = \"Engineering\"\n\n"
-        "# [[team]]\n# id = \"auth-team\"\n# name = \"Auth\"\n# department_id = \"engineering\"\n\n"
-        "# [[member]]\n# email = \"alice@example.com\"\n# team_id = \"auth-team\"\n"
-        "# display_name = \"Alice\"\n"
+        '# [[department]]\n# id = "engineering"\n# name = "Engineering"\n\n'
+        '# [[team]]\n# id = "auth-team"\n# name = "Auth"\n# department_id = "engineering"\n\n'
+        '# [[member]]\n# email = "alice@example.com"\n# team_id = "auth-team"\n'
+        '# display_name = "Alice"\n'
     )
     console.print(f"Created [bold cyan]{org_toml_path}[/]")
     console.print("Edit org.toml to add departments, teams, and members.")
@@ -1365,9 +1365,7 @@ def org_report(
 
     org_config = read_org_config(effective_hub)
     if org_config is None:
-        console.print(
-            f"[bold red]No org.toml at {effective_hub}.[/] Run `halyard org-init` first."
-        )
+        console.print(f"[bold red]No org.toml at {effective_hub}.[/] Run `halyard org-init` first.")
         raise typer.Exit(code=1)
 
     db_path = effective_hub / ORG_DB_FILENAME

@@ -97,7 +97,13 @@ def print_team_rollup(
         return
 
     t = Table(
-        "Team", "Sessions", "Users", "Direct", "Allocated", "Total", "Unattributed",
+        "Team",
+        "Sessions",
+        "Users",
+        "Direct",
+        "Allocated",
+        "Total",
+        "Unattributed",
         title=f"Team Rollup — {period}",
         box=None,
         padding=(0, 2),
@@ -138,7 +144,14 @@ def print_project_rollup(
         return
 
     t = Table(
-        "Project", "Team", "Sessions", "Contributors", "Direct", "Allocated", "Total", "Inferred",
+        "Project",
+        "Team",
+        "Sessions",
+        "Contributors",
+        "Direct",
+        "Allocated",
+        "Total",
+        "Inferred",
         title=f"Project Rollup — {period}",
         box=None,
         padding=(0, 2),
@@ -175,7 +188,12 @@ def print_people_rollup(
         return
 
     t = Table(
-        "User", "Team", "Sessions", "Active days", "Tools", "Total cost",
+        "User",
+        "Team",
+        "Sessions",
+        "Active days",
+        "Tools",
+        "Total cost",
         title=f"People — {period}",
         box=None,
         padding=(0, 2),
@@ -215,15 +233,13 @@ def print_governance(
     console.print(f"[bold red]Governance alerts — {period}[/]")
     for a in alerts:
         if a["type"] == "unattributed_rate":
-            pct = f"{a['rate']*100:.0f}%"
+            pct = f"{a['rate'] * 100:.0f}%"
             console.print(
                 f"  [yellow]●[/] {a['team_id']}: {pct} unattributed "
                 f"({a['unattributed']}/{a['total']} sessions)"
             )
         elif a["type"] == "missing_cost":
-            console.print(
-                f"  [red]●[/] {a['team_id']}: {a['count']} sessions with no cost data"
-            )
+            console.print(f"  [red]●[/] {a['team_id']}: {a['count']} sessions with no cost data")
 
 
 # ---------------------------------------------------------------------------
@@ -266,8 +282,15 @@ def print_finance_table(
         return
 
     t = Table(
-        "Cost center", "Team", "Project", "Tool",
-        "Sessions", "Direct", "Allocated", "Total", "Trust",
+        "Cost center",
+        "Team",
+        "Project",
+        "Tool",
+        "Sessions",
+        "Direct",
+        "Allocated",
+        "Total",
+        "Trust",
         title=f"Finance Export — {period}",
         box=None,
         padding=(0, 2),
@@ -296,8 +319,17 @@ def export_finance_csv(
         return ""
 
     fieldnames = [
-        "billing_period", "org_id", "cost_center", "team_id", "project_id", "tool",
-        "sessions", "direct_usd", "allocated_usd", "total_usd", "trust",
+        "billing_period",
+        "org_id",
+        "cost_center",
+        "team_id",
+        "project_id",
+        "tool",
+        "sessions",
+        "direct_usd",
+        "allocated_usd",
+        "total_usd",
+        "trust",
     ]
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
