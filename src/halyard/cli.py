@@ -357,6 +357,9 @@ def invoice(
         False, "--force", help="Overwrite an existing invoice for the period."
     ),
     rate: float | None = typer.Option(None, "--rate", help="Override hourly rate."),
+    include_ai_evidence: bool = typer.Option(
+        False, "--include-ai-evidence", help="Append AI usage evidence appendix."
+    ),
 ) -> None:
     """Generate an invoice from logged time entries."""
     from halyard.ai_log import find_project_dir
@@ -394,6 +397,7 @@ def invoice(
             force=force,
             dry_run=dry_run,
             rate_override=rate,
+            include_ai_evidence=include_ai_evidence,
         )
     except InvoiceError as exc:
         console.print(f"[bold red]Error:[/] {exc}")

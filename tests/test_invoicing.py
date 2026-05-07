@@ -294,3 +294,180 @@ class _FixedDatetime(datetime):
     @classmethod
     def now(cls, tz=None):  # type: ignore[no-untyped-def]
         return cls(2026, 5, 7, 12)
+
+
+# ---------------------------------------------------------------------------
+# AI evidence appendix tests (v2 task 5.x)
+# ---------------------------------------------------------------------------
+
+
+def _ai_session(
+    project: str = "acme:auth",
+    tool: str = "claude-code",
+    model: str = "claude-sonnet-4-6",
+    cost: float = 2.50,
+    input_tokens: int = 1000,
+    output_tokens: int = 500,
+) -> AiSession:
+    from datetime import timedelta
+
+    start = datetime(2026, 5, 6, 10, 0)
+    return AiSession(
+        start=start,
+        end=start + timedelta(minutes=30),
+        tool=tool,
+        model=model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost,
+        project=project,
+    )
+
+
+def test_ai_evidence_appendix_not_included_by_default(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+
+    result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05"])
+
+    assert result.exit_code == 0, result.output
+    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
+    assert "AI Usage Evidence" not in rendered
+
+
+def test_ai_evidence_appendix_no_sessions(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+
+    result = runner.invoke(
+        app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"]
+    )
+
+    assert result.exit_code == 0, result.output
+    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
+    assert "## AI Usage Evidence" in rendered
+    assert "No AI sessions recorded for this period" in rendered
+
+
+def test_ai_evidence_appendix_with_direct_api_sessions(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+    append_session(tmp_path, _ai_session(cost=3.75))
+
+    result = runner.invoke(
+        app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"]
+    )
+
+    assert result.exit_code == 0, result.output
+    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
+    assert "## AI Usage Evidence" in rendered
+    assert "Direct API" in rendered
+    assert "captured from API responses" in rendered
+    assert "claude-code" in rendered
+    assert "claude-sonnet-4-6" in rendered
+    assert "Sessions | 1" in rendered
+
+
+def test_ai_evidence_appendix_with_seat_plan(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+    (tmp_path / "ai-plans.toml").write_text(
+        """
+[[plan]]
+slug = "claude-max"
+tool = "claude-code"
+billing = "seat"
+monthly_usd = 200
+allocation = "active_minutes"
+starts_on = "2026-01-01"
+"""
+    )
+    append_session(tmp_path, _ai_session(cost=0.0))
+
+    result = runner.invoke(
+        app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"]
+    )
+
+    assert result.exit_code == 0, result.output
+    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
+    assert "Allocated plans" in rendered
+    assert "subscription plan allocation" in rendered
+    assert "Allocated costs are estimates" in rendered
+
+
+def test_ai_evidence_appendix_no_trust_note_for_all_direct(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+    append_session(tmp_path, _ai_session(cost=1.00))
+
+    result = runner.invoke(
+        app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"]
+    )
+
+    assert result.exit_code == 0, result.output
+    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
+    assert "Allocated costs are estimates" not in rendered
+
+
+def test_ai_evidence_appendix_dry_run(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+    append_session(tmp_path, _ai_session(cost=2.00))
+
+    result = runner.invoke(
+        app,
+        ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence", "--dry-run"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "## AI Usage Evidence" in result.output
+    assert "Direct API" in result.output
+
+
+def test_render_ai_evidence_appendix_golden(tmp_path: Path) -> None:
+    """Golden assertions: verify the full appendix structure with known inputs."""
+    from halyard.invoicing import render_ai_evidence_appendix
+
+    sessions = [
+        AiSession(
+            start=datetime(2026, 5, 6, 10, 0),
+            end=datetime(2026, 5, 6, 10, 30),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=2000,
+            output_tokens=800,
+            cost_usd=4.00,
+            project="acme:auth",
+        ),
+        AiSession(
+            start=datetime(2026, 5, 7, 14, 0),
+            end=datetime(2026, 5, 7, 14, 45),
+            tool="cursor",
+            model="gpt-4o",
+            input_tokens=1000,
+            output_tokens=300,
+            cost_usd=1.50,
+            project="acme:auth",
+        ),
+    ]
+
+    appendix = render_ai_evidence_appendix(sessions, [], [], "May 2026")
+
+    assert "## AI Usage Evidence" in appendix
+    assert "**Period:** May 2026" in appendix
+    assert "claude-code" in appendix
+    assert "cursor" in appendix
+    assert "claude-sonnet-4-6" in appendix
+    assert "gpt-4o" in appendix
+    assert "Sessions | 2" in appendix
+    assert "Input tokens | 3,000" in appendix
+    assert "Output tokens | 1,100" in appendix
+    assert "Direct API" in appendix
+    assert "$5.5000" in appendix
+    assert "**Total AI cost**" in appendix

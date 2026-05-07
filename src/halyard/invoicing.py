@@ -13,7 +13,8 @@ from typing import Any
 import tomli_w
 from jinja2 import Environment, FileSystemLoader
 
-from halyard.ai_log import parse_sessions
+from halyard.ai_log import AiSession, parse_sessions
+from halyard.ai_plans import AiPlan
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,7 @@ def generate_invoice(
     force: bool = False,
     dry_run: bool = False,
     rate_override: float | None = None,
+    include_ai_evidence: bool = False,
 ) -> InvoiceResult:
     """Render an invoice markdown file for a client and billing period."""
     config = _read_toml(project_dir / "halyard.toml")
@@ -192,6 +194,20 @@ def generate_invoice(
     )
     rendered = _render_invoice(project_dir, business, client, view)
 
+    if include_ai_evidence:
+        from halyard.ai_plans import read_ai_plans
+        from halyard.reports import parse_timeclock
+
+        evidence_sessions = [
+            s
+            for s in parse_sessions(project_dir)
+            if s.project in project_accounts and period_start <= s.end < period_end
+        ]
+        plans = read_ai_plans(project_dir)
+        tc_entries = parse_timeclock(project_dir / "time.timeclock")
+        period_label = datetime(year, month, 1).strftime("%B %Y")
+        rendered += render_ai_evidence_appendix(evidence_sessions, plans, tc_entries, period_label)
+
     if dry_run:
         return InvoiceResult(
             path=None, rendered=rendered, total=view.total, dry_run=True, warning=warning
@@ -204,6 +220,91 @@ def generate_invoice(
     return InvoiceResult(
         path=invoice_path, rendered=rendered, total=view.total, dry_run=False, warning=warning
     )
+
+
+def render_ai_evidence_appendix(
+    sessions: list[AiSession],
+    plans: list[AiPlan],
+    tc_entries: list[tuple[datetime, datetime, str]],
+    period_label: str,
+) -> str:
+    """Render a markdown AI usage evidence appendix for an invoice.
+
+    Never includes prompts, code contents, or session transcripts.
+    """
+    if not sessions:
+        return "\n\n---\n\n## AI Usage Evidence\n\nNo AI sessions recorded for this period.\n"
+
+    from halyard.ledger import build_ledger
+
+    period_start = min(s.start for s in sessions)
+    summary = build_ledger(
+        sessions, plans, tc_entries, year=period_start.year, month=period_start.month
+    )
+
+    tools = sorted({s.tool for s in sessions})
+    models = sorted({s.model for s in sessions})
+    total_input = sum(s.input_tokens for s in sessions)
+    total_output = sum(s.output_tokens for s in sessions)
+    total_cache_read = sum(s.cache_read or 0 for s in sessions)
+    total_cache_write = sum(s.cache_write or 0 for s in sessions)
+    total_minutes = sum(max(1, int((s.end - s.start).total_seconds() // 60)) for s in sessions)
+
+    lines = [
+        "",
+        "---",
+        "",
+        "## AI Usage Evidence",
+        "",
+        f"**Period:** {period_label}  ",
+        f"**Tools:** {', '.join(tools)}  ",
+        f"**Models:** {', '.join(models)}  ",
+        "",
+        "| Metric | Value |",
+        "|---|---|",
+        f"| Sessions | {len(sessions)} |",
+        f"| Active minutes | {total_minutes} |",
+        f"| Input tokens | {total_input:,} |",
+        f"| Output tokens | {total_output:,} |",
+    ]
+    if total_cache_read or total_cache_write:
+        lines.append(f"| Cache read tokens | {total_cache_read:,} |")
+        lines.append(f"| Cache write tokens | {total_cache_write:,} |")
+
+    lines += [
+        "",
+        "| Cost | Amount | Basis |",
+        "|---|---|---|",
+    ]
+    if summary.total_direct_usd > 0:
+        lines.append(
+            f"| Direct API | ${summary.total_direct_usd:.4f}"
+            " | captured from API responses |"
+        )
+    if summary.total_allocated_usd > 0:
+        lines.append(
+            f"| Allocated plans | ${summary.total_allocated_usd:.4f}"
+            " | subscription plan allocation |"
+        )
+    lines.append(f"| **Total AI cost** | **${summary.total_usd:.4f}** | |")
+
+    notes: list[str] = []
+    if summary.total_allocated_usd > 0:
+        notes.append(
+            "Allocated costs are estimates derived from configured subscription plans "
+            "and are not direct per-session charges."
+        )
+    if any(e.has_inferred_attribution for e in summary.entries):
+        notes.append(
+            "Some sessions have project attribution inferred from timeclock overlap "
+            "and have not been explicitly confirmed."
+        )
+
+    if notes:
+        lines += ["", "*" + " ".join(notes) + "*"]
+
+    lines.append("")
+    return "\n".join(lines)
 
 
 def render_pdf(invoice_path: Path) -> str | None:

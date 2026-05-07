@@ -38,11 +38,11 @@ Implementation checklist for v2 — AI Work Ledger.
 
 ## 5. Invoice evidence
 
-- [ ] 5.1 Add `--include-ai-evidence` option to invoice generation.
-- [ ] 5.2 Render markdown invoice appendix from combined report data.
-- [ ] 5.3 Label estimated, allocated, and inferred values clearly.
-- [ ] 5.4 Ensure prompt/code content is never included by default.
-- [ ] 5.5 Add golden-file tests for the invoice appendix.
+- [x] 5.1 Add `--include-ai-evidence` option to invoice generation.
+- [x] 5.2 Render markdown invoice appendix from combined report data.
+- [x] 5.3 Label estimated, allocated, and inferred values clearly.
+- [x] 5.4 Ensure prompt/code content is never included by default.
+- [x] 5.5 Add golden-file tests for the invoice appendix.
 
 ## 6. Documentation and demo
 
