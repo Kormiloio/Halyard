@@ -14,7 +14,7 @@ Implementation checklist for v2 — Local Activity Dashboard.
 ## 2. Shared report services
 
 - [x] 2.1 Extract AI session parsing into reusable service functions.
-- [ ] 2.2 Extract timeclock parsing and project-hour aggregation.
+- [x] 2.2 Extract timeclock parsing and project-hour aggregation.
 - [x] 2.3 Extract AI cost aggregation from CLI report logic.
 - [x] 2.4 Add health-check service for project files and collectors.
 
@@ -28,7 +28,7 @@ Implementation checklist for v2 — Local Activity Dashboard.
 ## 4. Dashboard views
 
 - [x] 4.1 Build Glass Cockpit overview.
-- [ ] 4.2 Build Today view.
+- [x] 4.2 Build Today view.
 - [x] 4.3 Build Projects view.
 - [x] 4.4 Build Sessions view with filters.
 - [ ] 4.5 Build Costs view with trust labels.
@@ -38,7 +38,7 @@ Implementation checklist for v2 — Local Activity Dashboard.
 
 - [x] 5.1 Define visual system: typography, spacing, semantic colors, tables,
       metrics, and status indicators.
-- [ ] 5.2 Add responsive layouts for laptop and desktop viewports.
+- [x] 5.2 Add responsive layouts for laptop and desktop viewports.
 - [x] 5.3 Ensure live updates do not shift or resize core dashboard regions.
 - [ ] 5.4 Add empty, loading, healthy, warning, and error states for each view.
 - [ ] 5.5 Verify dashboard screenshots before release.
@@ -55,3 +55,9 @@ Implementation checklist for v2 — Local Activity Dashboard.
 - [x] 7.1 Document `halyard dashboard` in README.
 - [ ] 7.2 Add a screenshot or GIF to the README once implemented.
 - [ ] 7.3 Add demo script showing Claude Code capture appearing in the dashboard.
+
+## 8. Local and demo capture
+
+- [x] 8.1 Add manual/Codex session capture command.
+- [x] 8.2 Add sample session command for demos and UI testing.
+- [ ] 8.3 Add first-class Codex hook integration when a stable hook surface exists.

@@ -22,6 +22,12 @@ class CostBucket:
 
 
 @dataclass(frozen=True)
+class TimeBucket:
+    label: str
+    minutes: int
+
+
+@dataclass(frozen=True)
 class AiReport:
     sessions: list[AiSession]
     period_label: str
@@ -41,6 +47,18 @@ class ActiveTimer:
     slug: str
     timeclock: Path | None
     started: str | None
+    elapsed_minutes: int = 0
+
+    @property
+    def elapsed_label(self) -> str:
+        return format_minutes(self.elapsed_minutes)
+
+
+@dataclass(frozen=True)
+class HumanTimeReport:
+    today_minutes: int
+    month_minutes: int
+    by_project: list[TimeBucket]
 
 
 @dataclass(frozen=True)
@@ -54,6 +72,7 @@ class HealthCheck:
 class DashboardState:
     project_dir: Path
     report: AiReport
+    human_time: HumanTimeReport
     active_timer: ActiveTimer | None
     health: list[HealthCheck]
     latest_session: AiSession | None
@@ -118,18 +137,85 @@ def read_active_timer(active_path: Path = _HALYARD_ACTIVE) -> ActiveTimer | None
         return None
 
     timeclock = Path(data["timeclock"]) if data.get("timeclock") else None
-    return ActiveTimer(slug=slug, timeclock=timeclock, started=data.get("started"))
+    started = data.get("started")
+    elapsed = _elapsed_minutes(started, datetime.now()) if started else 0
+    return ActiveTimer(slug=slug, timeclock=timeclock, started=started, elapsed_minutes=elapsed)
+
+
+def build_human_time_report(project_dir: Path, *, now: datetime | None = None) -> HumanTimeReport:
+    """Summarize hledger-compatible timeclock entries."""
+    clock = now or datetime.now()
+    entries = parse_timeclock(project_dir / "time.timeclock", now=clock)
+    today = clock.date()
+    month_minutes = 0
+    today_minutes = 0
+    totals: dict[str, int] = {}
+
+    for start, end, account in entries:
+        minutes = max(0, int((end - start).total_seconds() // 60))
+        if start.year == clock.year and start.month == clock.month:
+            month_minutes += minutes
+            totals[account] = totals.get(account, 0) + minutes
+        if start.date() == today:
+            today_minutes += minutes
+
+    return HumanTimeReport(
+        today_minutes=today_minutes,
+        month_minutes=month_minutes,
+        by_project=[
+            TimeBucket(label=label, minutes=minutes)
+            for label, minutes in sorted(totals.items(), key=lambda item: -item[1])
+        ],
+    )
+
+
+def parse_timeclock(
+    path: Path, *, now: datetime | None = None
+) -> list[tuple[datetime, datetime, str]]:
+    """Parse `i`/`o` timeclock pairs. An open entry is measured through now."""
+    if not path.exists():
+        return []
+
+    clock = now or datetime.now()
+    entries: list[tuple[datetime, datetime, str]] = []
+    open_entry: tuple[datetime, str] | None = None
+
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(";"):
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        marker = parts[0]
+        timestamp = _parse_timeclock_timestamp(parts[1], parts[2])
+        if timestamp is None:
+            continue
+        if marker == "i" and len(parts) >= 4:
+            open_entry = (timestamp, parts[3])
+        elif marker == "o" and open_entry is not None:
+            start, account = open_entry
+            entries.append((start, timestamp, account))
+            open_entry = None
+
+    if open_entry is not None:
+        start, account = open_entry
+        entries.append((start, clock, account))
+
+    return entries
 
 
 def build_dashboard_state(project_dir: Path) -> DashboardState:
     """Build all data needed for the local Glass Cockpit."""
     report = build_ai_report(project_dir, all_time=False)
     active_timer = read_active_timer()
+    human_time = build_human_time_report(project_dir)
     latest_session = max(report.sessions, key=lambda session: session.end, default=None)
 
     return DashboardState(
         project_dir=project_dir,
         report=report,
+        human_time=human_time,
         active_timer=active_timer,
         latest_session=latest_session,
         health=build_health_checks(project_dir, report=report, active_timer=active_timer),
@@ -222,3 +308,26 @@ def _settings_has_halyard_hooks(path: Path) -> bool:
         if isinstance(hook, dict)
     ]
     return "halyard cc-session" in commands and "halyard cc-hook" in commands
+
+
+def format_minutes(minutes: int) -> str:
+    """Format minutes as a compact duration."""
+    hours, mins = divmod(max(0, minutes), 60)
+    if hours:
+        return f"{hours}h {mins:02d}m"
+    return f"{mins}m"
+
+
+def _elapsed_minutes(started: str, now: datetime) -> int:
+    try:
+        start = datetime.strptime(started, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return 0
+    return max(0, int((now - start).total_seconds() // 60))
+
+
+def _parse_timeclock_timestamp(day: str, time: str) -> datetime | None:
+    try:
+        return datetime.strptime(f"{day} {time}", "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None

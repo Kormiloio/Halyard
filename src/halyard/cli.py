@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -362,6 +362,88 @@ def install_hook(
         console.print(
             f"[yellow]Hooks already present[/] in [bold]{settings_path}[/] — nothing changed."
         )
+
+
+@app.command(name="record-session")
+def record_session(
+    project: str | None = typer.Option(
+        None,
+        "--project",
+        help="Project slug as client:project. Defaults to the active timer project.",
+    ),
+    tool: str = typer.Option("codex", "--tool", help="AI tool slug."),
+    model: str = typer.Option("codex-local", "--model", help="Model or tool model label."),
+    input_tokens: int = typer.Option(0, "--input-tokens", help="Input token count."),
+    output_tokens: int = typer.Option(0, "--output-tokens", help="Output token count."),
+    cost: float | None = typer.Option(None, "--cost", help="Explicit USD cost."),
+    minutes: int = typer.Option(1, "--minutes", help="Session duration in minutes."),
+    note: str | None = typer.Option(None, "--note", help="Short note, spaces are allowed."),
+) -> None:
+    """Append a manual/Codex AI session record to ai-sessions.log."""
+    from halyard.ai_log import AiSession, append_session, find_project_dir
+    from halyard.pricing import calculate_cost
+    from halyard.reports import read_active_timer
+
+    project_dir = find_project_dir()
+    if project_dir is None:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
+        raise typer.Exit(code=1)
+
+    active = read_active_timer()
+    attributed_project = project or (active.slug if active else None)
+    end = datetime.now()
+    start_time = end - timedelta(minutes=max(0, minutes))
+    session_cost = (
+        cost
+        if cost is not None
+        else calculate_cost(model, input_tokens=input_tokens, output_tokens=output_tokens)
+    )
+
+    session = AiSession(
+        start=start_time,
+        end=end,
+        tool=tool,
+        model=model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=session_cost,
+        project=attributed_project,
+        tokens_available=input_tokens > 0 or output_tokens > 0,
+        source="manual" if tool != "codex" else "codex",
+        note=note,
+    )
+    append_session(project_dir, session)
+
+    console.print(
+        f"[bold green]Recorded[/] {tool} session"
+        f" ({input_tokens:,} in / {output_tokens:,} out, ${session_cost:.4f})."
+    )
+
+
+@app.command(name="sample-session")
+def sample_session(
+    project: str | None = typer.Option(
+        None,
+        "--project",
+        help="Project slug as client:project. Defaults to the active timer project.",
+    ),
+) -> None:
+    """Append a realistic sample AI session for dashboard demos."""
+    from halyard.reports import read_active_timer
+
+    active = read_active_timer()
+    record_session(
+        project=project or (active.slug if active else None),
+        tool="claude-code",
+        model="claude-sonnet-4-6",
+        input_tokens=18_000,
+        output_tokens=3_200,
+        cost=None,
+        minutes=6,
+        note="dashboard sample",
+    )
 
 
 # ---------------------------------------------------------------------------

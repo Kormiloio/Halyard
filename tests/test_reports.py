@@ -7,7 +7,14 @@ from datetime import datetime
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
-from halyard.reports import build_ai_report, build_health_checks, read_active_timer
+from halyard.reports import (
+    build_ai_report,
+    build_health_checks,
+    build_human_time_report,
+    format_minutes,
+    parse_timeclock,
+    read_active_timer,
+)
 
 
 def _init_project(tmp_path: Path) -> None:
@@ -97,3 +104,34 @@ def test_read_active_timer(tmp_path: Path) -> None:
 
     assert timer is not None
     assert timer.slug == "acme:auth"
+
+
+def test_parse_timeclock_pairs_completed_and_open_entries(tmp_path: Path) -> None:
+    timeclock = tmp_path / "time.timeclock"
+    timeclock.write_text(
+        "i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 10:30:00\ni 2026-05-07 11:00:00 acme:auth\n"
+    )
+
+    entries = parse_timeclock(timeclock, now=datetime(2026, 5, 7, 11, 45))
+
+    assert len(entries) == 2
+    assert entries[0][2] == "acme:auth"
+    assert int((entries[0][1] - entries[0][0]).total_seconds() // 60) == 90
+    assert int((entries[1][1] - entries[1][0]).total_seconds() // 60) == 45
+
+
+def test_build_human_time_report_summarizes_today_and_month(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    (tmp_path / "time.timeclock").write_text(
+        "i 2026-05-07 09:00:00 acme:auth\n"
+        "o 2026-05-07 10:30:00\n"
+        "i 2026-05-06 09:00:00 globex:reports\n"
+        "o 2026-05-06 10:00:00\n"
+    )
+
+    report = build_human_time_report(tmp_path, now=datetime(2026, 5, 7, 12, 0))
+
+    assert report.today_minutes == 90
+    assert report.month_minutes == 150
+    assert report.by_project[0].label == "acme:auth"
+    assert format_minutes(report.today_minutes) == "1h 30m"

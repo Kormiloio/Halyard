@@ -21,5 +21,14 @@ def test_help_runs() -> None:
 
 def test_v0_commands_registered() -> None:
     result = runner.invoke(app, ["--help"])
-    for cmd in ("init", "log", "start", "stop", "invoice", "dashboard"):
+    for cmd in (
+        "init",
+        "log",
+        "start",
+        "stop",
+        "invoice",
+        "dashboard",
+        "record-session",
+        "sample-session",
+    ):
         assert cmd in result.stdout, f"command {cmd!r} not registered"

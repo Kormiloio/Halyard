@@ -55,6 +55,7 @@ halyard start acme/auth-migration
 halyard stop
 cat time.timeclock   # plain text, hledger-compatible
 halyard dashboard    # local Glass Cockpit for AI work capture
+halyard sample-session  # seed demo AI usage if hooks are not firing yet
 ```
 
 ---

@@ -49,3 +49,16 @@ def test_render_dashboard_shows_cockpit_and_session(tmp_path: Path) -> None:
     assert "Recent AI Sessions" in html
     assert "acme:auth" in html
     assert "claude-sonnet-4-6" in html
+
+
+def test_render_dashboard_shows_human_time(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    (tmp_path / "time.timeclock").write_text(
+        "i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 10:00:00\n"
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "Human Time" in html
+    assert "Timeclock" in html
+    assert "acme:auth" in html

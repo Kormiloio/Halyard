@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `halyard dashboard` command — starts a local Glass Cockpit dashboard showing
   AI sessions, cost, token totals, project attribution, active timer state, and
   collector health.
+- `halyard record-session` and `halyard sample-session` commands for manual,
+  Codex/local, and demo AI usage capture.
 - Reusable AI report and dashboard health services shared by CLI reporting and
   the local dashboard.
 - Auto-detection of business name from `git config user.name` during `init`.

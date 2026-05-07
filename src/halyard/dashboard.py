@@ -13,7 +13,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from halyard.ai_log import AiSession
-from halyard.reports import CostBucket, DashboardState, build_dashboard_state
+from halyard.reports import (
+    CostBucket,
+    DashboardState,
+    TimeBucket,
+    build_dashboard_state,
+    format_minutes,
+)
 
 
 def run_dashboard(project_dir: Path, *, port: int = 0, open_browser: bool = False) -> str:
@@ -79,10 +85,11 @@ def _resolve_port(port: int) -> int:
 
 def _render_state(state: DashboardState) -> str:
     report = state.report
+    human_time = state.human_time
     latest = state.latest_session
     timer_label = state.active_timer.slug if state.active_timer else "No active timer"
     timer_started = (
-        state.active_timer.started or "No start timestamp"
+        f"{state.active_timer.elapsed_label} elapsed"
         if state.active_timer
         else "Start one with halyard start"
     )
@@ -109,9 +116,9 @@ def _render_state(state: DashboardState) -> str:
 
     <section class="metrics" aria-label="Today summary">
       {_metric("Active Project", timer_label, timer_started, "focus")}
+      {_metric("Human Time", format_minutes(human_time.today_minutes), "today", "normal")}
       {_metric("AI Sessions", str(len(report.sessions)), report.period_label, "normal")}
       {_metric("AI Cost", f"${report.total_cost:.2f}", "captured API cost", "money")}
-      {_metric("Tokens", f"{report.total_input_tokens:,} in", f"{report.total_output_tokens:,} out", "normal")}
     </section>
 
     <section class="grid">
@@ -134,6 +141,17 @@ def _render_state(state: DashboardState) -> str:
           </div>
         </div>
         <div class="health-list">{"".join(_health_row(check.label, check.status, check.detail) for check in state.health)}</div>
+      </article>
+
+      <article class="panel span-6">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Human Work</p>
+            <h2>Timeclock</h2>
+          </div>
+          <span class="pill">{_e(format_minutes(human_time.month_minutes))} this month</span>
+        </div>
+        {_time_table(human_time.by_project)}
       </article>
 
       <article class="panel span-6">
@@ -229,6 +247,21 @@ def _bucket_table(buckets: Iterable[CostBucket], label: str) -> str:
     return (
         f"<table><thead><tr><th>{_e(label)}</th><th>Sessions</th><th>Cost</th>"
         "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+    )
+
+
+def _time_table(buckets: Iterable[TimeBucket]) -> str:
+    rows = []
+    for bucket in buckets:
+        rows.append(
+            f"<tr><td>{_e(bucket.label)}</td><td>{_e(format_minutes(bucket.minutes))}</td></tr>"
+        )
+    if not rows:
+        return '<p class="empty">No human time recorded this month.</p>'
+    return (
+        "<table><thead><tr><th>Project</th><th>Time</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
     )
 
 
