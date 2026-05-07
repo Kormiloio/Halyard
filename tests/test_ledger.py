@@ -80,7 +80,7 @@ def test_direct_api_uses_captured_cost() -> None:
     assert entry.direct_usd == pytest.approx(2.50)
     assert entry.allocated_usd == 0.0
     assert entry.total_usd == pytest.approx(2.50)
-    assert entry.trust == "calculated"
+    assert entry.trust == "captured"
 
 
 def test_no_plans_falls_back_to_direct() -> None:

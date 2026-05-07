@@ -130,7 +130,7 @@ analytics layer has anything to analyze.
 ### Human time
 The clock time a person spends directing, reviewing, building, communicating,
 and making decisions on a project. Stored in `time.timeclock` (hledger timeclock
-format). Tracked with `halyard in / out`.
+format). Tracked with `halyard start / stop`.
 
 ### AI session
 A bounded unit of AI tool activity: a Claude Code session, a Cursor stop event,
@@ -147,7 +147,7 @@ auto-tags sessions with project slug and branch when no active timer is running.
 
 ### Project attribution
 Mapping a session to a `client:project` slug. Priority order:
-1. Active timer (`halyard in acme:auth`)
+1. Active timer (`halyard start acme:auth`)
 2. Explicit git mapping (`~/.halyard/repos.toml`)
 3. Auto-derived git slug (`git/<repo-name>`)
 4. Unattributed (recoverable later with `halyard assign-unattributed`)

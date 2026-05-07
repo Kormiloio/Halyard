@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import tomllib
 from dataclasses import replace
 from pathlib import Path
 
@@ -138,7 +139,7 @@ def scaffold_project(target_dir: Path, hub: bool = False) -> None:
     console.print(
         "  3. Run [bold]halyard install-hook[/] — auto-capture AI sessions from Claude Code."
     )
-    console.print("\nTrack time: halyard in/out   |   View AI spend: halyard report")
+    console.print("\nTrack time: halyard start/stop   |   View AI spend: halyard report")
 
 
 def interactive_assign_unattributed(
@@ -185,6 +186,15 @@ def interactive_assign_unattributed(
                     console.print("[bold red]No current project or hub found.[/] Skipping session.")
                     skipped += 1
                     continue
+
+                if not _is_valid_project(target_project, target_dir):
+                    console.print(
+                        f"[bold red]Error:[/] Project '[bold]{target_project}[/]' not found "
+                        f"in {target_dir / 'projects.toml'}."
+                    )
+                    skipped += 1
+                    continue
+
                 append_session(target_dir, replace(session, project=target_project))
                 remaining.remove(line)
                 _rewrite_lines_atomic(global_log, remaining)
@@ -229,6 +239,13 @@ def interactive_assign_unattributed(
         )
         raise typer.Exit(code=1)
 
+    if not _is_valid_project(target_project, project_dir):
+        console.print(
+            f"[bold red]Error:[/] Project '[bold]{target_project}[/]' not found "
+            f"in {project_dir / 'projects.toml'}."
+        )
+        raise typer.Exit(code=1)
+
     changed = assign_unattributed_sessions(project_dir, target_project)
     if changed:
         console.print(
@@ -237,6 +254,21 @@ def interactive_assign_unattributed(
         )
     else:
         console.print("[yellow]No unattributed sessions found.[/]")
+
+
+def _is_valid_project(slug: str, project_dir: Path) -> bool:
+    """Return True if slug exists in projects.toml."""
+    path = project_dir / "projects.toml"
+    if not path.exists():
+        return False
+    try:
+        data = tomllib.loads(path.read_text())
+        for entry in data.get("project", []):
+            if entry.get("slug") == slug:
+                return True
+    except Exception:
+        pass
+    return False
 
 
 def _detect_business_name() -> str:

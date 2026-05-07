@@ -287,4 +287,4 @@ def _trust_label(direct: float, allocated: float, seat_claimed: int = 0) -> Cost
         return "allocated"
     if seat_claimed > 0:
         return "unallocated"
-    return "calculated"
+    return "captured"

@@ -111,12 +111,8 @@ def budget_status(now: datetime | None = None) -> list[BudgetStatus]:
             if not (candidate / AI_LOG_FILENAME).exists():
                 continue
             all_sessions = parse_sessions(candidate)
-            # When reading from hub, filter by project slug.
-            # When reading from a project dir, include all sessions.
-            if candidate == hub:
-                sessions = [s for s in all_sessions if s.project == slug]
-            else:
-                sessions = all_sessions
+            # Filter by project slug to ensure correctness even in project-local logs.
+            sessions = [s for s in all_sessions if s.project == slug]
             today_spend, month_spend = _sum_api_spend(sessions, now)
             break  # first valid source wins
 

@@ -70,7 +70,7 @@ render a Jinja2 invoice. Steps:
 - No multi-turn conversation for `halyard log`. Single-turn tool use only for
   v0.1. A persistent session REPL is a future scope item.
 - No automatic time entry approval. The user controls open/close manually with
-  `halyard in / out`.
+  `halyard start / stop`.
 - No e-filing or PDF transmission. The invoice file is the output; sending it
   is the user's responsibility.
 - No AI-assisted time entry review (reviewing timeclock for gaps). That is a

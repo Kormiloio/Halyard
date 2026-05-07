@@ -702,10 +702,11 @@ def check_log(
 
     resolved_log_path: Path
     if log_path is None:
-        project_dir = find_project_dir()
+        from halyard.hub import find_hub
+        project_dir = find_project_dir() or find_hub()
         if project_dir is None:
             console.print(
-                "[bold red]Error:[/] No Halyard project found. "
+                "[bold red]Error:[/] No Halyard project or hub found. "
                 "Run [bold]halyard init[/] first or pass [bold]--log[/]."
             )
             raise typer.Exit(code=1)

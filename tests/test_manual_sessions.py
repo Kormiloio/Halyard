@@ -37,6 +37,7 @@ def _init_project(tmp_path: Path) -> None:
     (tmp_path / "halyard.toml").write_text("[business]\n")
     (tmp_path / "time.timeclock").write_text("; time\n")
     (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp_path / "projects.toml").write_text('[[project]]\nslug = "acme:auth"\n')
 
 
 def test_record_session_appends_manual_session(
