@@ -37,14 +37,15 @@
 - [x] Each row: tool icon, model (truncated), project, duration, tokens, cost
 - [x] Newest sessions at top
 - [ ] New arrivals briefly highlighted
-- [ ] `Enter` on a row: post `ProjectSelected(slug)` message to app
+- [x] `Enter` on a row: opens project detail for the selected row
 
 ### `src/halyard/tui/widgets/project_pane.py`
-- [ ] `ProjectPane(Widget)` — project detail view (shown on drill-down)
-- [ ] Sessions list filtered to selected project
-- [ ] Per-model cost breakdown bar chart (ASCII bars via Textual `ProgressBar`)
-- [ ] Today's and month-to-date spend vs budget limits
-- [ ] `Escape` returns to session feed
+- [x] `ProjectPane(Widget)` — project detail view (shown on drill-down)
+- [x] Sessions list filtered to selected project
+- [x] Per-model cost breakdown bar chart (ASCII bars)
+- [x] Today's and month-to-date spend
+- [ ] Budget limits in project detail
+- [x] `Escape` returns to session feed
 
 ### `src/halyard/tui/widgets/budget_pane.py`
 - [x] `BudgetPane(Widget)` — spend vs limits for all configured projects
@@ -74,7 +75,7 @@
 - [x] Key binding: `b` (branch modal)
 - [x] Key binding: `?` (help)
 - [ ] Key binding: `ctrl+c` explicit quit
-- [ ] Handle `ProjectSelected` message: swap SessionFeed for ProjectPane
+- [x] Handle project selection: swap SessionFeed for ProjectPane
 - [x] Handle `BranchSelected` message: set `branch_filter`, update header
 - [x] `app.tcss` CSS file with budget color classes and layout rules
 
@@ -98,6 +99,9 @@
 - [x] `test_time_window_key_changes_window` — `await pilot.press("d")` sets
   `time_window = "today"`
 - [x] `test_project_toggle_key` — `await pilot.press("p")` toggles scope
+- [x] `test_feed_selection_moves_with_arrow_keys` — arrow keys update selected row
+- [x] `test_enter_opens_project_detail` — Enter opens project detail
+- [x] `test_escape_returns_from_project_detail` — Escape restores feed
 - [x] `test_budget_pane_renders_limits` — BudgetPane shows correct spend/limit
   for mocked budget data
 

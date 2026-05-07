@@ -227,9 +227,12 @@ First vertical slice implemented.
 - The branch filter modal lists branch tags by recency; Enter applies a branch
   filter and Escape clears it.
 - The help modal gives an in-app keyboard reference and dismisses with Escape.
+- The session feed supports row selection; Enter opens a project detail pane
+  with project sessions, model mix, and today/month spend, and Escape returns
+  to the feed.
 
-Still pending: project drill-down, new-row highlighting, richer budget/project
-detail views, and explicit log rotation re-open behavior.
+Still pending: new-row highlighting, budget limits inside project detail, richer
+project detail visuals, and explicit log rotation re-open behavior.
 
 ### The gap
 

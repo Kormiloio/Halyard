@@ -162,6 +162,67 @@ def test_project_toggle_key(tmp_path: Path) -> None:
     asyncio.run(run())
 
 
+def test_feed_selection_moves_with_arrow_keys(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+    from halyard.tui.widgets.session_feed import SessionFeed
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")
+        store.sessions = [
+            _session(project="acme:first"),
+            _session(project="acme:second"),
+        ]
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            await pilot.press("down")
+            assert pilot.app.selected_index == 1
+            assert pilot.app.query_one(SessionFeed).selected_index == 1
+
+    asyncio.run(run())
+
+
+def test_enter_opens_project_detail(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+    from halyard.tui.widgets.project_pane import ProjectPane
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")
+        store.sessions = [_session(project="acme:auth")]
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            await pilot.press("enter")
+            pane = pilot.app.query_one(ProjectPane)
+            assert pilot.app.detail_project == "acme:auth"
+            assert "Project: acme:auth" in pane.last_rendered_text
+
+    asyncio.run(run())
+
+
+def test_escape_returns_from_project_detail(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")
+        store.sessions = [_session(project="acme:auth")]
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            await pilot.press("enter")
+            assert pilot.app.detail_project == "acme:auth"
+            await pilot.press("escape")
+            assert pilot.app.detail_project is None
+
+    asyncio.run(run())
+
+
 def test_branch_modal_key_opens_selector(tmp_path: Path) -> None:
     pytest.importorskip("textual")
     from halyard.tui.app import HalyardApp

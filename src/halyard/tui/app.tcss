@@ -17,6 +17,7 @@ Screen {
 }
 
 #session-feed,
+#project-pane,
 #budget-pane,
 #model-pane {
     border: solid $primary;
