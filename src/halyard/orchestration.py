@@ -11,9 +11,11 @@ import typer
 from rich.console import Console
 
 from halyard.ai_log import (
+    AI_LOG_FILENAME,
     AiSession,
     append_session,
     assign_unattributed_sessions,
+    confirm_session_attributions,
     find_project_dir,
     unattributed_log_path,
 )
@@ -255,6 +257,78 @@ def interactive_assign_unattributed(
         )
     else:
         console.print("[yellow]No unattributed sessions found.[/]")
+
+
+def interactive_confirm_attribution(project_dir: Path) -> None:
+    """Review and confirm AI sessions with project attribution inferred from timeclock overlap."""
+    from halyard.ledger import infer_project_attribution
+    from halyard.reports import parse_timeclock
+
+    log_path = project_dir / AI_LOG_FILENAME
+    if not log_path.exists():
+        console.print("[yellow]No ai-sessions.log found in this project.[/]")
+        return
+
+    tc_entries = parse_timeclock(project_dir / "time.timeclock")
+    if not tc_entries:
+        console.print(
+            "[yellow]No timeclock entries found.[/] Attribution inference requires "
+            "time.timeclock data. Run [bold]halyard start[/] to begin tracking time."
+        )
+        return
+
+    raw_lines = log_path.read_text().splitlines()
+    candidates: list[tuple[str, AiSession, str]] = []
+
+    for raw_line in raw_lines:
+        line = raw_line.rstrip()
+        if not (line.startswith("s ") and " project=" not in line):
+            continue
+        session = AiSession.from_log_line(line)
+        if session is None:
+            continue
+        inferred = infer_project_attribution(session, tc_entries)
+        if inferred is not None:
+            candidates.append((line, session, inferred))
+
+    if not candidates:
+        console.print("[green]No unattributed sessions with inferred attribution found.[/]")
+        return
+
+    console.print(f"\n[bold]{len(candidates)} session(s) with inferred attribution[/]\n")
+
+    confirmations: list[tuple[str, str]] = []
+    confirmed_count = rejected = skipped = 0
+
+    for raw_line, session, inferred in candidates:
+        duration = max(1, int((session.end - session.start).total_seconds() // 60))
+        console.print(
+            f"\n  {session.start:%Y-%m-%d %H:%M} → {session.end:%H:%M}  ({duration}m)\n"
+            f"  {session.tool} / {session.model}  ${session.cost_usd:.4f}\n"
+            f"  Inferred: [bold cyan]{inferred}[/]"
+        )
+        choice = typer.prompt("  [y]es / [n]o / [s]kip", default="s").strip().lower()[:1]
+        if choice == "y":
+            confirmations.append((raw_line, inferred))
+            confirmed_count += 1
+        elif choice == "n":
+            rejected += 1
+        else:
+            skipped += 1
+
+    if confirmations:
+        count = confirm_session_attributions(project_dir, confirmations)
+        console.print(f"\n[bold green]{count} session(s) attributed.[/]")
+    else:
+        console.print("\n[yellow]No attributions confirmed.[/]")
+
+    parts = []
+    if rejected:
+        parts.append(f"{rejected} rejected")
+    if skipped:
+        parts.append(f"{skipped} skipped")
+    if parts:
+        console.print(f"  {', '.join(parts)}")
 
 
 def _is_valid_project(slug: str, project_dir: Path) -> bool:

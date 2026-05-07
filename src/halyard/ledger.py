@@ -22,6 +22,19 @@ from halyard.ai_plans import AiPlan
 CostTrust = Literal["captured", "calculated", "allocated", "unallocated", "mixed", "inferred"]
 
 
+def infer_project_attribution(
+    session: AiSession,
+    timeclock_entries: list[tuple[datetime, datetime, str]],
+) -> str | None:
+    """Return the inferred project slug from an unambiguous timeclock overlap, or None."""
+    overlapping = [
+        account
+        for tc_start, tc_end, account in timeclock_entries
+        if tc_start <= session.end and tc_end >= session.start
+    ]
+    return overlapping[0] if len(overlapping) == 1 else None
+
+
 @dataclass(frozen=True)
 class LedgerEntry:
     project: str
@@ -165,21 +178,16 @@ def _resolve_attribution(
 ) -> list[tuple[AiSession, bool]]:
     """Return (session, inferred) pairs. Unattributed sessions get a project
     inferred from an unambiguous overlapping timeclock window."""
+    import dataclasses
+
     result: list[tuple[AiSession, bool]] = []
     for sess in sessions:
         if sess.project:
             result.append((sess, False))
             continue
-        overlapping = [
-            account
-            for tc_start, tc_end, account in timeclock_entries
-            if tc_start <= sess.end and tc_end >= sess.start
-        ]
-        if len(overlapping) == 1:
-            import dataclasses
-
-            attributed = dataclasses.replace(sess, project=overlapping[0])
-            result.append((attributed, True))
+        inferred = infer_project_attribution(sess, timeclock_entries)
+        if inferred is not None:
+            result.append((dataclasses.replace(sess, project=inferred), True))
         else:
             result.append((sess, False))
     return result

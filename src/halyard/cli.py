@@ -710,6 +710,22 @@ def assign_unattributed(
     interactive_assign_unattributed(explicit_project=project)
 
 
+@app.command(name="confirm-attribution")
+def confirm_attribution() -> None:
+    """Confirm AI sessions with project attribution inferred from timeclock overlap."""
+    from halyard.ai_log import find_project_dir
+    from halyard.orchestration import interactive_confirm_attribution
+
+    project_dir = find_project_dir()
+    if project_dir is None:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
+        raise typer.Exit(code=1)
+
+    interactive_confirm_attribution(project_dir)
+
+
 @app.command(name="check-log")
 def check_log(
     log_path: str | None = typer.Option(

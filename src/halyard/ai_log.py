@@ -229,6 +229,37 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
     return session, None
 
 
+def confirm_session_attributions(
+    project_dir: Path,
+    confirmations: list[tuple[str, str]],
+) -> int:
+    """Write confirmed project attributions into ai-sessions.log.
+
+    Each entry in confirmations is (original_line, project_slug). The matching
+    line in the log gets ' project=<slug>' appended in place.
+    Returns the number of lines updated.
+    """
+    log_path = project_dir / AI_LOG_FILENAME
+    if not log_path.exists() or not confirmations:
+        return 0
+
+    confirm_map = {line.rstrip(): project for line, project in confirmations}
+    changed = 0
+    new_lines = []
+    for raw_line in log_path.read_text().splitlines():
+        stripped = raw_line.rstrip()
+        if stripped in confirm_map:
+            new_lines.append(f"{stripped} project={confirm_map[stripped]}")
+            changed += 1
+        else:
+            new_lines.append(raw_line)
+
+    if changed:
+        log_path.write_text("\n".join(new_lines) + "\n")
+
+    return changed
+
+
 def _is_assignable_session_line(line: str) -> bool:
     stripped = line.strip()
     return stripped.startswith("s ") and " project=" not in stripped

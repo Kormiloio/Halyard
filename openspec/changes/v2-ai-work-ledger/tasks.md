@@ -24,7 +24,7 @@ Implementation checklist for v2 — AI Work Ledger.
 - [ ] 3.1 Join AI sessions to project records through `project=client:project`.
 - [ ] 3.2 Detect unattributed sessions and surface them in reports.
 - [ ] 3.3 Infer attribution from overlapping `time.timeclock` windows.
-- [ ] 3.4 Add a confirmation flow for inferred attribution before writing any
+- [x] 3.4 Add a confirmation flow for inferred attribution before writing any
       corrections.
 
 ## 4. Combined reporting
