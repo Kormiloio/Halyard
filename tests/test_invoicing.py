@@ -109,14 +109,14 @@ def test_log_json_returns_local_summary(tmp_path: Path, monkeypatch: object) -> 
     assert payload["agent"] == "local"
 
 
-def test_log_agent_claude_is_explicitly_unavailable(tmp_path: Path, monkeypatch: object) -> None:
+def test_log_agent_claude_requires_api_key(tmp_path: Path, monkeypatch: object) -> None:
     monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
     _init_project(tmp_path)
 
     result = runner.invoke(app, ["log", "what did I spend?", "--agent", "claude"])
 
     assert result.exit_code == 1
-    assert "--agent claude is not implemented yet" in result.output
+    assert "Missing ANTHROPIC_API_KEY" in result.output
 
 
 def test_log_rejects_unknown_agent(tmp_path: Path, monkeypatch: object) -> None:

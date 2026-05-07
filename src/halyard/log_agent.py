@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from halyard.ai_log import AiSession, parse_sessions
-from halyard.reports import format_minutes, parse_timeclock, summarize_ai_sessions
+from halyard.reports import (
+    AiReport,
+    format_minutes,
+    parse_timeclock,
+    summarize_ai_sessions,
+)
 
 LogAgent = Literal["local", "claude"]
 
@@ -50,6 +57,61 @@ class LogAgentError(Exception):
     """Raised when a requested log query provider cannot answer."""
 
 
+# ---------------------------------------------------------------------------
+# Anthropic Tool Schemas
+# ---------------------------------------------------------------------------
+
+_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "read_sessions",
+        "description": "Read individual AI work sessions from the log, with optional filters.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "ISO date (YYYY-MM-DD)"},
+                "end_date": {"type": "string", "description": "ISO date (YYYY-MM-DD)"},
+                "tool": {"type": "string", "description": "Filter by tool name (cursor, codex, etc.)"},
+                "project": {"type": "string", "description": "Filter by project slug (client:project)"},
+                "limit": {"type": "integer", "description": "Max sessions to return", "default": 20},
+            },
+        },
+    },
+    {
+        "name": "summarize_by_project",
+        "description": "Get aggregated costs and session counts grouped by project.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "ISO date (YYYY-MM-DD)"},
+                "end_date": {"type": "string", "description": "ISO date (YYYY-MM-DD)"},
+            },
+        },
+    },
+    {
+        "name": "summarize_by_model",
+        "description": "Get aggregated costs and session counts grouped by AI model.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "ISO date (YYYY-MM-DD)"},
+                "end_date": {"type": "string", "description": "ISO date (YYYY-MM-DD)"},
+            },
+        },
+    },
+    {
+        "name": "read_timeclock",
+        "description": "Read human time entries from the timeclock file.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "ISO date (YYYY-MM-DD)"},
+                "end_date": {"type": "string", "description": "ISO date (YYYY-MM-DD)"},
+            },
+        },
+    },
+]
+
+
 def run_log_query(
     query: str,
     *,
@@ -66,10 +128,202 @@ def run_log_query(
             query, project_dir=project_dir, period=period, filters=filters, now=now
         )
     if agent == "claude":
-        raise LogAgentError(
-            "--agent claude is not implemented yet. Use --agent local for offline log queries."
+        return run_claude_log_query(
+            query,
+            project_dir=project_dir,
+            model=model or "claude-3-5-sonnet-20241022",
+            now=now,
         )
     raise LogAgentError(f"Unknown log agent: {agent}")
+
+
+def run_claude_log_query(
+    query: str,
+    *,
+    project_dir: Path,
+    model: str,
+    now: datetime | None = None,
+) -> LogQueryResponse:
+    """Answer via Anthropic SDK using tool-use for local data retrieval."""
+    import anthropic
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise LogAgentError(
+            "Missing ANTHROPIC_API_KEY environment variable. "
+            "Set it to use the --agent claude provider."
+        )
+
+    clock = now or datetime.now()
+    client = anthropic.Anthropic(api_key=api_key)
+
+    system_prompt = (
+        f"You are the Halyard AI Assistant. Today is {clock.strftime('%Y-%m-%d %A')}. "
+        "Your role is to answer questions about the user's work sessions and costs. "
+        "Use the provided tools to fetch data from the local Halyard logs. "
+        "Never make up data; if tools return no results, say so. "
+        "When summarizing costs, use the USD totals from the tools."
+    )
+
+    messages: list[Any] = [{"role": "user", "content": query}]
+    captured_buckets_project: list[LogBucket] = []
+    captured_buckets_model: list[LogBucket] = []
+    total_cost = 0.0
+    session_count = 0
+    human_minutes = 0
+
+    try:
+        # Max 3 turns to prevent runaway loops
+        for _ in range(3):
+            response = client.messages.create(
+                model=model,
+                max_tokens=1024,
+                system=system_prompt,
+                tools=_TOOLS,  # type: ignore[arg-type]
+                messages=messages,
+            )
+
+            if response.stop_reason != "tool_use":
+                # Final answer reached
+                text_content = next(
+                    (c.text for c in response.content if hasattr(c, "text")),
+                    "(No answer provided)",
+                )
+                return LogQueryResponse(
+                    answer=text_content,
+                    query=query,
+                    agent="claude",
+                    data_source=str(project_dir),
+                    period="dynamic",
+                    cost_usd_total=round(total_cost, 4),
+                    session_count=session_count,
+                    human_minutes=human_minutes,
+                    filters=LogQueryFilters(),
+                    projects=captured_buckets_project,
+                    models=captured_buckets_model,
+                )
+
+            # Process tool calls
+            messages.append({"role": "assistant", "content": response.content})
+            for content in response.content:
+                if content.type == "tool_use":
+                    tool_name = content.name
+                    tool_args = content.input
+                    tool_result = _execute_tool(tool_name, tool_args, project_dir, clock)
+
+                    # Update internal counters if it was a summary tool
+                    if isinstance(tool_result, dict):
+                        if "total_cost" in tool_result:
+                            total_cost = max(total_cost, tool_result.get("total_cost", 0.0))
+                            session_count = max(session_count, tool_result.get("session_count", 0))
+                        if "by_project" in tool_result:
+                            captured_buckets_project = [
+                                LogBucket(
+                                    label=b["label"],
+                                    cost_usd=b["cost_usd"],
+                                    sessions=b["sessions"],
+                                )
+                                for b in tool_result["by_project"]
+                            ]
+                        if "by_model" in tool_result:
+                            captured_buckets_model = [
+                                LogBucket(
+                                    label=b["label"],
+                                    cost_usd=b["cost_usd"],
+                                    sessions=b["sessions"],
+                                )
+                                for b in tool_result["by_model"]
+                            ]
+                        if "total_minutes" in tool_result:
+                            human_minutes = max(human_minutes, tool_result["total_minutes"])
+
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": content.id,
+                                    "content": json.dumps(tool_result),
+                                }
+                            ],
+                        }
+                    )
+
+        raise LogAgentError("Agent exceeded maximum turn limit (3) without a final answer.")
+
+    except anthropic.AnthropicError as exc:
+        raise LogAgentError(f"Anthropic API error: {exc}") from exc
+
+
+def _execute_tool(name: str, args: dict[str, Any], project_dir: Path, now: datetime) -> Any:
+    """Route a tool call to the local Halyard data layer."""
+    start_date = _parse_date(args.get("start_date"))
+    end_date = _parse_date(args.get("end_date"))
+
+    if name == "read_sessions":
+        sessions = parse_sessions(project_dir)
+        sessions = _filter_sessions_by_date(sessions, start_date, end_date)
+        if tool := args.get("tool"):
+            sessions = [s for s in sessions if s.tool == tool]
+        if project := args.get("project"):
+            sessions = [s for s in sessions if s.project == project]
+        limit = args.get("limit", 20)
+        return [asdict(s) for s in sessions[:limit]]
+
+    if name == "summarize_by_project" or name == "summarize_by_model":
+        sessions = parse_sessions(project_dir)
+        sessions = _filter_sessions_by_date(sessions, start_date, end_date)
+        report = summarize_ai_sessions(sessions, period_label="agent-query")
+        return {
+            "total_cost": round(report.total_cost, 4),
+            "session_count": len(sessions),
+            "by_project": [
+                {"label": b.label, "cost_usd": round(b.cost_usd, 4), "sessions": b.sessions}
+                for b in report.by_project
+            ],
+            "by_model": [
+                {"label": b.label, "cost_usd": round(b.cost_usd, 4), "sessions": b.sessions}
+                for b in report.by_model
+            ],
+        }
+
+    if name == "read_timeclock":
+        entries = parse_timeclock(project_dir / "time.timeclock", now=now)
+        filtered = []
+        total_minutes = 0
+        for start, end, note in entries:
+            if start_date and start.date() < start_date:
+                continue
+            if end_date and start.date() > end_date:
+                continue
+            filtered.append(
+                {"start": start.isoformat(), "end": end.isoformat(), "note": note}
+            )
+            total_minutes += max(0, int((end - start).total_seconds() // 60))
+        return {"total_minutes": total_minutes, "entries": filtered[:50]}
+
+    return {"error": f"Unknown tool: {name}"}
+
+
+def _parse_date(d: str | None) -> Any:
+    if not d:
+        return None
+    try:
+        return datetime.fromisoformat(d).date()
+    except ValueError:
+        return None
+
+
+def _filter_sessions_by_date(
+    sessions: list[AiSession], start: Any | None, end: Any | None
+) -> list[AiSession]:
+    result = sessions
+    if start:
+        result = [s for s in result if s.start.date() >= start]
+    if end:
+        result = [s for s in result if s.start.date() <= end]
+    return result
 
 
 def run_local_log_query(
