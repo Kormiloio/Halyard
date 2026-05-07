@@ -11,6 +11,7 @@ from halyard.git_context import (
     _extract_repo_name,
     _normalize_remote,
     _remote_matches,
+    current_branch,
     infer_project,
     register_repo,
 )
@@ -139,3 +140,29 @@ def test_register_repo_updates_existing(tmp_path: Path, monkeypatch: pytest.Monk
     text = config.read_text()
     assert '"acme:new"' in text
     assert '"acme:old"' not in text
+
+
+# ---------------------------------------------------------------------------
+# current_branch
+# ---------------------------------------------------------------------------
+
+
+def test_current_branch_returns_branch_name(tmp_path: Path) -> None:
+    with patch(
+        "halyard.git_context.subprocess.run",
+        return_value=type("R", (), {"returncode": 0, "stdout": "feature/auth\n"})(),
+    ):
+        assert current_branch(tmp_path) == "feature/auth"
+
+
+def test_current_branch_returns_none_on_error(tmp_path: Path) -> None:
+    with patch(
+        "halyard.git_context.subprocess.run",
+        return_value=type("R", (), {"returncode": 128, "stdout": ""})(),
+    ):
+        assert current_branch(tmp_path) is None
+
+
+def test_current_branch_returns_none_on_oserror(tmp_path: Path) -> None:
+    with patch("halyard.git_context.subprocess.run", side_effect=OSError):
+        assert current_branch(tmp_path) is None

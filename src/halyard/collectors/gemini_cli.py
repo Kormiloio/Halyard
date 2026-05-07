@@ -29,8 +29,9 @@ from pathlib import Path
 from typing import Any
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
-from halyard.git_context import infer_project
+from halyard.git_context import current_branch, infer_project
 from halyard.hub import find_hub
+from halyard.pricing import calculate_cost
 
 _GC_SESSION_FILE = Path.home() / ".halyard" / "gc-session"
 
@@ -46,6 +47,7 @@ def record_session_start() -> int:
         "model": "",
         "prompt_tokens": 0,
         "output_tokens": 0,
+        "cache_tokens": 0,
     }
     _GC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
     _GC_SESSION_FILE.write_text(json.dumps(state))
@@ -66,12 +68,15 @@ def record_model_usage() -> int:
     model = llm_req.get("model") or state.get("model") or ""
     prompt_tokens = int(usage.get("promptTokenCount") or 0)
     candidates_tokens = int(usage.get("candidatesTokenCount") or 0)
+    cached_tokens = int(usage.get("cachedContentTokenCount") or 0)
 
     state["model"] = model or state.get("model", "")
     # Keep the latest (largest) cumulative prompt token count
     state["prompt_tokens"] = max(int(state.get("prompt_tokens", 0)), prompt_tokens)
     # Accumulate output tokens across all model calls in this turn
     state["output_tokens"] = int(state.get("output_tokens", 0)) + candidates_tokens
+    # Keep the largest cumulative cached token count
+    state["cache_tokens"] = max(int(state.get("cache_tokens", 0)), cached_tokens)
 
     _GC_SESSION_FILE.write_text(json.dumps(state))
     return 0
@@ -100,20 +105,26 @@ def handle_agent_stop() -> int:
     model = (state or {}).get("model") or payload.get("model") or "gemini-unknown"
     prompt_tokens = int((state or {}).get("prompt_tokens") or 0)
     output_tokens = int((state or {}).get("output_tokens") or 0)
+    cache_tokens = int((state or {}).get("cache_tokens") or 0)
+    # promptTokenCount is cumulative (includes cached); net_input is the billable portion
+    net_input = max(0, prompt_tokens - cache_tokens)
     tokens_available = prompt_tokens > 0 or output_tokens > 0
+    branch = current_branch(cwd)
 
     session = AiSession(
         start=start,
         end=now,
         tool="gemini-cli",
         model=model,
-        input_tokens=prompt_tokens,
+        input_tokens=net_input,
         output_tokens=output_tokens,
-        cost_usd=0.0,
+        cost_usd=calculate_cost(model, net_input, output_tokens, cache_read=cache_tokens),
         project=_read_active_project() or infer_project(cwd),
+        cache_read=cache_tokens or None,
         tokens_available=tokens_available,
-        billing="seat",
+        billing="api",
         source="hook",
+        tags=[f"branch:{branch}"] if branch else [],
     )
 
     append_session(project_dir, session)
@@ -154,6 +165,7 @@ def _reset_state(payload: dict) -> None:  # type: ignore[type-arg]
     state["model"] = ""
     state["prompt_tokens"] = 0
     state["output_tokens"] = 0
+    state["cache_tokens"] = 0
     _GC_SESSION_FILE.write_text(json.dumps(state))
 
 

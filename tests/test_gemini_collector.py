@@ -40,6 +40,7 @@ def _after_model_payload(
     model: str = "gemini-2.0-pro",
     prompt_tokens: int = 1500,
     candidates_tokens: int = 200,
+    cached_tokens: int = 0,
 ) -> dict:  # type: ignore[type-arg]
     return {
         "hook_event_name": "AfterModel",
@@ -48,6 +49,7 @@ def _after_model_payload(
             "usageMetadata": {
                 "promptTokenCount": prompt_tokens,
                 "candidatesTokenCount": candidates_tokens,
+                "cachedContentTokenCount": cached_tokens,
                 "totalTokenCount": prompt_tokens + candidates_tokens,
             }
         },
@@ -309,4 +311,36 @@ def test_full_turn_sequence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert s.output_tokens == 250
     assert s.model == "gemini-2.0-pro"
     assert s.tool == "gemini-cli"
-    assert s.billing == "seat"
+    assert s.billing == "api"
+
+
+def test_cache_tokens_reduce_input_and_set_cache_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """cachedContentTokenCount is subtracted from input and stored as cache_read."""
+    project = _halyard_project(tmp_path / "project")
+    state_file = tmp_path / "gc-session"
+    monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
+    monkeypatch.setattr("halyard.collectors.gemini_cli._read_active_project", lambda: None)
+
+    with _patch_stdin(_session_start_payload(cwd=str(project))):
+        record_session_start()
+
+    # 1000 prompt tokens, 400 of which were cached
+    model_payload = _after_model_payload(
+        prompt_tokens=1000, candidates_tokens=100, cached_tokens=400
+    )
+    with _patch_stdin(model_payload):
+        record_model_usage()
+
+    with _patch_stdin(_after_agent_payload(cwd=str(project))):
+        handle_agent_stop()
+
+    from halyard.ai_log import parse_sessions
+
+    sessions = parse_sessions(project)
+    assert len(sessions) == 1
+    s = sessions[0]
+    assert s.input_tokens == 600   # 1000 - 400 cached
+    assert s.cache_read == 400
+    assert s.output_tokens == 100

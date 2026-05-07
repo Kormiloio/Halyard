@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
-from halyard.git_context import infer_project
+from halyard.git_context import current_branch, infer_project
 from halyard.hub import find_hub
 
 _CURSOR_SESSION_FILE = Path.home() / ".halyard" / "cursor-session"
@@ -64,10 +64,11 @@ def handle_stop_hook() -> int:
 
     model = payload.get("model") or payload.get("stop_model") or "cursor-unknown"
 
-    # Infer project from workspace root when no active timer is running
+    # Infer project and branch from workspace root when no active timer is running
     roots = payload.get("workspace_roots") or []
     cwd_for_git = Path(roots[0]) if roots else None
     project = _read_active_project() or (infer_project(cwd_for_git) if cwd_for_git else None)
+    branch = current_branch(cwd_for_git) if cwd_for_git else None
 
     session = AiSession(
         start=start,
@@ -83,6 +84,7 @@ def handle_stop_hook() -> int:
         tokens_available=tokens_available,
         billing="credits",
         source="hook",
+        tags=[f"branch:{branch}"] if branch else [],
     )
 
     append_session(project_dir, session)

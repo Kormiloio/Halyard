@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
-from halyard.git_context import infer_project
+from halyard.git_context import current_branch, infer_project
 from halyard.hub import find_hub
 from halyard.pricing import calculate_cost, model_is_known
 
@@ -69,6 +69,7 @@ def handle_stop_hook() -> int:
     )
 
     cost = calculate_cost(model, input_tokens, output_tokens, cache_read, cache_write)
+    branch = current_branch(cwd)
 
     session = AiSession(
         start=start,
@@ -83,6 +84,7 @@ def handle_stop_hook() -> int:
         cache_write=cache_write or None,
         tokens_available=tokens_available,
         source="hook",
+        tags=[f"branch:{branch}"] if branch else [],
     )
 
     append_session(project_dir, session)

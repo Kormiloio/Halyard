@@ -35,6 +35,21 @@ def infer_project(cwd: Path) -> str | None:
     return f"git/{repo_name}" if repo_name else None
 
 
+def current_branch(cwd: Path) -> str | None:
+    """Return the current git branch name for cwd, or None if not in a repo."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(cwd), "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        branch = result.stdout.strip()
+        return branch or None
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+        return None
+
+
 def register_repo(remote_pattern: str, project_slug: str) -> None:
     """Add or update a remote-pattern → project-slug mapping."""
     existing = _load_repos_config()
