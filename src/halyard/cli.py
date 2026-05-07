@@ -144,7 +144,7 @@ _CC_HOOKS: dict[str, list[dict[str, Any]]] = {
 }
 
 # Gemini CLI hook config injected by `halyard install-gemini-hook`
-_GC_HOOKS: dict[str, dict[str, str]] = {
+_GC_HOOKS: dict[str, str] = {
     "SessionStart": "halyard gc-session",
     "AfterModel": "halyard gc-model",
     "AfterAgent": "halyard gc-hook",
@@ -851,8 +851,9 @@ def report(
 
     if human.by_project:
         console.print("\n[bold]Human time by project[/]")
-        for bucket in human.by_project:
-            console.print(f"  {bucket.label:<32} [cyan]{format_minutes(bucket.minutes)}[/]")
+        for time_bucket in human.by_project:
+            mins = format_minutes(time_bucket.minutes)
+            console.print(f"  {time_bucket.label:<32} [cyan]{mins}[/]")
 
     if ledger:
         from halyard.ai_plans import read_ai_plans

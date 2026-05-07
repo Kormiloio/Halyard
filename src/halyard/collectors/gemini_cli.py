@@ -26,6 +26,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
 
@@ -130,11 +131,12 @@ def _read_payload() -> dict:  # type: ignore[type-arg]
         return {}
 
 
-def _read_state() -> dict | None:  # type: ignore[type-arg]
+def _read_state() -> dict[str, Any] | None:
     if not _GC_SESSION_FILE.exists():
         return None
     try:
-        return json.loads(_GC_SESSION_FILE.read_text())
+        result: dict[str, Any] = json.loads(_GC_SESSION_FILE.read_text())
+        return result
     except (json.JSONDecodeError, ValueError, OSError):
         return None
 
