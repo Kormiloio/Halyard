@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
+from halyard.collectors.gemini_history import find_session_file, parse_session_file
 from halyard.git_context import current_branch, infer_project
 from halyard.hub import find_hub
 from halyard.pricing import calculate_cost
@@ -116,14 +117,40 @@ def handle_agent_stop() -> int:
     except ValueError:
         start = now
 
-    model = (state or {}).get("model") or payload.get("model") or "gemini-unknown"
-    prompt_tokens = int((state or {}).get("prompt_tokens") or 0)
-    output_tokens = int((state or {}).get("output_tokens") or 0)
-    cache_tokens = int((state or {}).get("cache_tokens") or 0)
-    # promptTokenCount is cumulative (includes cached); net_input is the billable portion
-    net_input = max(0, prompt_tokens - cache_tokens)
-    tokens_available = prompt_tokens > 0 or output_tokens > 0
     branch = current_branch(cwd)
+    base_tags = [f"branch:{branch}"] if branch else []
+
+    # Try to enrich from the history file for accurate multi-model cost
+    session_id = (state or {}).get("session_id") or ""
+    history_summary = None
+    if session_id:
+        history_path = find_session_file(session_id)
+        if history_path:
+            history_summary = parse_session_file(history_path)
+
+    if history_summary:
+        model = history_summary.dominant_model or "gemini-unknown"
+        net_input = history_summary.total_input
+        output_tokens = history_summary.total_output
+        cache_tokens = history_summary.total_cache
+        cost = history_summary.cost_usd
+        tokens_available = net_input > 0 or output_tokens > 0
+        extra_tags: list[str] = []
+        if history_summary.total_tool_calls:
+            extra_tags.append(f"tools:{history_summary.total_tool_calls}")
+        if history_summary.total_tool_errors:
+            extra_tags.append(f"tool_errors:{history_summary.total_tool_errors}")
+        tags = base_tags + extra_tags
+    else:
+        # Fall back to accumulated hook state
+        model = (state or {}).get("model") or payload.get("model") or "gemini-unknown"
+        prompt_tokens = int((state or {}).get("prompt_tokens") or 0)
+        output_tokens = int((state or {}).get("output_tokens") or 0)
+        cache_tokens = int((state or {}).get("cache_tokens") or 0)
+        net_input = max(0, prompt_tokens - cache_tokens)
+        cost = calculate_cost(model, net_input, output_tokens, cache_read=cache_tokens)
+        tokens_available = prompt_tokens > 0 or output_tokens > 0
+        tags = base_tags
 
     session = AiSession(
         start=start,
@@ -132,13 +159,13 @@ def handle_agent_stop() -> int:
         model=model,
         input_tokens=net_input,
         output_tokens=output_tokens,
-        cost_usd=calculate_cost(model, net_input, output_tokens, cache_read=cache_tokens),
+        cost_usd=cost,
         project=_read_active_project() or infer_project(cwd),
         cache_read=cache_tokens or None,
         tokens_available=tokens_available,
         billing="api",
         source="hook",
-        tags=[f"branch:{branch}"] if branch else [],
+        tags=tags,
     )
 
     append_session(project_dir, session)
