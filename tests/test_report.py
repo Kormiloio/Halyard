@@ -108,3 +108,18 @@ def test_report_no_halyard_project_exits_nonzero(tmp_path: Path) -> None:
     with patch("halyard.ai_log.Path.cwd", return_value=tmp_path):
         result = runner.invoke(app, ["report"])
     assert result.exit_code == 1
+
+
+def test_report_project_filter_filters_model_breakdown(tmp_path: Path) -> None:
+    _init(tmp_path)
+    append_session(tmp_path, _s(project="acme:auth", model="claude-sonnet-4-6", cost=1.00))
+    append_session(tmp_path, _s(project="globex:reports", model="claude-opus-4-7", cost=9.00))
+
+    with patch("halyard.ai_log.Path.cwd", return_value=tmp_path):
+        result = runner.invoke(app, ["report", "--project", "acme:auth"])
+
+    assert result.exit_code == 0, result.output
+    assert "$1.00" in result.output
+    assert "claude-sonnet-4-6" in result.output
+    assert "claude-opus-4-7" not in result.output
+    assert "$9.00" not in result.output

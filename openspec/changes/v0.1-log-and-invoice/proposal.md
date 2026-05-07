@@ -19,16 +19,21 @@ This change closes v0 completely.
 
 ### `halyard log`
 
-Implements the AI agent REPL as a single-turn Claude SDK tool-use call, using
-the SDK's structured output mode. The agent receives:
+Implements a provider-neutral log query layer. The default `local` provider is
+deterministic, offline, and queries the same local Halyard files as any future
+model-backed provider. Claude is the first planned model-backed provider, but
+it is a reasoning engine only; it does not define which captured tools can be
+queried.
+
+The query layer receives:
 
 - System context: project config, current budget state, pricing table metadata
 - Contents of `ai-sessions.log` (or hub log if outside a project directory)
 - Natural language query from the user
 
-The model returns a typed `LogQueryResponse` object — not free-form text. The
-CLI renders the structured response as a Rich table or paragraph. With
-`--json`, the raw response is emitted for piping.
+The command returns a typed `LogQueryResponse` object — not free-form text. The
+CLI renders the structured response as a Rich table or paragraph. With `--json`,
+the raw response is emitted for piping.
 
 Tools available to the agent:
 - `read_sessions(project?, start?, end?)` — filtered view of ai-sessions.log
@@ -37,7 +42,8 @@ Tools available to the agent:
 - `cost_by_branch(branch)` — sessions tagged with a given branch name
 - `read_timeclock(start?, end?)` — human time entries from time.timeclock
 
-No prompt content is ever read. The agent only has access to metadata log files.
+No prompt content is ever read. Providers only have access to metadata log
+files. The local provider sends nothing to a network service.
 
 ### `halyard invoice`
 

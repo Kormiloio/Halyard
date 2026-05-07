@@ -206,6 +206,31 @@ def _active_project_for(project_dir: Path) -> str | None:
     return active.slug
 
 
+def _normalize_invoice_month(month: str | None) -> str:
+    now = datetime.now()
+    if month is None or month == "this":
+        return now.strftime("%Y-%m")
+    if month == "last":
+        year = now.year
+        month_num = now.month - 1
+        if month_num == 0:
+            year -= 1
+            month_num = 12
+        return f"{year}-{month_num:02d}"
+    try:
+        datetime.strptime(month, "%Y-%m")
+    except ValueError as exc:
+        raise typer.BadParameter("--month must be last, this, or YYYY-MM") from exc
+    return month
+
+
+def _rewrite_lines_atomic(path: Path, lines: list[str]) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    content = "\n".join(lines)
+    tmp.write_text((content + "\n") if content else "")
+    tmp.replace(path)
+
+
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
@@ -351,9 +376,69 @@ def link_repo(
 @app.command()
 def log(
     message: str = typer.Argument(..., help="Natural-language description of work."),
+    json_output: bool = typer.Option(False, "--json", help="Emit structured JSON."),
+    period: str = typer.Option("month", "--period", help="today | week | month | all"),
+    agent: str = typer.Option("local", "--agent", help="Query provider: local | claude."),
+    model: str | None = typer.Option(
+        None, "--model", help="Provider model for model-backed agents."
+    ),
+    tool: str | None = typer.Option(None, "--tool", help="Filter local queries by tool."),
+    project: str | None = typer.Option(None, "--project", help="Filter local queries by project."),
+    model_filter: str | None = typer.Option(
+        None, "--model-filter", help="Filter local queries by model substring."
+    ),
+    branch: str | None = typer.Option(None, "--branch", help="Filter local queries by branch tag."),
 ) -> None:
-    """Log time from a free-form description (calls Claude to extract the entry)."""
-    raise NotImplementedError("v0 task 3.2")
+    """Answer a natural-language query about captured work metadata."""
+    from halyard.ai_log import find_project_dir
+    from halyard.log_agent import LogAgentError, LogQueryFilters, run_log_query
+
+    project_dir = find_project_dir()
+    if project_dir is None:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
+        raise typer.Exit(code=1)
+
+    if agent not in {"local", "claude"}:
+        console.print("[bold red]Error:[/] --agent must be one of: local, claude.")
+        raise typer.Exit(code=1)
+
+    try:
+        response = run_log_query(
+            message,
+            project_dir=project_dir,
+            agent=agent,  # type: ignore[arg-type]
+            period=period,
+            model=model,
+            filters=LogQueryFilters(
+                tool=tool,
+                project=project,
+                model=model_filter,
+                branch=branch,
+            ),
+        )
+    except LogAgentError as exc:
+        console.print(f"[bold red]Error:[/] {exc}")
+        raise typer.Exit(code=1) from None
+
+    if json_output:
+        sys.stdout.write(json.dumps(response.to_dict(), indent=2) + "\n")
+        return
+
+    console.print(f"[bold]{response.answer}[/]")
+    if response.projects:
+        console.print("\n[bold]By project[/]")
+        for bucket in response.projects:
+            console.print(
+                f"  {bucket.label:<32} ${bucket.cost_usd:.2f}  {bucket.sessions} sessions"
+            )
+    if response.models:
+        console.print("\n[bold]By model[/]")
+        for bucket in response.models:
+            console.print(
+                f"  {bucket.label:<32} ${bucket.cost_usd:.2f}  {bucket.sessions} sessions"
+            )
 
 
 @app.command()
@@ -452,9 +537,60 @@ def invoice(
     month: str | None = typer.Option(None, "--month", help="last | this | YYYY-MM"),
     from_: str | None = typer.Option(None, "--from", help="ISO date (inclusive lower bound)"),
     to: str | None = typer.Option(None, "--to", help="ISO date (inclusive upper bound)"),
+    project: str | None = typer.Option(None, "--project", help="Project slug under the client."),
+    period: str | None = typer.Option(None, "--period", help="Billing period as YYYY-MM."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview without writing."),
+    pdf: bool = typer.Option(False, "--pdf", help="Render a PDF via typst after writing markdown."),
+    force: bool = typer.Option(
+        False, "--force", help="Overwrite an existing invoice for the period."
+    ),
+    rate: float | None = typer.Option(None, "--rate", help="Override hourly rate."),
 ) -> None:
     """Generate an invoice from logged time entries."""
-    raise NotImplementedError("v0 task 4.2")
+    from halyard.ai_log import find_project_dir
+    from halyard.invoicing import InvoiceError, generate_invoice, render_pdf
+
+    if from_ or to:
+        console.print(
+            "[bold red]Error:[/] --from/--to ranges are not implemented yet. Use --period."
+        )
+        raise typer.Exit(code=1)
+
+    project_dir = find_project_dir()
+    if project_dir is None:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
+        raise typer.Exit(code=1)
+
+    invoice_period = period or _normalize_invoice_month(month)
+    try:
+        result = generate_invoice(
+            client,
+            project_slug=project,
+            period=invoice_period,
+            project_dir=project_dir,
+            force=force,
+            dry_run=dry_run,
+            rate_override=rate,
+        )
+    except InvoiceError as exc:
+        console.print(f"[bold red]Error:[/] {exc}")
+        raise typer.Exit(code=1) from None
+
+    if result.warning:
+        console.print(f"[yellow]{result.warning}[/]")
+
+    if dry_run:
+        console.print(result.rendered)
+        return
+
+    if result.path is not None:
+        console.print(f"[bold green]Invoice written:[/] {result.path.relative_to(project_dir)}")
+        if pdf:
+            warning = render_pdf(result.path)
+            if warning:
+                console.print(f"[yellow]{warning}[/]")
 
 
 # ---------------------------------------------------------------------------
@@ -747,14 +883,91 @@ def assign_unattributed(
     ),
 ) -> None:
     """Assign unattributed AI sessions to a project."""
-    from halyard.ai_log import assign_unattributed_sessions, find_project_dir
+    from dataclasses import replace
+
+    from halyard.ai_log import (
+        AiSession,
+        append_session,
+        assign_unattributed_sessions,
+        find_project_dir,
+        unattributed_log_path,
+    )
+    from halyard.hub import find_hub
+
+    global_log = unattributed_log_path()
+    if global_log.exists() and any(
+        line.strip().startswith("s ") for line in global_log.read_text().splitlines()
+    ):
+        remaining = global_log.read_text().splitlines()
+        assigned = 0
+        hubbed = 0
+        discarded = 0
+        skipped = 0
+
+        for line in list(remaining):
+            if not line.strip().startswith("s "):
+                continue
+            session = AiSession.from_log_line(line)
+            if session is None:
+                skipped += 1
+                continue
+
+            console.print(
+                "\n[bold]Unattributed session[/]\n"
+                f"  {session.start:%Y-%m-%d %H:%M} → {session.end:%H:%M}\n"
+                f"  {session.tool} / {session.model}  ${session.cost_usd:.4f}\n"
+                f"  tags: {', '.join(session.tags) if session.tags else '(none)'}"
+            )
+
+            choice = (
+                "a"
+                if project
+                else typer.prompt("[a]ssign / [h]ub / [d]iscard / [s]kip", default="s")
+                .strip()
+                .lower()[:1]
+            )
+
+            if choice == "a":
+                target_project = project or typer.prompt("Project slug").strip()
+                target_dir = find_project_dir() or find_hub()
+                if target_dir is None:
+                    console.print("[bold red]No current project or hub found.[/] Skipping session.")
+                    skipped += 1
+                    continue
+                append_session(target_dir, replace(session, project=target_project))
+                remaining.remove(line)
+                _rewrite_lines_atomic(global_log, remaining)
+                assigned += 1
+            elif choice == "h":
+                hub_dir = find_hub()
+                if hub_dir is None:
+                    console.print("[bold red]No hub configured.[/] Skipping session.")
+                    skipped += 1
+                    continue
+                append_session(hub_dir, session)
+                remaining.remove(line)
+                _rewrite_lines_atomic(global_log, remaining)
+                hubbed += 1
+            elif choice == "d":
+                if typer.confirm("Discard this session?", default=False):
+                    remaining.remove(line)
+                    _rewrite_lines_atomic(global_log, remaining)
+                    discarded += 1
+                else:
+                    skipped += 1
+            else:
+                skipped += 1
+
+        console.print(
+            f"\n[bold green]Done.[/] {assigned} assigned, {hubbed} moved to hub, "
+            f"{discarded} discarded, {skipped} skipped."
+        )
+        return
 
     project_dir = find_project_dir()
     if project_dir is None:
-        console.print(
-            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
-        )
-        raise typer.Exit(code=1)
+        console.print("[yellow]No unattributed sessions.[/]")
+        return
 
     target_project = project or _active_project_for(project_dir)
     if not target_project:
@@ -772,6 +985,58 @@ def assign_unattributed(
         )
     else:
         console.print("[yellow]No unattributed sessions found.[/]")
+
+
+@app.command(name="check-log")
+def check_log(
+    log_path: str | None = typer.Option(
+        None,
+        "--log",
+        help="Path to ai-sessions.log. Defaults to current project log.",
+    ),
+) -> None:
+    """Validate an AI session log and quarantine malformed lines."""
+    from halyard.ai_log import AI_LOG_FILENAME, AiSession, find_project_dir
+
+    resolved_log_path: Path
+    if log_path is None:
+        project_dir = find_project_dir()
+        if project_dir is None:
+            console.print(
+                "[bold red]Error:[/] No Halyard project found. "
+                "Run [bold]halyard init[/] first or pass [bold]--log[/]."
+            )
+            raise typer.Exit(code=1)
+        resolved_log_path = project_dir / AI_LOG_FILENAME
+    else:
+        resolved_log_path = Path(log_path)
+
+    if not resolved_log_path.exists():
+        console.print(f"[bold red]Error:[/] Log not found: {resolved_log_path}")
+        raise typer.Exit(code=1)
+
+    valid = 0
+    invalid = 0
+    for lineno, raw_line in enumerate(resolved_log_path.read_text().splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith(";"):
+            continue
+        error = AiSession.log_line_error(line)
+        if error is not None:
+            AiSession.from_log_line(line)
+            invalid += 1
+            console.print(f"[red]Line {lineno}: {error}[/]")
+            console.print(f"  {line}")
+        else:
+            valid += 1
+
+    if invalid:
+        console.print(
+            f"[bold red]{invalid} invalid[/], {valid} valid. See ~/.halyard/quarantine.log."
+        )
+        raise typer.Exit(code=1)
+
+    console.print(f"[bold green]All {valid} lines valid.[/]")
 
 
 # ---------------------------------------------------------------------------
@@ -988,7 +1253,12 @@ def report(
 
     from halyard.ai_log import find_project_dir
     from halyard.pricing import pricing_table_age_days
-    from halyard.reports import build_ai_report, build_human_time_report, format_minutes
+    from halyard.reports import (
+        build_ai_report,
+        build_human_time_report,
+        format_minutes,
+        summarize_ai_sessions,
+    )
 
     project_dir = find_project_dir()
     if project_dir is None:
@@ -1038,6 +1308,7 @@ def report(
         report_data_sessions = report_data.sessions
 
     period_label = "All time" if all_time else period.strftime("%B %Y")
+    filtered_report = summarize_ai_sessions(report_data_sessions, period_label=period_label)
     filter_label = f" — {filter_slug or filter_client}" if (filter_slug or filter_client) else ""
     console.print(f"\n[bold]Report — {period_label}{filter_label}[/]")
     console.print("─" * 48)
@@ -1064,16 +1335,16 @@ def report(
     if total_input:
         console.print(f"  Tokens       in {total_input:,}  out {total_output:,}")
 
-    if not filter_slug and report_data.by_project:
+    if not filter_slug and filtered_report.by_project:
         console.print("\n[bold]By project[/]")
-        for bucket in report_data.by_project:
+        for bucket in filtered_report.by_project:
             console.print(
                 f"  {bucket.label:<32} [green]${bucket.cost_usd:.2f}[/]  {bucket.sessions} sessions"
             )
 
-    if report_data.by_model:
+    if filtered_report.by_model:
         console.print("\n[bold]By model[/]")
-        for bucket in report_data.by_model:
+        for bucket in filtered_report.by_model:
             console.print(
                 f"  {bucket.label:<32} [green]${bucket.cost_usd:.2f}[/]  {bucket.sessions} sessions"
             )
@@ -1114,6 +1385,15 @@ def report(
             console.print(
                 "\n[dim]No ai-plans.toml configured. Add plans to see seat/credits allocation.[/]"
             )
+
+    from halyard.ai_log import unattributed_log_count
+
+    global_unattributed = unattributed_log_count()
+    if global_unattributed:
+        console.print(
+            f"\n[yellow]{global_unattributed} unattributed session(s) in "
+            "~/.halyard/unattributed.log — run 'halyard assign-unattributed' to review.[/]"
+        )
 
     console.print("─" * 48 + "\n")
 

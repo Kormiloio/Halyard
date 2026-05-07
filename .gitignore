@@ -22,12 +22,20 @@ env/
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 .DS_Store
 
 # Halyard runtime
 .halyard-cache/
 .halyard/active
+ai-sessions.log
+halyard.toml
+clients.toml
+projects.toml
+time.timeclock
+invoices/
+*.tmp
 
 # OS
 Thumbs.db

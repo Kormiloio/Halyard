@@ -15,6 +15,7 @@ from halyard.ai_log import (
     assign_unattributed_sessions,
     find_project_dir,
     parse_sessions,
+    write_unattributed_session,
 )
 
 START = datetime(2026, 5, 6, 10, 30, 0)
@@ -168,6 +169,67 @@ def test_parse_ignores_unknown_kv(tmp_path: Path) -> None:
     )
     sessions = parse_sessions(tmp_path)
     assert len(sessions) == 1
+
+
+def test_from_log_line_negative_tokens_quarantines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    line = "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-opus-4-7 -1 1000 0.8250"
+
+    assert AiSession.from_log_line(line) is None
+
+    quarantine = tmp_path / ".halyard" / "quarantine.log"
+    assert quarantine.exists()
+    assert "input_tokens" in quarantine.read_text()
+
+
+def test_from_log_line_missing_required_field_quarantines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    line = "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code"
+
+    assert AiSession.from_log_line(line) is None
+
+    quarantine = tmp_path / ".halyard" / "quarantine.log"
+    assert quarantine.exists()
+    assert "expected session line" in quarantine.read_text()
+
+
+def test_from_log_line_bad_cost_quarantines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    line = "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-opus-4-7 100 50 nope"
+
+    assert AiSession.from_log_line(line) is None
+
+    quarantine = tmp_path / ".halyard" / "quarantine.log"
+    assert quarantine.exists()
+    assert "invalid cost_usd: nope" in quarantine.read_text()
+
+
+def test_log_line_error_does_not_write_quarantine(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    line = "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-opus-4-7 100 bad 0.1234"
+
+    assert AiSession.log_line_error(line) == "invalid output_tokens: bad"
+    assert not (tmp_path / ".halyard" / "quarantine.log").exists()
+
+
+def test_write_unattributed_session_creates_user_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    path = write_unattributed_session(_session(tool="codex"))
+
+    assert path == tmp_path / ".halyard" / "unattributed.log"
+    assert "tool" not in path.read_text()
+    assert "codex" in path.read_text()
 
 
 def test_assign_unattributed_sessions_adds_project(tmp_path: Path) -> None:

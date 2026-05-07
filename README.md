@@ -50,11 +50,13 @@ cd ~/businesses/my-freelance
 halyard init
 
 # Human time
-halyard in acme/auth-migration
+halyard start acme/auth-migration
 # ... do work ...
-halyard out
+halyard stop
 
 # Check what's been captured
+halyard log "what did I spend this month?"
+halyard log "what did Cursor cost this week?"
 halyard report
 halyard dashboard
 
@@ -147,7 +149,7 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 
 | Change | Description |
 |--------|-------------|
-| [`v0-time-and-invoice`](./openspec/changes/v0-time-and-invoice/) | Time tracking + invoicing CLI |
+| [`v0-time-and-invoice`](./openspec/changes/v0-time-and-invoice/) | Project skeleton + human time tracking |
 | [`v1-ai-intelligence`](./openspec/changes/v1-ai-intelligence/) | AI session schema + Claude Code collector + local reports |
 | [`v1.5-multi-tool-collectors`](./openspec/changes/v1.5-multi-tool-collectors/) | Cursor, Gemini CLI, and Codex collectors |
 | [`v2-ai-work-ledger`](./openspec/changes/v2-ai-work-ledger/) | Beancount ledger + plan cost allocation |
@@ -160,8 +162,8 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 
 | Change | Description |
 |--------|-------------|
-| [`v0.1-log-and-invoice`](./openspec/changes/v0.1-log-and-invoice/) | `halyard log` agent + `halyard invoice` generator — closes the v0 loop |
-| [`v2.4-data-integrity`](./openspec/changes/v2.4-data-integrity/) | No-silent-writes UX + `AiSession` schema validation |
+| [`v0.1-log-and-invoice`](./openspec/changes/v0.1-log-and-invoice/) | Provider-neutral local `halyard log` summary + `halyard invoice`; SDK agents still pending |
+| [`v2.4-data-integrity`](./openspec/changes/v2.4-data-integrity/) | Quarantine + recoverable unattributed log review; parser test polish still pending |
 
 ### Proposed
 
@@ -174,8 +176,8 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 
 ## Roadmap
 
-- **v0.1** — `halyard log` (AI agent, structured output) + `halyard invoice`. *In progress.*
-- **v2.4** — Data integrity: no-silent-writes + AiSession schema validation. *In progress.*
+- **v0.1** — `halyard invoice` + provider-neutral local `halyard log`; SDK structured-output agents next. *In progress.*
+- **v2.4** — Data integrity: quarantine + no silent drops + unattributed review. *In progress.*
 - **v3** — Org admin dashboard: manager/CIO rollups, governance, finance exports.
 - **v4** — Textual TUI: interactive terminal dashboard replacing Rich tables.
 - **v5+** — Productivity measurement, ROI reporting, outcome-based billing support.

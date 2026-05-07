@@ -36,6 +36,20 @@ class AiSession:
     tags: list[str] = field(default_factory=list)
     note: str | None = None
 
+    @classmethod
+    def from_log_line(cls, line: str) -> AiSession | None:
+        """Parse and validate one session line, quarantining malformed records."""
+        parsed, error = _parse_line_result(line)
+        if error is not None:
+            _write_quarantine(line, error)
+        return parsed
+
+    @classmethod
+    def log_line_error(cls, line: str) -> str | None:
+        """Return the validation error for a line without writing quarantine."""
+        _parsed, error = _parse_line_result(line)
+        return error
+
     def to_log_line(self) -> str:
         parts = [
             "s",
@@ -88,7 +102,7 @@ def parse_sessions(project_dir: Path) -> list[AiSession]:
         line = line.strip()
         if not line or line.startswith(";"):
             continue
-        parsed = _parse_line(line)
+        parsed = AiSession.from_log_line(line)
         if parsed is not None:
             sessions.append(parsed)
     return sessions
@@ -125,19 +139,51 @@ def find_project_dir(start: Path | None = None) -> Path | None:
 
 
 def _parse_line(line: str) -> AiSession | None:
+    parsed, _error = _parse_line_result(line)
+    return parsed
+
+
+def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
     parts = line.split()
     if len(parts) < 8 or parts[0] != "s":
-        return None
+        return None, "expected session line: s <start> <end> <tool> <model> <input> <output> <cost>"
+
     try:
         start = datetime.fromisoformat(parts[1])
+    except ValueError:
+        return None, f"invalid start timestamp: {parts[1]}"
+
+    try:
         end = datetime.fromisoformat(parts[2])
-        tool = parts[3]
-        model = parts[4]
+    except ValueError:
+        return None, f"invalid end timestamp: {parts[2]}"
+
+    tool = parts[3]
+    model = parts[4]
+    if not tool:
+        return None, "missing tool"
+    if not model:
+        return None, "missing model"
+
+    try:
         input_tokens = int(parts[5])
+    except ValueError:
+        return None, f"invalid input_tokens: {parts[5]}"
+    try:
         output_tokens = int(parts[6])
+    except ValueError:
+        return None, f"invalid output_tokens: {parts[6]}"
+    try:
         cost_usd = float(parts[7])
-    except (ValueError, IndexError):
-        return None
+    except ValueError:
+        return None, f"invalid cost_usd: {parts[7]}"
+
+    if input_tokens < 0:
+        return None, f"input_tokens must be non-negative: {input_tokens}"
+    if output_tokens < 0:
+        return None, f"output_tokens must be non-negative: {output_tokens}"
+    if cost_usd < 0:
+        return None, f"cost_usd must be non-negative: {cost_usd}"
 
     session = AiSession(
         start=start,
@@ -180,9 +226,40 @@ def _parse_line(line: str) -> AiSession | None:
             case "note":
                 session.note = v.replace("_", " ")
 
-    return session
+    return session, None
 
 
 def _is_assignable_session_line(line: str) -> bool:
     stripped = line.strip()
     return stripped.startswith("s ") and " project=" not in stripped
+
+
+def write_unattributed_session(session: AiSession) -> Path:
+    """Append a recoverable session to the per-user unattributed log."""
+    path = unattributed_log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as f:
+        f.write(session.to_log_line() + "\n")
+    return path
+
+
+def unattributed_log_path() -> Path:
+    """Return the per-user unattributed session log path."""
+    return Path.home() / ".halyard" / "unattributed.log"
+
+
+def unattributed_log_count() -> int:
+    """Return the number of session records in ~/.halyard/unattributed.log."""
+    path = unattributed_log_path()
+    if not path.exists():
+        return 0
+    return sum(1 for line in path.read_text().splitlines() if line.strip().startswith("s "))
+
+
+def _write_quarantine(original_line: str, error: str) -> Path:
+    path = Path.home() / ".halyard" / "quarantine.log"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as f:
+        f.write(f"; error={error}\n")
+        f.write(original_line.rstrip("\n") + "\n")
+    return path

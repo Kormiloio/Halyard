@@ -28,7 +28,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
+from halyard.ai_log import (
+    AI_LOG_FILENAME,
+    AiSession,
+    append_session,
+    find_project_dir,
+    write_unattributed_session,
+)
 from halyard.collectors.gemini_history import find_session_file, parse_session_file
 from halyard.git_context import current_branch, infer_project
 from halyard.hub import find_hub
@@ -105,10 +111,7 @@ def handle_agent_stop() -> int:
     cwd_str = (state or {}).get("cwd") or payload.get("cwd") or ""
     cwd = Path(cwd_str) if cwd_str else Path.cwd()
     project_dir = (find_project_dir(start=cwd) if cwd_str else find_project_dir()) or find_hub()
-
-    if project_dir is None or not (project_dir / AI_LOG_FILENAME).exists():
-        _reset_state(payload)
-        return 0
+    can_append_project_log = project_dir is not None and (project_dir / AI_LOG_FILENAME).exists()
 
     now = datetime.now()
     turn_start_str = (state or {}).get("turn_start")
@@ -168,7 +171,14 @@ def handle_agent_stop() -> int:
         tags=tags,
     )
 
-    append_session(project_dir, session)
+    if can_append_project_log and project_dir is not None:
+        append_session(project_dir, session)
+    else:
+        path = write_unattributed_session(session)
+        print(
+            f"[halyard] session saved to {path} — run 'halyard assign-unattributed' to review.",
+            file=sys.stderr,
+        )
     _reset_state(payload)
     return 0
 

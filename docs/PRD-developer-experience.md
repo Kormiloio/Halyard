@@ -47,6 +47,28 @@ team.
 
 ## Change 1: Close v0 — `halyard log` and `halyard invoice`
 
+### Implementation status — May 7, 2026
+
+First slice implemented.
+
+- `halyard invoice` now generates markdown invoices from local
+  `time.timeclock`, `clients.toml`, `projects.toml`, and `halyard.toml`; it
+  supports `--period`, `--project`, `--dry-run`, `--pdf`, `--force`, and
+  `--rate`.
+- `halyard log` now returns a deterministic local metadata summary with
+  `--json`, `--agent local`, and simple named periods (`today`, `week`,
+  `month`, `all`). The query layer is provider-neutral: model-backed agents
+  such as `--agent claude` are reasoning providers over the same local data,
+  not filters on which AI tools can be queried.
+- The local provider now recognizes simple query intent for tool names
+  (`cursor`, `claude`, `gemini`, `codex`), periods, project slugs, model
+  substrings, and branch tags. Explicit flags (`--tool`, `--project`,
+  `--model-filter`, `--branch`) override inferred intent.
+
+Still pending: the full Anthropic SDK structured-output agent loop described
+below. The current `log` command is a useful local bridge, not the final agent
+architecture.
+
 ### The gap
 
 `halyard log` is the primary way a user is supposed to interact with their
@@ -99,6 +121,25 @@ and `halyard.toml` to generate a Jinja2-rendered invoice markdown file:
 ---
 
 ## Change 2: Data integrity — no-silent-writes and schema validation
+
+### Implementation status — May 7, 2026
+
+First slice implemented.
+
+- Collectors preserve sessions that would previously have been dropped by
+  writing them to `~/.halyard/unattributed.log` and warning on stderr.
+- `AiSession.from_log_line()` validates required fields, token/cost types, and
+  non-negative numeric values; malformed lines are quarantined in
+  `~/.halyard/quarantine.log`.
+- `halyard check-log` validates `ai-sessions.log`.
+- `halyard report` now warns when the global unattributed log has recoverable
+  sessions.
+- `halyard assign-unattributed` now reviews `~/.halyard/unattributed.log` and
+  lets the user assign sessions to the current project, move them to the hub,
+  discard them, or skip them.
+
+Still pending: a design document for the final serialization/quarantine shape
+and any broader migration guidance for older logs.
 
 ### The gap
 

@@ -306,6 +306,7 @@ def test_import_skips_when_cwd_not_in_halyard_project(
 
     monkeypatch.setattr(mod, "_CODEX_SESSIONS_DIR", codex_dir)
     monkeypatch.setattr(mod, "_IMPORTED_STATE_FILE", state_file)
+    monkeypatch.setattr("halyard.collectors.codex_app.find_hub", lambda: None)
 
     sessions = import_codex_sessions(project_dir=None)
     assert sessions == []

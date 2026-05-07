@@ -28,6 +28,9 @@ The user is prompted: `[a]ssign to project / [h]ub / [d]iscard / [s]kip`.
 ### WHEN the user chooses [a]ssign
 THEN the user is prompted for a project slug. The session is appended to that
 project's `ai-sessions.log`. The line is removed from `unattributed.log`.
+If Halyard cannot resolve a project-specific log path, it appends to the
+current project log or configured hub log with `project=<slug>` set, preserving
+recoverability without inventing a hidden project registry.
 
 ### WHEN the user chooses [h]ub
 THEN the session is appended to the hub's `ai-sessions.log`. The line is

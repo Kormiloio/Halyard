@@ -13,7 +13,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
+from halyard.ai_log import (
+    AI_LOG_FILENAME,
+    AiSession,
+    append_session,
+    find_project_dir,
+    write_unattributed_session,
+)
 from halyard.git_context import current_branch, infer_project
 from halyard.hub import find_hub
 from halyard.pricing import calculate_cost, model_is_known
@@ -55,13 +61,7 @@ def handle_stop_hook() -> int:
 
     cwd = Path.cwd()
     project_dir = find_project_dir(start=cwd) or find_hub()
-    if project_dir is None:
-        _clear_session_start()
-        return 0
-
-    if not (project_dir / AI_LOG_FILENAME).exists():
-        _clear_session_start()
-        return 0
+    can_append_project_log = project_dir is not None and (project_dir / AI_LOG_FILENAME).exists()
 
     now = datetime.now()
     start = _read_session_start() or now
@@ -77,7 +77,7 @@ def handle_stop_hook() -> int:
     model = (
         payload.get("model")
         or payload.get("stop_model")
-        or _read_model_from_settings(project_dir)
+        or (_read_model_from_settings(project_dir) if project_dir else None)
         or "claude-unknown"
     )
 
@@ -100,7 +100,14 @@ def handle_stop_hook() -> int:
         tags=[f"branch:{branch}"] if branch else [],
     )
 
-    append_session(project_dir, session)
+    if can_append_project_log and project_dir is not None:
+        append_session(project_dir, session)
+    else:
+        path = write_unattributed_session(session)
+        print(
+            f"[halyard] session saved to {path} — run 'halyard assign-unattributed' to review.",
+            file=sys.stderr,
+        )
     return 0
 
 

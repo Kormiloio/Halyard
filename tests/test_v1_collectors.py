@@ -121,13 +121,21 @@ def test_stop_hook_handles_empty_payload(tmp_path: Path) -> None:
     assert sessions[0].model == "claude-unknown"
 
 
-def test_stop_hook_silent_when_not_in_halyard_project(tmp_path: Path) -> None:
+def test_stop_hook_writes_unattributed_when_not_in_halyard_project(tmp_path: Path) -> None:
     with (
         patch("halyard.collectors.claude_code.find_project_dir", return_value=None),
+        patch("halyard.collectors.claude_code.find_hub", return_value=None),
+        patch(
+            "halyard.collectors.claude_code.write_unattributed_session",
+            return_value=tmp_path / "unattributed.log",
+        ) as write_unattributed,
         patch("sys.stdin", StringIO("{}")),
+        patch("sys.stderr", StringIO()) as stderr,
     ):
         rc = handle_stop_hook()
     assert rc == 0
+    write_unattributed.assert_called_once()
+    assert "assign-unattributed" in stderr.getvalue()
 
 
 def test_stop_hook_picks_up_active_project(tmp_path: Path) -> None:

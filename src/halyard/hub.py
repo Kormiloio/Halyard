@@ -13,15 +13,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_HUB_POINTER = Path.home() / ".halyard" / "hub"
+_HUB_POINTER: Path | None = None
+
+
+def _hub_pointer() -> Path:
+    if _HUB_POINTER is not None:
+        return _HUB_POINTER
+    return Path.home() / ".halyard" / "hub"
 
 
 def find_hub() -> Path | None:
     """Return the hub project directory, or None if not configured."""
-    if not _HUB_POINTER.exists():
+    pointer = _hub_pointer()
+    if not pointer.exists():
         return None
     try:
-        path = Path(_HUB_POINTER.read_text().strip())
+        path = Path(pointer.read_text().strip())
     except OSError:
         return None
     return path if path.is_dir() else None
@@ -29,9 +36,10 @@ def find_hub() -> Path | None:
 
 def set_hub(path: Path) -> None:
     """Designate path as the hub directory."""
-    _HUB_POINTER.parent.mkdir(parents=True, exist_ok=True)
-    _HUB_POINTER.write_text(str(path.resolve()) + "\n")
+    pointer = _hub_pointer()
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    pointer.write_text(str(path.resolve()) + "\n")
 
 
 def clear_hub() -> None:
-    _HUB_POINTER.unlink(missing_ok=True)
+    _hub_pointer().unlink(missing_ok=True)
