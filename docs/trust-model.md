@@ -1,0 +1,87 @@
+# Trust Model
+
+Halyard reports include a **trust label** on every cost figure. The label tells you how the number was produced and how much confidence you should have in it. This matters when sharing costs with clients or making decisions based on reported spend.
+
+## Labels
+
+### `captured`
+
+The cost was recorded directly from an API response at session end. The tool reported back the token counts; Halyard applied the pricing table that was current at that moment and stored the result in `ai-sessions.log`.
+
+This is the highest-confidence figure. It is a direct measurement, not a derivation.
+
+**When you see it:** Direct API billing (`billing=api`) — Anthropic API, Google AI Studio, OpenAI API.
+
+---
+
+### `calculated`
+
+The cost was derived from captured token counts using Halyard's local pricing table. The tokens are real; the dollar figure is a calculation.
+
+This is effectively the same as `captured` for practical purposes — the only uncertainty is whether the pricing table was up to date at capture time. Run `halyard update-pricing` regularly to keep it fresh.
+
+**When you see it:** Sessions where tokens were captured but cost was not supplied directly.
+
+---
+
+### `allocated`
+
+The cost is a share of a monthly subscription or seat plan. No per-session cost exists; Halyard divides the monthly plan cost across sessions using the configured allocation rule (`active_minutes`, `session_count`, or `credits`).
+
+Allocated costs are **estimates**, not invoiced charges. They answer: "If I paid $200/month for Claude Max and did 40% of my active minutes on the `acme:auth` project, then roughly $80 of that seat belongs to `acme:auth`."
+
+These figures never appear in `ai-sessions.log`. They are computed at report time and exist only in the analytics layer.
+
+**When you see it:** Seat subscriptions (Claude Max, GitHub Copilot) and credit-based tools (Cursor, Factory) when configured in `ai-plans.toml`.
+
+---
+
+### `inferred`
+
+The project attribution for this session was inferred from an overlapping `time.timeclock` entry rather than being explicitly recorded. The cost figure itself may be captured or allocated — `inferred` refers to the attribution, not the cost.
+
+Use `halyard confirm-attribution` to review and confirm or reject inferred attributions. Once confirmed, the project is written into `ai-sessions.log` and the label becomes `captured` or `allocated`.
+
+**When you see it:** Sessions captured without a `project=` tag that matched an unambiguous timeclock window.
+
+---
+
+### `mixed`
+
+The project has both direct API cost (captured) and allocated seat/credit cost. Halyard shows the breakdown and labels the total `mixed`.
+
+---
+
+### `unallocated`
+
+A seat plan session with `allocation = "manual"` — no automatic allocation was applied. The session is counted but its monetary contribution to the total is zero until you provide manual overrides.
+
+---
+
+## In reports
+
+```
+halyard report --ledger
+```
+
+Each project row shows its trust label:
+
+```
+acme:auth      $58.01  14 sessions  mixed      (some inferred)
+acme:dash      $12.34   6 sessions  captured
+globex:reports  $0.00   3 sessions  unallocated
+```
+
+## In invoices
+
+```
+halyard invoice acme --include-ai-evidence
+```
+
+The AI evidence appendix groups costs by type and includes a footnote explaining what `allocated` and `inferred` mean. Clients receive an honest picture of what is measured directly versus what is estimated.
+
+## Design principle
+
+The trust hierarchy exists because client-facing evidence should be honest about what is known versus estimated. A `captured` cost of $12.34 means exactly that. An `allocated` cost of $45.00 means "we believe roughly $45 of the $200 seat cost belongs here, based on how the time was distributed."
+
+Neither is wrong. They are different kinds of information, and Halyard is explicit about which kind you are looking at.

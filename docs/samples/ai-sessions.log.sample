@@ -1,0 +1,18 @@
+; Halyard AI session log — spec: https://halyard.dev/spec/ai-sessions/v1
+; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd> [key=value ...]
+;
+; This is a sample log file for documentation and demo purposes.
+; Real logs are written by halyard hooks and collectors.
+;
+s 2026-05-06T09:12:04 2026-05-06T09:34:18 claude-code claude-sonnet-4-6 8420 1203 0.0000 project=acme:auth billing=seat tags=branch:main,tools:5 source=hook
+s 2026-05-06T10:01:32 2026-05-06T10:22:47 cursor gpt-4o 5100 890 0.0000 project=acme:auth billing=credits credits=12.5000 source=hook
+s 2026-05-06T11:15:00 2026-05-06T11:38:42 claude-code claude-sonnet-4-6 11200 1840 0.0000 project=acme:dash billing=seat tags=branch:main source=hook
+s 2026-05-06T14:30:05 2026-05-06T14:55:20 claude-code claude-opus-4-7 12300 2100 0.2460 project=acme:dash billing=api cache_read=48000 cache_write=3200 source=hook
+s 2026-05-06T15:04:11 2026-05-06T15:09:55 gemini-cli gemini-2.0-flash 3200 410 0.0014 project=acme:auth billing=api source=hook
+s 2026-05-07T08:45:00 2026-05-07T09:12:33 claude-code claude-sonnet-4-6 9800 1560 0.0000 project=acme:auth billing=seat tags=branch:feature/login source=hook
+s 2026-05-07T09:30:00 2026-05-07T09:52:18 cursor gpt-4o 4400 720 0.0000 project=acme:auth billing=credits credits=9.2000 source=hook
+s 2026-05-07T10:15:44 2026-05-07T10:44:09 claude-code claude-sonnet-4-6 15600 2340 0.0000 project=acme:auth billing=seat tags=branch:feature/login,tools:8 source=hook
+s 2026-05-07T13:00:00 2026-05-07T13:28:30 claude-code claude-sonnet-4-6 7200 980 0.0000 billing=seat tags=branch:main source=hook
+s 2026-05-07T14:05:22 2026-05-07T14:31:47 gemini-cli gemini-2.5-pro 18400 3200 0.0480 project=acme:dash billing=api source=hook
+s 2026-05-07T15:20:00 2026-05-07T15:45:12 cursor claude-sonnet-4-6 6300 1100 0.0000 project=acme:dash billing=credits credits=15.0000 source=hook
+s 2026-05-07T16:00:00 2026-05-07T16:22:08 claude-code claude-sonnet-4-6 5800 890 0.0000 project=acme:auth billing=seat tags=branch:main source=hook

@@ -1,0 +1,39 @@
+# AI Plans — sample configuration for documentation purposes.
+# Copy to your Halyard project directory and edit to match your subscriptions.
+
+# Claude Max — seat subscription billed monthly.
+# Halyard allocates the monthly cost across sessions by active minutes.
+[[plan]]
+slug = "claude-max"
+tool = "claude-code"
+billing = "seat"
+monthly_usd = 200
+allocation = "active_minutes"
+starts_on = "2026-01-01"
+
+# Cursor Pro — credit-based subscription.
+# Halyard converts credits to USD using the configured exchange rate.
+[[plan]]
+slug = "cursor-pro"
+tool = "cursor"
+billing = "credits"
+monthly_usd = 20
+included_credits = 500
+credit_to_usd = 0.04
+allocation = "credits"
+starts_on = "2026-01-01"
+
+# Anthropic API — pay-per-token.
+# Cost is captured directly from the API response; no allocation needed.
+[[plan]]
+slug = "anthropic-api"
+tool = "claude-api"
+billing = "api"
+allocation = "direct"
+
+# Gemini API — pay-per-token via Google AI Studio or Vertex.
+[[plan]]
+slug = "gemini-api"
+tool = "gemini-cli"
+billing = "api"
+allocation = "direct"

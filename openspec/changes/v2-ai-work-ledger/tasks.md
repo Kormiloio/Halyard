@@ -46,9 +46,9 @@ Implementation checklist for v2 — AI Work Ledger.
 
 ## 6. Documentation and demo
 
-- [ ] 6.1 Update README with the AI Work Ledger positioning.
-- [ ] 6.2 Add a sample `ai-sessions.log` and `ai-plans.toml`.
-- [ ] 6.3 Add a 60-second demo script showing human time plus AI cost by
+- [x] 6.1 Update README with the AI Work Ledger positioning.
+- [x] 6.2 Add a sample `ai-sessions.log` and `ai-plans.toml`.
+- [x] 6.3 Add a 60-second demo script showing human time plus AI cost by
       project.
-- [ ] 6.4 Document the trust model: captured vs calculated vs allocated vs
+- [x] 6.4 Document the trust model: captured vs calculated vs allocated vs
       inferred.

@@ -4,7 +4,7 @@
 
 **AI Work Intelligence Infrastructure.** Time, tokens, models, and cost — captured where the work happens, owned by you, readable by anyone.
 
-**Status:** alpha. v0–v2.3 shipped and in daily use.
+**Status:** alpha. v0–v2 and v4 TUI shipped and in daily use.
 
 ---
 
@@ -37,6 +37,8 @@ Halyard has three layers:
 **Collection** — Lightweight hooks that run where AI work happens. Claude Code, Cursor, and Gemini CLI hooks capture every session: time, tokens, model, cost, project, branch. Written to a plain-text append-only log you own. Nothing is lost silently.
 
 **Intelligence** — Analytics built on that log. Local CLI reports, cost-by-project breakdowns, per-model spend, budget alerts, and trust-labeled totals (captured vs. calculated vs. allocated). Works offline, no account required.
+
+**AI Work Ledger** — Cost allocation for seat subscriptions and credit plans. If you pay $200/month for Claude Max, Halyard allocates that cost across your projects proportionally — by active minutes, session count, or credit usage — so you know what each client engagement actually costs. Runs on top of `ai-sessions.log` and `ai-plans.toml`; nothing is written back to the raw log.
 
 **Glass Cockpit** — A local dashboard for watching capture happen in real time. Run `halyard dashboard` inside any Halyard project.
 
@@ -73,9 +75,20 @@ halyard import-gemini
 halyard set-budget acme --daily 10.00 --monthly 200.00
 halyard budget
 
+# AI Work Ledger — allocate seat/credit plan costs by project
+halyard report --ledger
+
+# Confirm inferred project attribution from timeclock overlap
+halyard confirm-attribution
+
+# Invoice with AI usage evidence appendix
+halyard invoice acme --period 2026-05 --include-ai-evidence
+
 # Keep pricing table fresh
 halyard update-pricing
 ```
+
+See [`docs/demo.md`](docs/demo.md) for a full 60-second walkthrough.
 
 ---
 
@@ -149,37 +162,32 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 
 | Change | Description |
 |--------|-------------|
-| [`v0-time-and-invoice`](./openspec/changes/v0-time-and-invoice/) | Project skeleton + human time tracking |
+| [`v0-time-and-invoice`](./openspec/changes/v0-time-and-invoice/) | Project skeleton, `halyard init`, human time tracking, invoice generation |
+| [`v0.1-log-and-invoice`](./openspec/changes/v0.1-log-and-invoice/) | `halyard log` natural-language query + `halyard invoice` |
+| [`v0.2-ai-agent-loop`](./openspec/changes/v0.2-ai-agent-loop/) | Structured-output AI agent loop for `halyard log` |
+| [`v0.3-provider-neutral-log`](./openspec/changes/v0.3-provider-neutral-log/) | OpenAI + local model support for `halyard log --agent openai` |
 | [`v1-ai-intelligence`](./openspec/changes/archive/2026-05-07-v1-ai-intelligence/) | AI session schema + Claude Code collector + local reports |
 | [`v1.5-multi-tool-collectors`](./openspec/changes/archive/2026-05-07-v1.5-multi-tool-collectors/) | Cursor, Gemini CLI, and Codex collectors |
-| [`v2-ai-work-ledger`](./openspec/changes/v2-ai-work-ledger/) | Beancount ledger + plan cost allocation |
+| [`v2-ai-work-ledger`](./openspec/changes/v2-ai-work-ledger/) | Cost allocation for seat/credit plans, trust-labeled reports, `confirm-attribution`, invoice evidence appendix |
 | [`v2-local-activity-dashboard`](./openspec/changes/v2-local-activity-dashboard/) | Glass Cockpit local dashboard |
 | [`v2.1-dynamic-pricing`](./openspec/changes/archive/2026-05-07-v2.1-dynamic-pricing/) | `halyard update-pricing` — live pricing table sync |
 | [`v2.2-budget-limits`](./openspec/changes/archive/2026-05-07-v2.2-budget-limits/) | Per-project daily/monthly budget alerts |
 | [`v2.3-gemini-history`](./openspec/changes/archive/2026-05-07-v2.3-gemini-history/) | Gemini history file enrichment + `halyard import-gemini` |
-
-### In progress
-
-| Change | Description |
-|--------|-------------|
-| [`v0.1-log-and-invoice`](./openspec/changes/v0.1-log-and-invoice/) | Provider-neutral local `halyard log` summary + `halyard invoice`; SDK agents still pending |
-| [`v2.4-data-integrity`](./openspec/changes/v2.4-data-integrity/) | Quarantine + recoverable unattributed log review; parser test polish still pending |
+| [`v2.4-data-integrity`](./openspec/changes/v2.4-data-integrity/) | Quarantine, recoverable unattributed log, parser hardening |
+| [`v2.5-cli-decoupling`](./openspec/changes/v2.5-cli-decoupling/) | Service layer extracted from CLI; orchestration module |
+| [`v4-tui`](./openspec/changes/v4-tui/) | Textual interactive terminal dashboard (`halyard tui`) |
 
 ### Proposed
 
 | Change | Description |
 |--------|-------------|
 | [`v3-org-admin-dashboard`](./openspec/changes/v3-org-admin-dashboard/) | Team, manager, CIO, and finance rollups |
-| [`v4-tui`](./openspec/changes/v4-tui/) | Textual interactive terminal dashboard |
 
 ---
 
 ## Roadmap
 
-- **v0.1** — `halyard invoice` + provider-neutral local `halyard log`; SDK structured-output agents next. *In progress.*
-- **v2.4** — Data integrity: quarantine + no silent drops + unattributed review. *In progress.*
 - **v3** — Org admin dashboard: manager/CIO rollups, governance, finance exports.
-- **v4** — Textual TUI: interactive terminal dashboard replacing Rich tables.
 - **v5+** — Productivity measurement, ROI reporting, outcome-based billing support.
 
 ---
