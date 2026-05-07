@@ -2,7 +2,7 @@
 
 > *A halyard is the line that raises the sails. Pull on it, the sails go up. Pull on this one, your AI work comes into focus.*
 
-**AI work intelligence infrastructure.** Time, tokens, models, and cost — captured where the work happens, owned by you, readable by anyone.
+**AI Work Intelligence Infrastructure.** Time, tokens, models, and cost — captured where the work happens, owned by you, readable by anyone.
 
 **Status:** alpha. v0–v2.3 shipped and in daily use.
 
