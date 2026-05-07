@@ -64,9 +64,15 @@ def _tool(name: str = "run_shell_command", status: str = "success") -> dict:
 
 def test_parse_session_file_single_model(tmp_path: Path) -> None:
     f = tmp_path / "session-2026-05-07T10-00-abcd1234.json"
-    f.write_text(json.dumps(_make_session(messages=[
-        _gemini_msg(model="gemini-2.5-flash", inp=10000, out=500, cached=2000),
-    ])))
+    f.write_text(
+        json.dumps(
+            _make_session(
+                messages=[
+                    _gemini_msg(model="gemini-2.5-flash", inp=10000, out=500, cached=2000),
+                ]
+            )
+        )
+    )
     s = parse_session_file(f)
     assert s is not None
     assert len(s.model_stats) == 1
@@ -82,11 +88,17 @@ def test_parse_session_file_single_model(tmp_path: Path) -> None:
 
 def test_parse_session_file_multi_model(tmp_path: Path) -> None:
     f = tmp_path / "session-2026-05-07T10-00-abcd1234.json"
-    f.write_text(json.dumps(_make_session(messages=[
-        _gemini_msg(model="gemini-2.5-flash", inp=5000, out=50),
-        _gemini_msg(model="gemini-2.5-pro", inp=100000, out=800, cached=50000),
-        _gemini_msg(model="gemini-2.5-flash", inp=20000, out=200),
-    ])))
+    f.write_text(
+        json.dumps(
+            _make_session(
+                messages=[
+                    _gemini_msg(model="gemini-2.5-flash", inp=5000, out=50),
+                    _gemini_msg(model="gemini-2.5-pro", inp=100000, out=800, cached=50000),
+                    _gemini_msg(model="gemini-2.5-flash", inp=20000, out=200),
+                ]
+            )
+        )
+    )
     s = parse_session_file(f)
     assert s is not None
     assert len(s.model_stats) == 2  # two distinct models
@@ -99,28 +111,43 @@ def test_parse_session_file_multi_model(tmp_path: Path) -> None:
 
 def test_parse_session_file_thinking_tokens(tmp_path: Path) -> None:
     f = tmp_path / "session-2026-05-07T10-00-abcd1234.json"
-    f.write_text(json.dumps(_make_session(messages=[
-        _gemini_msg(model="gemini-2.5-flash", inp=10000, out=500, thoughts=200),
-    ])))
+    f.write_text(
+        json.dumps(
+            _make_session(
+                messages=[
+                    _gemini_msg(model="gemini-2.5-flash", inp=10000, out=500, thoughts=200),
+                ]
+            )
+        )
+    )
     s = parse_session_file(f)
     assert s is not None
     # thinking tokens billed as additional input
     assert s.model_stats[0].thinking_tokens == 200
     # cost includes thinking: calculate_cost called with input_tokens + thinking_tokens
     from halyard.pricing import calculate_cost
+
     expected = calculate_cost("gemini-2.5-flash", 10000 + 200, 500)
     assert abs(s.cost_usd - expected) < 0.0001
 
 
 def test_parse_session_file_tool_calls(tmp_path: Path) -> None:
     f = tmp_path / "session-2026-05-07T10-00-abcd1234.json"
-    f.write_text(json.dumps(_make_session(messages=[
-        _gemini_msg(tool_calls=[
-            _tool("run_shell_command", "success"),
-            _tool("read_file", "success"),
-            _tool("glob", "error"),
-        ]),
-    ])))
+    f.write_text(
+        json.dumps(
+            _make_session(
+                messages=[
+                    _gemini_msg(
+                        tool_calls=[
+                            _tool("run_shell_command", "success"),
+                            _tool("read_file", "success"),
+                            _tool("glob", "error"),
+                        ]
+                    ),
+                ]
+            )
+        )
+    )
     s = parse_session_file(f)
     assert s is not None
     assert s.total_tool_calls == 3
@@ -129,10 +156,16 @@ def test_parse_session_file_tool_calls(tmp_path: Path) -> None:
 
 def test_parse_session_file_no_gemini_messages(tmp_path: Path) -> None:
     f = tmp_path / "session.json"
-    f.write_text(json.dumps(_make_session(messages=[
-        {"type": "user", "content": "hello"},
-        {"type": "info", "content": "info msg"},
-    ])))
+    f.write_text(
+        json.dumps(
+            _make_session(
+                messages=[
+                    {"type": "user", "content": "hello"},
+                    {"type": "info", "content": "info msg"},
+                ]
+            )
+        )
+    )
     s = parse_session_file(f)
     assert s is not None
     assert s.model_stats == []

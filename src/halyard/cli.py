@@ -892,7 +892,7 @@ def import_gemini(
         if log_path.exists():
             for s in parse_sessions(candidate_dir):
                 if s.job_id and s.job_id.startswith("gemini:"):
-                    imported_ids.add(s.job_id[len("gemini:"):])
+                    imported_ids.add(s.job_id[len("gemini:") :])
 
     imported: list[AiSession] = []
     skipped = 0
@@ -911,9 +911,7 @@ def import_gemini(
         target_dir = pd if pd and (pd / "halyard.toml").exists() else hub
 
         if target_dir is None:
-            console.print(
-                f"  [dim]skip {summary.session_id[:8]} — no project dir or hub[/dim]"
-            )
+            console.print(f"  [dim]skip {summary.session_id[:8]} — no project dir or hub[/dim]")
             continue
 
         tags: list[str] = []
@@ -1203,9 +1201,7 @@ def budget() -> None:
             over = s.today_spend > s.today_limit
             mark = "  [bold yellow]⚠ over[/]" if over else "  [green]✓[/]"
             pct = f" {s.today_spend / s.today_limit * 100:.0f}% used" if not over else ""
-            console.print(
-                f"    Today      ${s.today_spend:.2f} / ${s.today_limit:.2f}{mark}{pct}"
-            )
+            console.print(f"    Today      ${s.today_spend:.2f} / ${s.today_limit:.2f}{mark}{pct}")
         else:
             console.print(f"    Today      ${s.today_spend:.2f}  [dim](no limit)[/dim]")
         # This month
@@ -1213,9 +1209,7 @@ def budget() -> None:
             over = s.month_spend > s.month_limit
             mark = "  [bold yellow]⚠ over[/]" if over else "  [green]✓[/]"
             pct = f" {s.month_spend / s.month_limit * 100:.0f}% used" if not over else ""
-            console.print(
-                f"    This month ${s.month_spend:.2f} / ${s.month_limit:.2f}{mark}{pct}"
-            )
+            console.print(f"    This month ${s.month_spend:.2f} / ${s.month_limit:.2f}{mark}{pct}")
         else:
             console.print(f"    This month ${s.month_spend:.2f}  [dim](no limit)[/dim]")
         console.print()

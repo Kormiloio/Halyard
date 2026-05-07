@@ -341,6 +341,6 @@ def test_cache_tokens_reduce_input_and_set_cache_read(
     sessions = parse_sessions(project)
     assert len(sessions) == 1
     s = sessions[0]
-    assert s.input_tokens == 600   # 1000 - 400 cached
+    assert s.input_tokens == 600  # 1000 - 400 cached
     assert s.cache_read == 400
     assert s.output_tokens == 100

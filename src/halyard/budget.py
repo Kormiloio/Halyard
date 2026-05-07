@@ -72,9 +72,7 @@ def check_budget(
 
     warnings: list[str] = []
     if budget.daily_usd is not None and today_spend > budget.daily_usd:
-        warnings.append(
-            f"today ${today_spend:.2f} / ${budget.daily_usd:.2f}  ⚠ over daily limit"
-        )
+        warnings.append(f"today ${today_spend:.2f} / ${budget.daily_usd:.2f}  ⚠ over daily limit")
     if budget.monthly_usd is not None and month_spend > budget.monthly_usd:
         warnings.append(
             f"monthly ${month_spend:.2f} / ${budget.monthly_usd:.2f}  ⚠ over monthly limit"
@@ -122,13 +120,15 @@ def budget_status(now: datetime | None = None) -> list[BudgetStatus]:
             today_spend, month_spend = _sum_api_spend(sessions, now)
             break  # first valid source wins
 
-        statuses.append(BudgetStatus(
-            slug=slug,
-            today_spend=today_spend,
-            today_limit=budget.daily_usd,
-            month_spend=month_spend,
-            month_limit=budget.monthly_usd,
-        ))
+        statuses.append(
+            BudgetStatus(
+                slug=slug,
+                today_spend=today_spend,
+                today_limit=budget.daily_usd,
+                month_spend=month_spend,
+                month_limit=budget.monthly_usd,
+            )
+        )
 
     return statuses
 

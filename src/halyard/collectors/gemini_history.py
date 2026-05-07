@@ -164,8 +164,10 @@ def project_dir_for_slug(slug: str) -> Path | None:
 def _parse_iso(s: str) -> datetime | None:
     """Parse ISO 8601 string with or without trailing Z."""
     try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(
-            tz=None
-        ).replace(tzinfo=None)
+        return (
+            datetime.fromisoformat(s.replace("Z", "+00:00"))
+            .astimezone(tz=None)
+            .replace(tzinfo=None)
+        )
     except Exception:
         return None

@@ -44,7 +44,7 @@ PRICING: dict[str, tuple[float, float]] = {
 }
 
 # Anthropic prompt cache pricing multipliers (relative to input rate)
-_CACHE_READ_MULTIPLIER = 0.10   # cache reads = 10% of input price
+_CACHE_READ_MULTIPLIER = 0.10  # cache reads = 10% of input price
 _CACHE_WRITE_MULTIPLIER = 1.25  # cache writes = 125% of input price
 
 _LOCAL_PRICING_FILE = Path.home() / ".halyard" / "pricing.toml"
@@ -183,22 +183,15 @@ def update_pricing(timeout: int = 5) -> tuple[int, int]:
         for field in ("cache_read_multiplier", "cache_write_multiplier"):
             val = entry.get(field)
             if val is not None and (not isinstance(val, (int, float)) or float(val) <= 0):
-                raise PricingFetchError(
-                    f"Model {model_name!r} has invalid {field}: {val!r}"
-                )
+                raise PricingFetchError(f"Model {model_name!r} has invalid {field}: {val!r}")
 
     # Count new vs updated relative to bundled table
     new_count = sum(1 for m in fetched if m not in PRICING)
-    updated_count = sum(
-        1 for m, rates in fetched.items()
-        if m in PRICING and rates != PRICING[m]
-    )
+    updated_count = sum(1 for m, rates in fetched.items() if m in PRICING and rates != PRICING[m])
 
     # Atomic write
     _LOCAL_PRICING_FILE.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(
-        dir=_LOCAL_PRICING_FILE.parent, suffix=".toml.tmp"
-    )
+    fd, tmp_path = tempfile.mkstemp(dir=_LOCAL_PRICING_FILE.parent, suffix=".toml.tmp")
     try:
         with os.fdopen(fd, "w") as f:
             f.write(content)
