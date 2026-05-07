@@ -35,8 +35,11 @@ dev = [
     "mypy>=1.10",
 ]
 openai = ["openai>=1.0"]
-tui = ["textual>=0.60"]
-all = ["textual>=0.60", "openai>=1.0"]
+tui = [
+    "textual>=0.60",
+    "watchfiles>=0.21",
+]
+all = ["textual>=0.60", "watchfiles>=0.21", "openai>=1.0"]
 
 [project.scripts]
 halyard = "halyard.cli:app"

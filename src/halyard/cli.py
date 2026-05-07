@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 
 def _halyard_exe() -> str:
@@ -1125,6 +1126,34 @@ def dashboard(
         raise typer.Exit(code=1)
 
     run_dashboard(project_dir, port=port, open_browser=open_)
+
+
+@app.command(name="tui")
+def tui_cmd() -> None:
+    """Launch the interactive Textual terminal dashboard."""
+    from halyard.ai_log import AI_LOG_FILENAME, find_project_dir
+    from halyard.hub import find_hub
+
+    try:
+        from halyard.tui.app import HalyardApp
+    except ImportError as exc:
+        console.print(f"[bold red]Error:[/] {escape(str(exc))}")
+        raise typer.Exit(code=1) from None
+
+    project_dir = find_project_dir()
+    hub_dir = find_hub()
+
+    header_note: str | None = None
+    if hub_dir is not None:
+        log_path = hub_dir / AI_LOG_FILENAME
+    elif project_dir is not None:
+        log_path = project_dir / AI_LOG_FILENAME
+    else:
+        log_path = Path.cwd() / AI_LOG_FILENAME
+        header_note = "No project or hub found - run 'halyard init' or 'halyard set-hub'"
+
+    project_slug = project_dir.name if project_dir is not None else None
+    HalyardApp(log_path=log_path, project_slug=project_slug, header_note=header_note).run()
 
 
 # ---------------------------------------------------------------------------

@@ -209,8 +209,25 @@ count grows.
 
 ## Change 3: TUI — Textual interactive terminal dashboard
 
-> **Status: PRD / directional. No full spec yet. Needs design decisions before
-> implementation starts.**
+### Implementation status — May 7, 2026
+
+First vertical slice implemented.
+
+- v4 proposal, design, spec, and task checklist are written with the five design
+  decisions locked.
+- `halyard tui` launches a Textual application when installed with
+  `halyard[tui]`; the base install remains lean and prints a clear install
+  instruction when Textual is missing.
+- The first layout renders a session feed, budget status panel, model breakdown
+  panel, header/status line, and footer key hints.
+- `SessionStore` loads `ai-sessions.log`, tails appended lines with
+  `watchfiles`, and filters by time window, project scope, and branch tag.
+- Keyboard shortcuts for `d`/`w`/`m`/`a` time windows, `p` project scope, and
+  `q` quit are wired.
+
+Still pending: project drill-down, branch selector modal, help panel, new-row
+highlighting, richer budget/project detail views, and explicit log rotation
+re-open behavior.
 
 ### The gap
 
@@ -241,32 +258,12 @@ the static Rich dashboard with an interactive terminal UI:
 - **Time window** — configurable to today / this week / this month / all time,
   switchable with keyboard shortcuts.
 
-### Design decisions still needed
+### Design decisions
 
-The following must be resolved before writing specs:
-
-1. **Replace or supplement?** Does `halyard tui` replace `halyard dashboard`, or
-   do both exist? Is `halyard dashboard` kept for non-interactive contexts
-   (CI, tmux, screen readers)?
-
-2. **Textual as a dependency.** Textual is a 500KB+ dependency tree. Should it
-   be a required dependency, an optional extra (`pip install halyard[tui]`), or
-   a separate package (`halyard-tui`)?
-
-3. **State model.** Does the TUI hold an in-memory copy of all sessions (fast
-   but memory-heavy for large logs) or re-read on every navigation (correct but
-   potentially slow)?
-
-4. **Write actions.** Should the TUI allow any writes — e.g., assigning an
-   unattributed session, editing a project tag? Or is it read-only?
-
-5. **Session scope.** Does the TUI watch a single project dir or the hub? Can
-   it switch between projects without restarting?
-
-### Next step
-
-Resolve the five design decisions above, then write `specs/tui.md` and
-`design.md`. Implementation can start once those are approved.
+The v4 OpenSpec locks the TUI as a supplement to `halyard dashboard`, ships
+Textual/watchfiles as the optional `halyard[tui]` extra, keeps session state in
+memory with a file watcher, stays read-only for v4, and prefers the hub log
+when configured.
 
 ---
 

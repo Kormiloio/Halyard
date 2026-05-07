@@ -5,8 +5,8 @@
 | Concern | Choice | Reason |
 |---------|--------|--------|
 | UI framework | [Textual](https://textual.textualize.io/) | Purpose-built for Python terminal UIs; reactive data model; CSS-like layout |
-| File watching | `watchfiles` (already a Textual dependency) | Async-friendly; wraps `inotify`/`kqueue`/`ReadDirectoryChanges` |
-| Optional extra | `pip install halyard[tui]` | `pyproject.toml: [project.optional-dependencies] tui = ["textual>=0.60"]` |
+| File watching | `watchfiles` | Async-friendly; wraps `inotify`/`kqueue`/`ReadDirectoryChanges` |
+| Optional extra | `pip install halyard[tui]` | `pyproject.toml: [project.optional-dependencies] tui = ["textual>=0.60", "watchfiles>=0.21"]` |
 | Package layout | `src/halyard/tui/` sub-package | Keeps TUI code isolated; importable only when Textual is installed |
 
 ## Module layout

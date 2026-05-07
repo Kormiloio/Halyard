@@ -1,0 +1,41 @@
+Screen {
+    layout: vertical;
+}
+
+#body {
+    height: 1fr;
+}
+
+#main-pane {
+    width: 2fr;
+    height: 1fr;
+}
+
+#side-pane {
+    width: 1fr;
+    height: 1fr;
+}
+
+#session-feed,
+#budget-pane,
+#model-pane {
+    border: solid $primary;
+    padding: 1;
+}
+
+.budget-ok {
+    color: green;
+}
+
+.budget-warn {
+    color: yellow;
+}
+
+.budget-high {
+    color: red;
+}
+
+.budget-over {
+    color: red;
+    text-style: blink;
+}
