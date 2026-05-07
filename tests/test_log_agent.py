@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from halyard.log_agent import _infer_branch, _infer_filters, _infer_period, _infer_tool
-
 
 # ---------------------------------------------------------------------------
 # Period inference
