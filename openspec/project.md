@@ -90,3 +90,25 @@ Each change lives at `openspec/changes/<change-slug>/` with:
 - `tasks.md` — the implementation checklist
 
 Completed changes get archived to `openspec/changes/archive/YYYY-MM-DD-<slug>/`.
+
+## Spec-first rule
+
+**Write the spec before writing the code.**
+
+For any non-trivial change (new command, new collector, new concept):
+
+1. Create the change directory and write `proposal.md` first.
+2. Get alignment on the proposal before writing `design.md` and `specs/`.
+3. Only then open code. `tasks.md` is the bridge — write it before starting
+   implementation, check items off as you go.
+
+What counts as non-trivial: anything that adds a new user-facing command,
+introduces a new file or data format, changes existing behaviour in a
+way that affects stored data, or requires design decisions with trade-offs.
+
+Bug fixes, test additions, and internal refactors that don't change the
+observable contract are exempt — do those directly.
+
+The purpose of spec-first is not process for its own sake. It's to ensure
+the "why" is captured while it's fresh, so future contributors (and future
+AI assistants) can understand intent, not just implementation.
