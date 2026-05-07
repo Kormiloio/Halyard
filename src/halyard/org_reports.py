@@ -231,8 +231,35 @@ def print_governance(
 # ---------------------------------------------------------------------------
 
 
-def print_finance_table(db_path: Path, org_id: str, year: int, month: int) -> None:
-    rows = finance_export(db_path, org_id, year, month)
+def _enrich_cost_centers(rows: list[dict], hub_dir: Path | None) -> list[dict]:  # type: ignore[type-arg]
+    """Attach cost_center to each finance row using hub config files."""
+    if hub_dir is None:
+        for r in rows:
+            r.setdefault("cost_center", "")
+        return rows
+    from halyard.cost_centers import (
+        CostCenterConfig,
+        read_cost_center_config,
+        read_project_cost_centers,
+        resolve_cost_center,
+    )
+
+    org_cc = read_cost_center_config(hub_dir)
+    project_overrides = read_project_cost_centers(hub_dir)
+    for r in rows:
+        r["cost_center"] = resolve_cost_center(
+            r.get("project_id", ""),
+            r.get("team_id", ""),
+            project_overrides=project_overrides,
+            org_config=org_cc,
+        )
+    return rows
+
+
+def print_finance_table(
+    db_path: Path, org_id: str, year: int, month: int, hub_dir: Path | None = None
+) -> None:
+    rows = _enrich_cost_centers(finance_export(db_path, org_id, year, month), hub_dir)
     period = _period_label(year, month)
 
     if not rows:
@@ -240,13 +267,14 @@ def print_finance_table(db_path: Path, org_id: str, year: int, month: int) -> No
         return
 
     t = Table(
-        "Team", "Project", "Tool", "Sessions", "Direct", "Allocated", "Total", "Trust",
+        "Cost center", "Team", "Project", "Tool", "Sessions", "Direct", "Allocated", "Total", "Trust",
         title=f"Finance Export — {period}",
         box=None,
         padding=(0, 2),
     )
     for r in rows:
         t.add_row(
+            r.get("cost_center") or "",
             r["team_id"],
             r["project_id"] or "(unattributed)",
             r["tool"],
@@ -259,14 +287,16 @@ def print_finance_table(db_path: Path, org_id: str, year: int, month: int) -> No
     console.print(t)
 
 
-def export_finance_csv(db_path: Path, org_id: str, year: int, month: int) -> str:
+def export_finance_csv(
+    db_path: Path, org_id: str, year: int, month: int, hub_dir: Path | None = None
+) -> str:
     """Return a well-formed CSV string of the finance export rows."""
-    rows = finance_export(db_path, org_id, year, month)
+    rows = _enrich_cost_centers(finance_export(db_path, org_id, year, month), hub_dir)
     if not rows:
         return ""
 
     fieldnames = [
-        "billing_period", "org_id", "team_id", "project_id", "tool",
+        "billing_period", "org_id", "cost_center", "team_id", "project_id", "tool",
         "sessions", "direct_usd", "allocated_usd", "total_usd", "trust",
     ]
     buf = io.StringIO()

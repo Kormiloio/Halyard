@@ -52,6 +52,17 @@ CREATE INDEX IF NOT EXISTS idx_org_project
 
 CREATE INDEX IF NOT EXISTS idx_org_user
     ON org_sessions (org_id, user_id, start_ts);
+
+CREATE TABLE IF NOT EXISTS sync_audit (
+    id           INTEGER PRIMARY KEY,
+    org_id       TEXT    NOT NULL,
+    synced_by    TEXT    NOT NULL,
+    synced_at    TEXT    NOT NULL,
+    source_path  TEXT    NOT NULL DEFAULT '',
+    inserted     INTEGER NOT NULL DEFAULT 0,
+    skipped      INTEGER NOT NULL DEFAULT 0,
+    event        TEXT    NOT NULL DEFAULT 'sync'
+);
 """
 
 
@@ -128,6 +139,75 @@ def insert_sessions(db_path: Path, sessions: list[OrgSession]) -> tuple[int, int
         else:
             skipped += 1
     return inserted, skipped
+
+
+# ---------------------------------------------------------------------------
+# Sync audit log
+# ---------------------------------------------------------------------------
+
+
+def record_sync(
+    db_path: Path,
+    org_id: str,
+    synced_by: str,
+    inserted: int,
+    skipped: int,
+    source_path: str = "",
+    event: str = "sync",
+) -> None:
+    """Append one immutable sync event to the audit log."""
+    ensure_schema(db_path)
+    with _connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO sync_audit (org_id, synced_by, synced_at, source_path, inserted, skipped, event)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [org_id, synced_by, datetime.now().isoformat(), source_path, inserted, skipped, event],
+        )
+
+
+def read_sync_audit(db_path: Path, org_id: str, limit: int = 50) -> list[dict]:  # type: ignore[type-arg]
+    """Return recent sync audit events, newest first."""
+    ensure_schema(db_path)
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT synced_by, synced_at, source_path, inserted, skipped, event
+            FROM sync_audit
+            WHERE org_id = ?
+            ORDER BY synced_at DESC
+            LIMIT ?
+            """,
+            [org_id, limit],
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def purge_user(db_path: Path, org_id: str, user_id: str, purged_by: str) -> int:
+    """Delete all session records for a user and log the purge in the audit trail.
+
+    Returns the number of records deleted.  The audit entry is always written
+    even if the count is zero so the request is on record.
+    """
+    ensure_schema(db_path)
+    with _connect(db_path) as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM org_sessions WHERE org_id = ? AND user_id = ?",
+            [org_id, user_id],
+        ).fetchone()[0]
+        conn.execute(
+            "DELETE FROM org_sessions WHERE org_id = ? AND user_id = ?",
+            [org_id, user_id],
+        )
+        conn.execute(
+            """
+            INSERT INTO sync_audit (org_id, synced_by, synced_at, source_path, inserted, skipped, event)
+            VALUES (?, ?, ?, ?, 0, 0, ?)
+            """,
+            [org_id, purged_by, datetime.now().isoformat(), user_id, f"purge:{user_id}"],
+        )
+    return count
 
 
 # ---------------------------------------------------------------------------

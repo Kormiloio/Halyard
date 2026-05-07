@@ -19,11 +19,22 @@ from halyard.org import (
     normalize_session,
     read_org_config,
 )
+from halyard.cost_centers import (
+    CostCenterConfig,
+    ProjectCostMapping,
+    TeamCostMapping,
+    read_cost_center_config,
+    read_project_cost_centers,
+    resolve_cost_center,
+)
 from halyard.org_store import (
     ORG_DB_FILENAME,
     ensure_schema,
     insert_session,
     insert_sessions,
+    purge_user,
+    read_sync_audit,
+    record_sync,
     team_monthly_rollup,
     project_monthly_rollup,
     user_monthly_rollup,
@@ -471,3 +482,137 @@ def test_sync_project_missing_log_returns_error(tmp_path: Path):
     result = sync_project(tmp_path, hub_dir=tmp_path)
     assert len(result.errors) == 1
     assert "ai-sessions.log" in result.errors[0]
+
+
+# ---------------------------------------------------------------------------
+# cost_centers — resolution
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_cost_center_from_project_override(tmp_path: Path):
+    overrides = {"acme:auth": "CC-001"}
+    cfg = CostCenterConfig()
+    assert resolve_cost_center("acme:auth", "auth-team", project_overrides=overrides, org_config=cfg) == "CC-001"
+
+
+def test_resolve_cost_center_from_org_project_mapping():
+    cfg = CostCenterConfig(
+        project_mappings=(ProjectCostMapping(project_slug="acme:auth", cost_center="CC-ORG-001"),),
+    )
+    assert resolve_cost_center("acme:auth", "auth-team", project_overrides={}, org_config=cfg) == "CC-ORG-001"
+
+
+def test_resolve_cost_center_falls_back_to_team_mapping():
+    cfg = CostCenterConfig(
+        team_mappings=(TeamCostMapping(team_id="auth-team", cost_center="CC-TEAM-010"),),
+    )
+    assert resolve_cost_center("acme:auth", "auth-team", project_overrides={}, org_config=cfg) == "CC-TEAM-010"
+
+
+def test_resolve_cost_center_project_override_beats_org_mapping():
+    cfg = CostCenterConfig(
+        project_mappings=(ProjectCostMapping(project_slug="acme:auth", cost_center="CC-ORG-001"),),
+    )
+    overrides = {"acme:auth": "CC-LOCAL-999"}
+    assert resolve_cost_center("acme:auth", "auth-team", project_overrides=overrides, org_config=cfg) == "CC-LOCAL-999"
+
+
+def test_resolve_cost_center_unattributed_returns_empty():
+    cfg = CostCenterConfig()
+    assert resolve_cost_center("", "auth-team", project_overrides={}, org_config=cfg) == ""
+
+
+def test_read_cost_center_config_missing(tmp_path: Path):
+    cfg = read_cost_center_config(tmp_path)
+    assert cfg.project_mappings == ()
+    assert cfg.team_mappings == ()
+
+
+def test_read_cost_center_config_parses(tmp_path: Path):
+    (tmp_path / "org-cost-centers.toml").write_text(
+        '[[project_mapping]]\nproject_slug = "acme:auth"\ncost_center = "CC-001"\n'
+        '[[team_mapping]]\nteam_id = "auth-team"\ncost_center = "CC-010"\n'
+    )
+    cfg = read_cost_center_config(tmp_path)
+    assert len(cfg.project_mappings) == 1
+    assert len(cfg.team_mappings) == 1
+    assert cfg.project_mappings[0].cost_center == "CC-001"
+
+
+def test_read_project_cost_centers(tmp_path: Path):
+    (tmp_path / "projects.toml").write_text(
+        '[[project]]\nslug = "acme:auth"\nclient_slug = "acme"\nname = "Auth"\ncost_center = "CC-042"\n'
+    )
+    result = read_project_cost_centers(tmp_path)
+    assert result == {"acme:auth": "CC-042"}
+
+
+def test_read_project_cost_centers_missing(tmp_path: Path):
+    assert read_project_cost_centers(tmp_path) == {}
+
+
+# ---------------------------------------------------------------------------
+# sync_audit — record and read
+# ---------------------------------------------------------------------------
+
+
+def test_record_and_read_sync_audit(tmp_path: Path):
+    db = tmp_path / ORG_DB_FILENAME
+    record_sync(db, org_id="acme", synced_by="alice", inserted=5, skipped=2, source_path="/hub")
+    rows = read_sync_audit(db, "acme")
+    assert len(rows) == 1
+    assert rows[0]["synced_by"] == "alice"
+    assert rows[0]["inserted"] == 5
+    assert rows[0]["skipped"] == 2
+    assert rows[0]["event"] == "sync"
+
+
+def test_sync_project_records_audit(tmp_path: Path):
+    (tmp_path / "org.toml").write_text("[org]\nid = \"acme\"\nname = \"Acme\"\n")
+    s = _session()
+    (tmp_path / AI_LOG_FILENAME).write_text(s.to_log_line() + "\n")
+    sync_project(tmp_path, hub_dir=tmp_path)
+    rows = read_sync_audit(tmp_path / ORG_DB_FILENAME, "acme")
+    assert len(rows) == 1
+    assert rows[0]["inserted"] == 1
+
+
+# ---------------------------------------------------------------------------
+# purge_user — GDPR removal
+# ---------------------------------------------------------------------------
+
+
+def test_purge_user_deletes_records_and_logs_audit(tmp_path: Path):
+    db = tmp_path / ORG_DB_FILENAME
+    sessions = [
+        _org_session(user_id="alice@acme.example", line_hash="a1"),
+        _org_session(user_id="alice@acme.example", line_hash="a2"),
+        _org_session(user_id="bob@acme.example", line_hash="b1"),
+    ]
+    insert_sessions(db, sessions)
+
+    count = purge_user(db, "acme", "alice@acme.example", purged_by="admin")
+    assert count == 2
+
+    # Alice's sessions gone, Bob's intact
+    rows = team_monthly_rollup(db, "acme", 2026, 5)
+    users_remaining = set()
+    from halyard.org_store import user_monthly_rollup as umr
+    for r in umr(db, "acme", 2026, 5):
+        users_remaining.add(r["user_id"])
+    assert "alice@acme.example" not in users_remaining
+    assert "bob@acme.example" in users_remaining
+
+    # Audit trail has the purge event
+    audit = read_sync_audit(db, "acme")
+    purge_events = [r for r in audit if "purge" in r["event"]]
+    assert len(purge_events) == 1
+    assert purge_events[0]["synced_by"] == "admin"
+
+
+def test_purge_user_zero_count_still_logs(tmp_path: Path):
+    db = tmp_path / ORG_DB_FILENAME
+    count = purge_user(db, "acme", "nobody@acme.example", purged_by="admin")
+    assert count == 0
+    audit = read_sync_audit(db, "acme")
+    assert len(audit) == 1

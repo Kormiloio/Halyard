@@ -11,7 +11,7 @@ from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession
 from halyard.org import OrgConfig, normalize_session, read_org_config
-from halyard.org_store import ORG_DB_FILENAME, insert_sessions
+from halyard.org_store import ORG_DB_FILENAME, insert_sessions, record_sync
 
 ORG_TOML_FILENAME = "org.toml"
 
@@ -61,6 +61,20 @@ def sync_project(project_dir: Path, hub_dir: Path | None = None) -> SyncResult:
     inserted, skipped = insert_sessions(db_path, org_sessions)
     result.inserted = inserted
     result.skipped = skipped
+
+    import getpass
+    try:
+        synced_by = getpass.getuser()
+    except Exception:  # noqa: BLE001
+        synced_by = "unknown"
+    record_sync(
+        db_path,
+        org_id=org_config.org.id,
+        synced_by=synced_by,
+        inserted=inserted,
+        skipped=skipped,
+        source_path=str(project_dir),
+    )
     return result
 
 
