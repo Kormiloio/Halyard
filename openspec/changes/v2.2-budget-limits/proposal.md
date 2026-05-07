@@ -17,16 +17,25 @@ to happen — before the next session starts, not after it ends.
 
 ### 1. Budget configuration
 
-Per-project limits defined in the project's `halyard.toml`:
+Per-project limits defined in `~/.halyard/budgets.toml` — personal to the
+developer, never committed to a project repo:
 
 ```toml
-[budget]
+["acme:auth-migration"]
 daily_usd   = 50.00   # warn when today's AI spend exceeds this
 monthly_usd = 500.00  # warn when this month's AI spend exceeds this
+
+["globex:reporting"]
+monthly_usd = 200.00
 ```
 
-Both fields are optional. Either or both can be set. No budget configured =
-no warnings (existing behaviour preserved).
+The file is keyed by project slug. Both fields are optional; either or both
+can be set. No entry for a project = no warnings for that project. A missing
+file = no warnings for anything (existing behaviour preserved).
+
+Keeping limits in `~/.halyard/budgets.toml` rather than `halyard.toml` means
+they stay personal: different developers on the same project can set different
+limits, and no budget information leaks into a committed config file.
 
 ### 2. Warning mechanism
 
@@ -106,11 +115,13 @@ loss. The risk of silently exceeding a budget limit by one session is much
 lower than the cost of a false-positive block. Start with warnings; consider
 opt-in blocking in a later version if users ask for it.
 
-**Why `halyard.toml` and not a separate `budgets.toml`?**  
-Budget limits are project-level configuration, not a separate concern. Putting
-them in `halyard.toml` keeps related config together and avoids file sprawl.
-The `[budget]` section is optional — projects without it behave identically to
-today.
+**Why `~/.halyard/budgets.toml` and not `halyard.toml`?**  
+Budget limits are personal preferences, not project configuration. Different
+developers on the same engagement may have different cost sensitivities. More
+importantly, `halyard.toml` is committed to the project repo — a developer's
+personal spend limits should not be visible to clients or teammates. Keeping
+limits in `~/.halyard/` puts them alongside other personal state (the active
+timer, the hub pointer, the repos mapping) and keeps them out of git entirely.
 
 **Why daily and monthly, not hourly or per-session?**  
 Daily and monthly match how developers think about AI spend: "I've already

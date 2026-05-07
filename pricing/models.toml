@@ -1,0 +1,81 @@
+# Halyard model pricing table
+# updated: 2026-05-07
+# All prices are USD per million tokens.
+
+[models]
+
+[models.claude-opus-4-7]
+input  = 15.00
+output = 75.00
+
+[models.claude-sonnet-4-6]
+input  = 3.00
+output = 15.00
+
+[models.claude-haiku-4-5-20251001]
+input  = 0.80
+output = 4.00
+
+[models.claude-haiku-4-5]
+input  = 0.80
+output = 4.00
+
+[models.gpt-4o]
+input  = 2.50
+output = 10.00
+
+[models.gpt-4o-mini]
+input  = 0.15
+output = 0.60
+
+[models.o3]
+input  = 10.00
+output = 40.00
+
+[models.o4-mini]
+input  = 1.10
+output = 4.40
+
+[models.gemini-2.5-pro]
+input  = 1.25
+output = 10.00
+cache_read_multiplier  = 0.25
+cache_write_multiplier = 1.25
+
+[models.gemini-2.5-flash]
+input  = 0.15
+output = 0.60
+cache_read_multiplier  = 0.25
+cache_write_multiplier = 1.25
+
+[models.gemini-3-pro]
+input  = 1.25
+output = 5.00
+
+[models.gemini-3-flash]
+input  = 0.075
+output = 0.30
+
+[models.deepseek-v3]
+input  = 0.27
+output = 1.10
+
+[models.deepseek-r1]
+input  = 0.55
+output = 2.19
+
+[models.grok-3]
+input  = 3.00
+output = 15.00
+
+[models.grok-3-mini]
+input  = 0.30
+output = 0.50
+
+[models.mistral-large-latest]
+input  = 2.00
+output = 6.00
+
+[models.mistral-small-latest]
+input  = 0.10
+output = 0.30

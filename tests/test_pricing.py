@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pytest
 
-from halyard.pricing import PRICING, calculate_cost, model_is_known
+import halyard.pricing as pricing_mod
+from halyard.pricing import (
+    PRICING,
+    PricingFetchError,
+    calculate_cost,
+    load_pricing_table,
+    model_is_known,
+    pricing_table_age_days,
+    update_pricing,
+)
 
 
 def test_unknown_model_returns_zero() -> None:
@@ -81,3 +93,216 @@ def test_result_is_rounded_to_four_decimal_places() -> None:
     cost = calculate_cost("claude-sonnet-4-6", input_tokens=1, output_tokens=0)
     # Result should be a float with at most 4 decimal places
     assert cost == round(cost, 4)
+
+
+# ---------------------------------------------------------------------------
+# load_pricing_table — merged table tests
+# ---------------------------------------------------------------------------
+
+
+def _reset_cache() -> None:
+    pricing_mod._merged_table = None
+
+
+def test_load_pricing_table_no_local_file(tmp_path: Path) -> None:
+    _reset_cache()
+    with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", tmp_path / "pricing.toml"):
+        table = load_pricing_table()
+    assert table == PRICING
+    _reset_cache()
+
+
+def test_load_pricing_table_local_overrides_bundled(tmp_path: Path) -> None:
+    _reset_cache()
+    local = tmp_path / "pricing.toml"
+    local.write_text("[models.claude-sonnet-4-6]\ninput = 1.00\noutput = 5.00\n")
+    with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local):
+        table = load_pricing_table()
+    assert table["claude-sonnet-4-6"] == (1.00, 5.00)
+    # Other bundled models still present
+    assert "gpt-4o" in table
+    _reset_cache()
+
+
+def test_load_pricing_table_local_adds_new_model(tmp_path: Path) -> None:
+    _reset_cache()
+    local = tmp_path / "pricing.toml"
+    local.write_text("[models.brand-new-model]\ninput = 0.50\noutput = 2.00\n")
+    with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local):
+        table = load_pricing_table()
+    assert "brand-new-model" in table
+    assert table["brand-new-model"] == (0.50, 2.00)
+    _reset_cache()
+
+
+def test_load_pricing_table_corrupted_local_falls_back(tmp_path: Path) -> None:
+    _reset_cache()
+    local = tmp_path / "pricing.toml"
+    local.write_text("not valid toml ][[[")
+    with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local):
+        table = load_pricing_table()
+    assert table == PRICING
+    _reset_cache()
+
+
+def test_model_is_known_with_local_file(tmp_path: Path) -> None:
+    _reset_cache()
+    local = tmp_path / "pricing.toml"
+    local.write_text("[models.local-only-model]\ninput = 1.00\noutput = 4.00\n")
+    with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local):
+        assert model_is_known("local-only-model") is True
+    _reset_cache()
+
+
+# ---------------------------------------------------------------------------
+# pricing_table_age_days
+# ---------------------------------------------------------------------------
+
+
+def test_pricing_table_age_days_absent(tmp_path: Path) -> None:
+    with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", tmp_path / "pricing.toml"):
+        assert pricing_table_age_days() is None
+
+
+def test_pricing_table_age_days_fresh(tmp_path: Path) -> None:
+    local = tmp_path / "pricing.toml"
+    local.write_text("[models]\n")
+    with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local):
+        age = pricing_table_age_days()
+    assert age is not None
+    assert age == 0  # just created
+
+
+# ---------------------------------------------------------------------------
+# update_pricing
+# ---------------------------------------------------------------------------
+
+_VALID_TOML = """\
+[models.model-a]
+input = 1.00
+output = 4.00
+
+[models.model-b]
+input = 2.00
+output = 8.00
+
+[models.model-c]
+input = 0.50
+output = 2.00
+"""
+
+
+def test_update_pricing_success(tmp_path: Path) -> None:
+    _reset_cache()
+    local = tmp_path / "pricing.toml"
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = _VALID_TOML.encode()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
+        patch("urllib.request.urlopen", return_value=mock_resp),
+    ):
+        new_count, updated_count = update_pricing()
+
+    assert local.exists()
+    assert new_count == 3  # all three are new relative to bundled PRICING
+    assert updated_count == 0
+    _reset_cache()
+
+
+def test_update_pricing_network_error(tmp_path: Path) -> None:
+    import urllib.error
+
+    local = tmp_path / "pricing.toml"
+    with (
+        patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
+        patch("urllib.request.urlopen", side_effect=urllib.error.URLError("timeout")),
+        pytest.raises(PricingFetchError, match="could not fetch"),
+    ):
+        update_pricing()
+
+    assert not local.exists()
+
+
+def test_update_pricing_validation_too_few_models(tmp_path: Path) -> None:
+    local = tmp_path / "pricing.toml"
+    toml = "[models.only-one]\ninput = 1.0\noutput = 4.0\n"
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = toml.encode()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
+        patch("urllib.request.urlopen", return_value=mock_resp),
+        pytest.raises(PricingFetchError, match="only 1 model"),
+    ):
+        update_pricing()
+
+    assert not local.exists()
+
+
+def test_update_pricing_validation_non_positive_price(tmp_path: Path) -> None:
+    local = tmp_path / "pricing.toml"
+    toml = (
+        "[models.a]\ninput = -1.0\noutput = 4.0\n"
+        "[models.b]\ninput = 1.0\noutput = 4.0\n"
+        "[models.c]\ninput = 1.0\noutput = 4.0\n"
+    )
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = toml.encode()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
+        patch("urllib.request.urlopen", return_value=mock_resp),
+        pytest.raises(PricingFetchError),
+    ):
+        update_pricing()
+
+    assert not local.exists()
+
+
+def test_update_pricing_missing_models_table(tmp_path: Path) -> None:
+    local = tmp_path / "pricing.toml"
+    toml = "some_key = 'value'\n"
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = toml.encode()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
+        patch("urllib.request.urlopen", return_value=mock_resp),
+        pytest.raises(PricingFetchError, match="missing \\[models\\]"),
+    ):
+        update_pricing()
+
+
+def test_update_pricing_atomic_replaces_existing(tmp_path: Path) -> None:
+    _reset_cache()
+    local = tmp_path / "pricing.toml"
+    local.write_text("[models.old-model]\ninput = 9.0\noutput = 36.0\n")
+    original_content = local.read_text()
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = _VALID_TOML.encode()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
+        patch("urllib.request.urlopen", return_value=mock_resp),
+    ):
+        update_pricing()
+
+    assert local.read_text() == _VALID_TOML
+    assert local.read_text() != original_content
+    _reset_cache()

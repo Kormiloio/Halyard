@@ -32,7 +32,19 @@ _HALYARD_ACTIVE = Path.home() / ".halyard" / "active"
 def record_session_start() -> int:
     """Called by beforeSubmitPrompt hook. Records start timestamp."""
     if _CURSOR_SESSION_FILE.exists():
-        return 0  # already tracking this session
+        return 0  # already tracking this session — budget already checked
+
+    # Budget check fires once per session, before the session file is written
+    active = _read_active_project()
+    if active:
+        project_dir = find_project_dir() or find_hub()
+        if project_dir:
+            from halyard.budget import check_budget
+
+            warning = check_budget(active, project_dir)
+            if warning:
+                print(warning)
+
     _CURSOR_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
     _CURSOR_SESSION_FILE.write_text(datetime.now().strftime("%Y-%m-%dT%H:%M:%S"))
     return 0

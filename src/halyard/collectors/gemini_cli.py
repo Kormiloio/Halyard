@@ -39,11 +39,25 @@ _GC_SESSION_FILE = Path.home() / ".halyard" / "gc-session"
 def record_session_start() -> int:
     """Called by SessionStart hook. Saves start time, session_id, and cwd."""
     payload = _read_payload()
+    cwd_str = payload.get("cwd", "")
+
+    # Budget check fires before writing the new session state
+    active = _read_active_project()
+    if active:
+        cwd = Path(cwd_str) if cwd_str else Path.cwd()
+        project_dir = find_project_dir(start=cwd) or find_hub()
+        if project_dir:
+            from halyard.budget import check_budget
+
+            warning = check_budget(active, project_dir)
+            if warning:
+                print(warning)
+
     now_str = payload.get("timestamp") or datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     state = {
         "turn_start": now_str,
         "session_id": payload.get("session_id", ""),
-        "cwd": payload.get("cwd", ""),
+        "cwd": cwd_str,
         "model": "",
         "prompt_tokens": 0,
         "output_tokens": 0,

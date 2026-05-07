@@ -848,6 +848,7 @@ def report(
     from datetime import datetime
 
     from halyard.ai_log import find_project_dir
+    from halyard.pricing import pricing_table_age_days
     from halyard.reports import build_ai_report, build_human_time_report, format_minutes
 
     project_dir = find_project_dir()
@@ -856,6 +857,20 @@ def report(
             "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
         )
         raise typer.Exit(code=1)
+
+    # Staleness warning for pricing table
+    age = pricing_table_age_days()
+    if age is None or age >= 30:
+        if age is None:
+            console.print(
+                "[yellow]⚠  No local pricing table found.[/] "
+                "Run [bold]halyard update-pricing[/] to fetch current model prices."
+            )
+        else:
+            console.print(
+                f"[yellow]⚠  Pricing table last updated {age} days ago.[/] "
+                "Run [bold]halyard update-pricing[/] to refresh."
+            )
 
     # Resolve billing period
     now = datetime.now()
@@ -981,6 +996,112 @@ def dashboard(
         raise typer.Exit(code=1)
 
     run_dashboard(project_dir, port=port, open_browser=open_)
+
+
+# ---------------------------------------------------------------------------
+# Pricing sync (v2.1)
+# ---------------------------------------------------------------------------
+
+
+@app.command(name="update-pricing")
+def update_pricing_cmd() -> None:
+    """Fetch the latest model pricing table from GitHub and save locally."""
+    from halyard.pricing import PricingFetchError, update_pricing
+
+    console.print("Fetching pricing table from github.com/Kormiloio/Halyard...")
+    try:
+        new_count, updated_count = update_pricing()
+    except PricingFetchError as exc:
+        console.print(f"[bold red]Error:[/] {exc}")
+        console.print("[dim]Bundled pricing table is still active.[/]")
+        raise typer.Exit(code=1) from None
+
+    parts = []
+    if new_count:
+        parts.append(f"{new_count} model{'s' if new_count != 1 else ''} added")
+    if updated_count:
+        parts.append(f"{updated_count} price{'s' if updated_count != 1 else ''} changed")
+    summary = ", ".join(parts) if parts else "no changes"
+    console.print(f"Updated: {summary}.")
+    console.print("Pricing table saved to [bold]~/.halyard/pricing.toml[/].")
+
+
+# ---------------------------------------------------------------------------
+# Budget limits (v2.2)
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def budget() -> None:
+    """Show current AI spend vs. configured budget limits for all projects."""
+    from datetime import datetime
+
+    from halyard.budget import budget_status, load_budgets
+
+    budgets = load_budgets()
+    if not budgets:
+        console.print(
+            "[yellow]No budgets configured.[/] "
+            "Create [bold]~/.halyard/budgets.toml[/] to set limits:\n"
+        )
+        console.print('  [dim][["acme:auth-migration"]][/dim]')
+        console.print("  [dim]daily_usd   = 50.00[/dim]")
+        console.print("  [dim]monthly_usd = 500.00[/dim]")
+        console.print("\nOr use [bold]halyard set-budget <project> --daily N --monthly N[/].")
+        return
+
+    now = datetime.now()
+    statuses = budget_status(now=now)
+
+    console.print(f"\n[bold]Budget status — {now:%B %Y}[/]")
+    console.print("─" * 52)
+    for s in statuses:
+        console.print(f"  [bold cyan]{s.slug}[/]")
+        # Today
+        if s.today_limit is not None:
+            over = s.today_spend > s.today_limit
+            mark = "  [bold yellow]⚠ over[/]" if over else "  [green]✓[/]"
+            pct = f" {s.today_spend / s.today_limit * 100:.0f}% used" if not over else ""
+            console.print(
+                f"    Today      ${s.today_spend:.2f} / ${s.today_limit:.2f}{mark}{pct}"
+            )
+        else:
+            console.print(f"    Today      ${s.today_spend:.2f}  [dim](no limit)[/dim]")
+        # This month
+        if s.month_limit is not None:
+            over = s.month_spend > s.month_limit
+            mark = "  [bold yellow]⚠ over[/]" if over else "  [green]✓[/]"
+            pct = f" {s.month_spend / s.month_limit * 100:.0f}% used" if not over else ""
+            console.print(
+                f"    This month ${s.month_spend:.2f} / ${s.month_limit:.2f}{mark}{pct}"
+            )
+        else:
+            console.print(f"    This month ${s.month_spend:.2f}  [dim](no limit)[/dim]")
+        console.print()
+    console.print("─" * 52)
+
+
+@app.command(name="set-budget")
+def set_budget_cmd(
+    slug: str = typer.Argument(..., help="Project slug (e.g. acme:auth-migration)."),
+    daily: float | None = typer.Option(None, "--daily", help="Daily spend limit in USD."),
+    monthly: float | None = typer.Option(None, "--monthly", help="Monthly spend limit in USD."),
+) -> None:
+    """Add or update a budget limit for a project."""
+    from halyard.budget import set_budget
+
+    if daily is None and monthly is None:
+        console.print("[bold red]Error:[/] Provide at least one of --daily or --monthly.")
+        raise typer.Exit(code=1)
+
+    result = set_budget(slug, daily_usd=daily, monthly_usd=monthly)
+
+    parts = []
+    if result.daily_usd is not None:
+        parts.append(f"daily ${result.daily_usd:.2f}")
+    if result.monthly_usd is not None:
+        parts.append(f"monthly ${result.monthly_usd:.2f}")
+    console.print(f"Budget set for [bold cyan]{slug}[/]: {' '.join(parts)}")
 
 
 if __name__ == "__main__":
