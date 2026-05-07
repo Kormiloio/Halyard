@@ -100,6 +100,19 @@ def test_session_store_filter_branch(tmp_path: Path) -> None:
     assert result[0].project == "acme:auth"
 
 
+def test_session_store_branches_sorted_by_recent(tmp_path: Path) -> None:
+    from halyard.tui.store import SessionStore
+
+    store = SessionStore(tmp_path / "ai-sessions.log")
+    store.sessions = [
+        _session(start=datetime(2026, 5, 7, 12), tags=["branch:feature"]),
+        _session(start=datetime(2026, 5, 7, 10), tags=["branch:main"]),
+        _session(start=datetime(2026, 5, 7, 9), tags=["branch:feature"]),
+    ]
+
+    assert store.branches() == ["feature", "main"]
+
+
 def test_session_feed_shows_sessions(tmp_path: Path) -> None:
     pytest.importorskip("textual")
     from halyard.tui.app import HalyardApp
@@ -145,6 +158,60 @@ def test_project_toggle_key(tmp_path: Path) -> None:
         async with app_instance.run_test() as pilot:
             await pilot.press("p")
             assert pilot.app.project_scope == "project"
+
+    asyncio.run(run())
+
+
+def test_branch_modal_key_opens_selector(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+    from halyard.tui.widgets.branch_modal import BranchModal
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")
+        store.sessions = [_session(tags=["branch:main"])]
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            await pilot.press("b")
+            assert isinstance(pilot.app.screen, BranchModal)
+
+    asyncio.run(run())
+
+
+def test_branch_modal_selects_branch(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")
+        store.sessions = [_session(tags=["branch:main"])]
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            await pilot.press("b")
+            await pilot.press("enter")
+            assert pilot.app.branch_filter == "main"
+
+    asyncio.run(run())
+
+
+def test_escape_clears_branch_filter(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")
+        store.sessions = [_session(tags=["branch:main"])]
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        app_instance.branch_filter = "main"
+        async with app_instance.run_test() as pilot:
+            await pilot.press("escape")
+            assert pilot.app.branch_filter is None
 
     asyncio.run(run())
 

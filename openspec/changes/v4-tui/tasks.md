@@ -58,11 +58,11 @@
 - [x] Each row: model name, session count, cost, % of total
 
 ### `src/halyard/tui/widgets/branch_modal.py`
-- [ ] `BranchModal(ModalScreen)` — branch selector overlay
-- [ ] Lists all unique branch names from `branch:` tags in active sessions,
+- [x] `BranchModal(ModalScreen)` — branch selector overlay
+- [x] Lists all unique branch names from `branch:` tags in active sessions,
   sorted by most recent session
-- [ ] Arrow keys + Enter to select; Escape to dismiss without change
-- [ ] Posts `BranchSelected(branch)` message to app on selection
+- [x] Arrow keys + Enter to select; Escape clears/dismisses
+- [x] Posts `BranchSelected(branch)` message to app on selection
 
 ### `src/halyard/tui/app.py` — HalyardApp
 - [x] `HalyardApp(App)` with reactive: `time_window`, `project_scope`, `branch_filter`
@@ -71,9 +71,10 @@
   Footer with key hints
 - [x] Key bindings: `d`, `w`, `m`, `a` (time window); `p` (project toggle);
   `q` (quit)
-- [ ] Key bindings: `b` (branch modal); `?` (help); `ctrl+c` explicit quit
+- [x] Key binding: `b` (branch modal)
+- [ ] Key bindings: `?` (help); `ctrl+c` explicit quit
 - [ ] Handle `ProjectSelected` message: swap SessionFeed for ProjectPane
-- [ ] Handle `BranchSelected` message: set `branch_filter`, update header
+- [x] Handle `BranchSelected` message: set `branch_filter`, update header
 - [x] `app.tcss` CSS file with budget color classes and layout rules
 
 ## `src/halyard/cli.py` — `halyard tui` command

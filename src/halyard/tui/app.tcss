@@ -23,6 +23,20 @@ Screen {
     padding: 1;
 }
 
+#branch-modal {
+    width: 48;
+    max-height: 20;
+    margin: 2 4;
+    padding: 1 2;
+    border: solid $accent;
+    background: $surface;
+}
+
+#branch-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
 .budget-ok {
     color: green;
 }

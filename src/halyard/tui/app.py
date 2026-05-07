@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -16,6 +16,9 @@ from halyard.tui.store import SessionStore, TimeWindow
 from halyard.tui.widgets.budget_pane import BudgetPane
 from halyard.tui.widgets.model_pane import ModelPane
 from halyard.tui.widgets.session_feed import SessionFeed
+
+if TYPE_CHECKING:
+    from halyard.tui.widgets.branch_modal import BranchModal
 
 ProjectScope = Literal["hub", "project"]
 
@@ -30,6 +33,8 @@ class HalyardApp(App[None]):
         ("m", "set_time_window('month')", "month"),
         ("a", "set_time_window('all')", "all"),
         ("p", "toggle_project_scope", "project"),
+        ("b", "open_branch_modal", "branch"),
+        ("escape", "clear_branch_filter", "clear branch"),
         ("q", "quit", "quit"),
     ]
 
@@ -80,6 +85,21 @@ class HalyardApp(App[None]):
 
     def action_toggle_project_scope(self) -> None:
         self.project_scope = "project" if self.project_scope == "hub" else "hub"
+        self.refresh_views()
+
+    def action_open_branch_modal(self) -> None:
+        from halyard.tui.widgets.branch_modal import BranchModal
+
+        branches = self.store.branches(self.active_sessions())
+        self.push_screen(BranchModal(branches, self.branch_filter))
+
+    def action_clear_branch_filter(self) -> None:
+        if self.branch_filter is not None:
+            self.branch_filter = None
+            self.refresh_views()
+
+    def on_branch_modal_branch_selected(self, message: BranchModal.BranchSelected) -> None:
+        self.branch_filter = message.branch
         self.refresh_views()
 
     def refresh_views(self) -> None:
