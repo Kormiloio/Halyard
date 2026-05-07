@@ -149,6 +149,18 @@ def test_stop_hook_picks_up_active_project(tmp_path: Path) -> None:
     assert s.project == "acme:auth"
 
 
+def test_stop_hook_skips_cursor_events(tmp_path: Path) -> None:
+    # Cursor fires Claude Code's Stop hook internally — we must not double-record
+    _init_project(tmp_path)
+    payload = {
+        "cursor_version": "0.50.0",
+        "model": "claude-opus-4-7",
+        "usage": {"input_tokens": 1000, "output_tokens": 200},
+    }
+    _run_stop_hook(tmp_path, payload)
+    assert parse_sessions(tmp_path) == []
+
+
 def test_stop_hook_captures_cache_tokens(tmp_path: Path) -> None:
     _init_project(tmp_path)
     payload = {

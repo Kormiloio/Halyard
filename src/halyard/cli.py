@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -12,6 +14,23 @@ import typer
 from rich.console import Console
 
 _HALYARD_ACTIVE = Path.home() / ".halyard" / "active"
+
+
+def _halyard_exe() -> str:
+    """Return the absolute path to the running halyard executable.
+
+    Prefers the resolved sys.argv[0] so that hooks embed the exact binary that
+    ran `install-*-hook`, rather than relying on PATH being set up correctly
+    in the hook execution environment (e.g. Gemini CLI, Cursor, Claude Code).
+    """
+    candidate = Path(sys.argv[0]).resolve()
+    if candidate.name in ("halyard", "halyard.exe") and candidate.exists():
+        return str(candidate)
+    found = shutil.which("halyard")
+    if found:
+        return str(Path(found).resolve())
+    return "halyard"  # fallback: trust PATH at hook-run time
+
 
 # ---------------------------------------------------------------------------
 # Helpers — time tracking
@@ -26,16 +45,6 @@ def _parse_active() -> dict[str, str]:
     return dict(
         line.split("=", 1) for line in _HALYARD_ACTIVE.read_text().splitlines() if "=" in line
     )
-
-
-def _elapsed_str(started: str, stopped: str) -> str:
-    delta = datetime.strptime(stopped, "%Y-%m-%d %H:%M:%S") - datetime.strptime(
-        started,
-        "%Y-%m-%d %H:%M:%S",
-    )
-    total_mins = int(delta.total_seconds() // 60)
-    h, m = divmod(total_mins, 60)
-    return f"{h}h {m:02d}m" if h else f"{m}m"
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +97,35 @@ _AI_SESSIONS_LOG = """\
 ; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd> [key=value ...]
 """
 
+_AI_PLANS_TOML = """\
+# AI Plans — configure how Halyard tracks AI subscription and seat costs.
+# Uncomment and fill in the blocks below for your active plans.
+#
+# [[plan]]
+# slug = "claude-max"            # unique name for this plan
+# tool = "claude-code"           # tool slug: claude-code, cursor, copilot, ...
+# billing = "seat"               # seat | api | credits
+# monthly_usd = 200              # cost per month in USD
+# allocation = "active_minutes"  # active_minutes | session_count | manual
+# starts_on = "2026-01-01"       # ISO date when plan began
+#
+# [[plan]]
+# slug = "cursor-pro"
+# tool = "cursor"
+# billing = "credits"
+# monthly_usd = 20
+# included_credits = 500
+# credit_to_usd = 0.04           # USD per credit (monthly_usd / included_credits)
+# allocation = "credits"
+# starts_on = "2026-01-01"
+#
+# [[plan]]
+# slug = "anthropic-api"
+# tool = "claude-api"
+# billing = "api"
+# allocation = "direct"          # uses cost_usd captured in ai-sessions.log
+"""
+
 _GITIGNORE = """\
 # Halyard
 .halyard-cache/
@@ -103,6 +141,19 @@ _CC_HOOKS: dict[str, list[dict[str, Any]]] = {
         {"matcher": "", "hooks": [{"type": "command", "command": "halyard cc-session"}]}
     ],
     "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "halyard cc-hook"}]}],
+}
+
+# Gemini CLI hook config injected by `halyard install-gemini-hook`
+_GC_HOOKS: dict[str, dict[str, str]] = {
+    "SessionStart": "halyard gc-session",
+    "AfterModel": "halyard gc-model",
+    "AfterAgent": "halyard gc-hook",
+}
+
+# Cursor hook config injected by `halyard install-cursor-hook`
+_CURSOR_HOOKS: dict[str, str] = {
+    "beforeSubmitPrompt": "halyard cursor-session",
+    "stop": "halyard cursor-hook",
 }
 
 
@@ -203,6 +254,7 @@ def init() -> None:
     (cwd / "projects.toml").write_text(_PROJECTS_TOML)
     (cwd / "time.timeclock").write_text(_TIMECLOCK)
     (cwd / "ai-sessions.log").write_text(_AI_SESSIONS_LOG)
+    (cwd / "ai-plans.toml").write_text(_AI_PLANS_TOML)
     (cwd / "invoices").mkdir(exist_ok=True)
     _ensure_gitignore(cwd / ".gitignore")
 
@@ -290,7 +342,28 @@ def stop() -> None:
 
     _HALYARD_ACTIVE.unlink()
 
-    console.print(f"[bold green]Stopped[/] [bold]{slug}[/]. Elapsed: {_elapsed_str(started, ts)}.")
+    from halyard.reports import _elapsed_minutes, format_minutes
+
+    elapsed = format_minutes(_elapsed_minutes(started, datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")))
+    console.print(f"[bold green]Stopped[/] [bold]{slug}[/]. Elapsed: {elapsed}.")
+
+
+@app.command()
+def status() -> None:
+    """Show the active timer, or report that none is running."""
+    from halyard.reports import _elapsed_minutes, format_minutes
+
+    if not _HALYARD_ACTIVE.exists():
+        console.print(
+            "[yellow]No active timer.[/] Start one with [bold]halyard start <project>[/]."
+        )
+        return
+
+    active = _parse_active()
+    slug = active.get("slug", "(unknown)")
+    started = active.get("started", "")
+    elapsed = format_minutes(_elapsed_minutes(started, datetime.now())) if started else "?"
+    console.print(f"[bold cyan]{slug}[/]  {elapsed} elapsed  (started {started})")
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +403,56 @@ def cc_hook() -> None:
     raise typer.Exit(code=handle_stop_hook())
 
 
+# ---------------------------------------------------------------------------
+# Gemini CLI hooks
+# ---------------------------------------------------------------------------
+
+
+@app.command(name="gc-session", hidden=True)
+def gc_session() -> None:
+    """Record Gemini CLI session start (called by SessionStart hook)."""
+    from halyard.collectors.gemini_cli import record_session_start
+
+    raise typer.Exit(code=record_session_start())
+
+
+@app.command(name="gc-model", hidden=True)
+def gc_model() -> None:
+    """Accumulate Gemini CLI token counts (called by AfterModel hook)."""
+    from halyard.collectors.gemini_cli import record_model_usage
+
+    raise typer.Exit(code=record_model_usage())
+
+
+@app.command(name="gc-hook", hidden=True)
+def gc_hook() -> None:
+    """Finalise Gemini CLI session record (called by AfterAgent hook)."""
+    from halyard.collectors.gemini_cli import handle_agent_stop
+
+    raise typer.Exit(code=handle_agent_stop())
+
+
+# ---------------------------------------------------------------------------
+# Cursor hooks
+# ---------------------------------------------------------------------------
+
+
+@app.command(name="cursor-session", hidden=True)
+def cursor_session() -> None:
+    """Record Cursor session start (called by beforeSubmitPrompt hook)."""
+    from halyard.collectors.cursor import record_session_start
+
+    raise typer.Exit(code=record_session_start())
+
+
+@app.command(name="cursor-hook", hidden=True)
+def cursor_hook() -> None:
+    """Process Cursor stop hook payload (called by stop hook)."""
+    from halyard.collectors.cursor import handle_stop_hook
+
+    raise typer.Exit(code=handle_stop_hook())
+
+
 @app.command(name="install-hook")
 def install_hook(
     global_: bool = typer.Option(
@@ -355,15 +478,100 @@ def install_hook(
 
     hooks = existing.setdefault("hooks", {})
     added: list[str] = []
+    exe = _halyard_exe()
 
     for event, entries in _CC_HOOKS.items():
+        # Substitute the resolved executable path into a deep copy of the config
+        resolved = json.loads(json.dumps(entries).replace("halyard ", f"{exe} ", 1))
         current = hooks.setdefault(event, [])
-        command = entries[0]["hooks"][0]["command"]
+        command = resolved[0]["hooks"][0]["command"]
         already = any(
             h.get("command") == command for entry in current for h in entry.get("hooks", [])
         )
         if not already:
-            current.extend(entries)
+            current.extend(resolved)
+            added.append(event)
+
+    settings_path.write_text(json.dumps(existing, indent=2) + "\n")
+
+    if added:
+        console.print(f"[bold green]Hooks installed[/] in [bold]{settings_path}[/]")
+        for event in added:
+            console.print(f"  {event}")
+    else:
+        console.print(
+            f"[yellow]Hooks already present[/] in [bold]{settings_path}[/] — nothing changed."
+        )
+
+
+@app.command(name="install-gemini-hook")
+def install_gemini_hook() -> None:
+    """Install Gemini CLI hooks to auto-capture AI sessions."""
+    settings_path = Path.home() / ".gemini" / "settings.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: dict[str, Any] = {}
+    if settings_path.exists():
+        try:
+            existing = json.loads(settings_path.read_text())
+        except (json.JSONDecodeError, ValueError):
+            existing = {}
+
+    hooks = existing.setdefault("hooks", {})
+    added: list[str] = []
+    exe = _halyard_exe()
+
+    for event, template in _GC_HOOKS.items():
+        command = template.replace("halyard ", f"{exe} ", 1)
+        current = hooks.setdefault(event, [])
+        already = any(
+            h.get("command") == command for entry in current for h in entry.get("hooks", [])
+        )
+        if not already:
+            current.append(
+                {
+                    "matcher": "*",
+                    "hooks": [{"name": "halyard", "type": "command", "command": command}],
+                }
+            )
+            added.append(event)
+
+    settings_path.write_text(json.dumps(existing, indent=2) + "\n")
+
+    if added:
+        console.print(f"[bold green]Hooks installed[/] in [bold]{settings_path}[/]")
+        for event in added:
+            console.print(f"  {event}")
+    else:
+        console.print(
+            f"[yellow]Hooks already present[/] in [bold]{settings_path}[/] — nothing changed."
+        )
+
+
+@app.command(name="install-cursor-hook")
+def install_cursor_hook() -> None:
+    """Install Cursor hooks to auto-capture AI sessions."""
+    settings_path = Path.home() / ".cursor" / "hooks.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: dict[str, Any] = {}
+    if settings_path.exists():
+        try:
+            existing = json.loads(settings_path.read_text())
+        except (json.JSONDecodeError, ValueError):
+            existing = {}
+
+    existing.setdefault("version", 1)
+    hooks = existing.setdefault("hooks", {})
+    added: list[str] = []
+    exe = _halyard_exe()
+
+    for event, template in _CURSOR_HOOKS.items():
+        command = template.replace("halyard ", f"{exe} ", 1)
+        current = hooks.setdefault(event, [])
+        already = any(entry.get("command") == command for entry in current)
+        if not already:
+            current.append({"command": command})
             added.append(event)
 
     settings_path.write_text(json.dumps(existing, indent=2) + "\n")
@@ -385,8 +593,8 @@ def record_session(
         "--project",
         help="Project slug as client:project. Defaults to the active timer project.",
     ),
-    tool: str = typer.Option("codex", "--tool", help="AI tool slug."),
-    model: str = typer.Option("codex-local", "--model", help="Model or tool model label."),
+    tool: str = typer.Option("manual", "--tool", help="AI tool slug (e.g. claude-code, cursor)."),
+    model: str = typer.Option("unspecified", "--model", help="Model label."),
     input_tokens: int = typer.Option(0, "--input-tokens", help="Input token count."),
     output_tokens: int = typer.Option(0, "--output-tokens", help="Output token count."),
     cost: float | None = typer.Option(None, "--cost", help="Explicit USD cost."),
@@ -423,7 +631,7 @@ def record_session(
         cost_usd=session_cost,
         project=attributed_project,
         tokens_available=input_tokens > 0 or output_tokens > 0,
-        source="manual" if tool != "codex" else "codex",
+        source="manual",
         note=note,
     )
     append_session(project_dir, session)
@@ -492,6 +700,55 @@ def assign_unattributed(
 
 
 # ---------------------------------------------------------------------------
+# Codex importer
+# ---------------------------------------------------------------------------
+
+
+@app.command(name="import-codex")
+def import_codex(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be imported without writing anything."
+    ),
+    all_projects: bool = typer.Option(
+        False,
+        "--all",
+        help="Import sessions for all Halyard projects, not just the current one.",
+    ),
+) -> None:
+    """Import Codex Desktop session history into ai-sessions.log."""
+    from halyard.ai_log import find_project_dir
+    from halyard.collectors.codex_app import import_codex_sessions
+
+    project_dir = find_project_dir()
+    if project_dir is None and not all_projects:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. "
+            "Run [bold]halyard init[/] first or use [bold]--all[/]."
+        )
+        raise typer.Exit(code=1)
+
+    sessions = import_codex_sessions(
+        project_dir=project_dir,
+        dry_run=dry_run,
+        all_projects=all_projects,
+    )
+
+    if not sessions:
+        console.print("[yellow]No new Codex sessions to import.[/]")
+        return
+
+    label = "[dim](dry run)[/dim] " if dry_run else ""
+    console.print(f"{label}[bold green]Imported[/] {len(sessions)} Codex session(s).")
+    for s in sessions:
+        proj = s.project or "(unattributed)"
+        console.print(
+            f"  {s.start:%Y-%m-%d %H:%M} → {s.end:%H:%M}  "
+            f"[cyan]{s.model}[/]  in={s.input_tokens} out={s.output_tokens}  "
+            f"[dim]{proj}[/dim]"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Reporting (task v1 3.1)
 # ---------------------------------------------------------------------------
 
@@ -499,10 +756,24 @@ def assign_unattributed(
 @app.command()
 def report(
     all_time: bool = typer.Option(False, "--all", help="Show all time instead of current month."),
+    project: str | None = typer.Option(
+        None, "--project", help="Filter to a project slug (client:project)."
+    ),
+    client: str | None = typer.Option(
+        None, "--client", help="Filter to all projects for a client."
+    ),
+    month: str | None = typer.Option(
+        None, "--month", help="Billing month as YYYY-MM. Defaults to current month."
+    ),
+    ledger: bool = typer.Option(
+        False, "--ledger", help="Include allocated seat/credits costs from ai-plans.toml."
+    ),
 ) -> None:
-    """Show AI usage and cost summary."""
+    """Show AI usage, cost, and human time summary."""
+    from datetime import datetime
+
     from halyard.ai_log import find_project_dir
-    from halyard.reports import build_ai_report
+    from halyard.reports import build_ai_report, build_human_time_report, format_minutes
 
     project_dir = find_project_dir()
     if project_dir is None:
@@ -511,26 +782,60 @@ def report(
         )
         raise typer.Exit(code=1)
 
-    report_data = build_ai_report(project_dir, all_time=all_time)
+    # Resolve billing period
+    now = datetime.now()
+    if month:
+        try:
+            period = datetime.strptime(month, "%Y-%m")
+        except ValueError:
+            console.print("[bold red]Error:[/] --month must be YYYY-MM (e.g. 2026-05).")
+            raise typer.Exit(code=1) from None
+    else:
+        period = now
 
-    if not report_data.sessions:
-        console.print(f"[yellow]No AI sessions recorded for {report_data.period_label}.[/]")
+    report_data = build_ai_report(project_dir, all_time=all_time, now=period)
+    human = build_human_time_report(project_dir, now=period)
+
+    # Apply project / client filters
+    filter_slug = project
+    filter_client = client
+    if filter_slug:
+        report_data_sessions = [s for s in report_data.sessions if s.project == filter_slug]
+    elif filter_client:
+        report_data_sessions = [
+            s for s in report_data.sessions if (s.project or "").startswith(f"{filter_client}:")
+        ]
+    else:
+        report_data_sessions = report_data.sessions
+
+    period_label = "All time" if all_time else period.strftime("%B %Y")
+    filter_label = f" — {filter_slug or filter_client}" if (filter_slug or filter_client) else ""
+    console.print(f"\n[bold]Report — {period_label}{filter_label}[/]")
+    console.print("─" * 48)
+
+    if human.month_minutes:
         console.print(
-            "Run [bold]halyard install-hook[/] to start capturing sessions automatically."
+            f"  Human time [bold cyan]{format_minutes(human.month_minutes)}[/]  this month"
+            f"  (today: {format_minutes(human.today_minutes)})"
         )
+
+    if not report_data_sessions:
+        console.print(f"  [yellow]No AI sessions recorded for {period_label}.[/]")
+        console.print(
+            "\n  Run [bold]halyard install-hook[/] to start capturing sessions automatically."
+        )
+        console.print("─" * 48 + "\n")
         raise typer.Exit(code=0)
 
-    console.print(f"\n[bold]AI Report — {report_data.period_label}[/]")
-    console.print("─" * 48)
-    console.print(f"  Sessions   [bold]{len(report_data.sessions)}[/]")
-    console.print(f"  Cost       [bold green]${report_data.total_cost:.2f}[/]")
-    if report_data.total_input_tokens:
-        console.print(
-            f"  Tokens     in {report_data.total_input_tokens:,}  "
-            f"out {report_data.total_output_tokens:,}"
-        )
+    total_cost = sum(s.cost_usd for s in report_data_sessions)
+    total_input = sum(s.input_tokens for s in report_data_sessions)
+    total_output = sum(s.output_tokens for s in report_data_sessions)
+    console.print(f"  AI sessions  [bold]{len(report_data_sessions)}[/]")
+    console.print(f"  AI cost      [bold green]${total_cost:.2f}[/]")
+    if total_input:
+        console.print(f"  Tokens       in {total_input:,}  out {total_output:,}")
 
-    if report_data.by_project:
+    if not filter_slug and report_data.by_project:
         console.print("\n[bold]By project[/]")
         for bucket in report_data.by_project:
             console.print(
@@ -542,6 +847,42 @@ def report(
         for bucket in report_data.by_model:
             console.print(
                 f"  {bucket.label:<32} [green]${bucket.cost_usd:.2f}[/]  {bucket.sessions} sessions"
+            )
+
+    if human.by_project:
+        console.print("\n[bold]Human time by project[/]")
+        for bucket in human.by_project:
+            console.print(f"  {bucket.label:<32} [cyan]{format_minutes(bucket.minutes)}[/]")
+
+    if ledger:
+        from halyard.ai_plans import read_ai_plans
+        from halyard.ledger import build_ledger
+        from halyard.reports import parse_timeclock
+
+        plans = read_ai_plans(project_dir)
+        if plans:
+            tc_entries = parse_timeclock(project_dir / "time.timeclock")
+            summary = build_ledger(
+                report_data.sessions, plans, tc_entries, year=period.year, month=period.month
+            )
+            console.print(f"\n[bold]AI Work Ledger — {summary.period_label}[/]")
+            console.print(
+                f"  Direct API  [green]${summary.total_direct_usd:.2f}[/]  "
+                f"Allocated  [yellow]${summary.total_allocated_usd:.2f}[/]  "
+                f"Total  [bold green]${summary.total_usd:.2f}[/]"
+            )
+            for entry in summary.entries:
+                trust_color = "yellow" if entry.trust in ("allocated", "mixed") else "green"
+                inferred_note = " [dim](inferred)[/]" if entry.has_inferred_attribution else ""
+                console.print(
+                    f"  {entry.project:<32} "
+                    f"[{trust_color}]${entry.total_usd:.2f}[/]  "
+                    f"{entry.sessions} sessions  "
+                    f"[dim]{entry.trust}[/]{inferred_note}"
+                )
+        else:
+            console.print(
+                "\n[dim]No ai-plans.toml configured. Add plans to see seat/credits allocation.[/]"
             )
 
     console.print("─" * 48 + "\n")

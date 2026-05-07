@@ -48,7 +48,7 @@ def test_record_session_appends_manual_session(
     assert session.project == "acme:auth"
     assert session.input_tokens == 1000
     assert session.output_tokens == 500
-    assert session.source == "codex"
+    assert session.source == "manual"
 
 
 def test_sample_session_appends_realistic_session(

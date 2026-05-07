@@ -1,9 +1,17 @@
-"""Claude Code hook collector.
+"""Cursor hook collector.
 
-Two entry points, wired up by `halyard install-hook`:
+Two entry points, wired up by `halyard install-cursor-hook`:
 
-  UserPromptSubmit  →  record_session_start()  (halyard cc-session)
-  Stop              →  handle_stop_hook()       (halyard cc-hook)
+  beforeSubmitPrompt  →  record_session_start()   (halyard cursor-session)
+  stop                →  handle_stop_hook()         (halyard cursor-hook)
+
+The stop payload is structurally identical to Claude Code's Stop payload, with
+additional Cursor-specific fields (cursor_version, workspace_roots, user_email,
+transcript_path).  workspace_roots[0] is preferred over cwd for project lookup
+because it's the actual VS Code workspace folder, not the terminal cwd.
+
+Billing is "credits" for all Cursor sessions — costs are bundled in the plan
+and not charged per-token via API.  cost_usd is therefore 0.0.
 """
 
 from __future__ import annotations
@@ -14,38 +22,32 @@ from datetime import datetime
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
-from halyard.pricing import calculate_cost, model_is_known
 
-_CC_SESSION_FILE = Path.home() / ".halyard" / "cc-session"
+_CURSOR_SESSION_FILE = Path.home() / ".halyard" / "cursor-session"
 _HALYARD_ACTIVE = Path.home() / ".halyard" / "active"
 
 
 def record_session_start() -> int:
-    """Called by UserPromptSubmit hook. Records start timestamp once per session."""
-    if _CC_SESSION_FILE.exists():
+    """Called by beforeSubmitPrompt hook. Records start timestamp."""
+    if _CURSOR_SESSION_FILE.exists():
         return 0  # already tracking this session
-    _CC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _CC_SESSION_FILE.write_text(datetime.now().strftime("%Y-%m-%dT%H:%M:%S"))
+    _CURSOR_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _CURSOR_SESSION_FILE.write_text(datetime.now().strftime("%Y-%m-%dT%H:%M:%S"))
     return 0
 
 
 def handle_stop_hook() -> int:
-    """Called by Stop hook. Reads JSON payload from stdin, writes session record."""
+    """Called by stop hook. Reads JSON payload from stdin, writes session record."""
     payload = _read_payload()
 
-    # Cursor fires Claude Code's Stop hook internally — cursor.py handles those sessions
-    if payload.get("cursor_version"):
+    project_dir = _resolve_project_dir(payload)
+    if project_dir is None:
         _clear_session_start()
         return 0
 
-    project_dir = find_project_dir()
-    if project_dir is None:
-        _clear_session_start()
-        return 0  # not in a Halyard project — silently exit
-
     if not (project_dir / AI_LOG_FILENAME).exists():
         _clear_session_start()
-        return 0  # project not initialised with ai-sessions.log
+        return 0
 
     now = datetime.now()
     start = _read_session_start() or now
@@ -58,27 +60,21 @@ def handle_stop_hook() -> int:
     cache_write = int(usage.get("cache_creation_input_tokens", 0) or usage.get("cache_write", 0))
     tokens_available = input_tokens > 0 or output_tokens > 0
 
-    model = (
-        payload.get("model")
-        or payload.get("stop_model")
-        or _read_model_from_settings(project_dir)
-        or "claude-unknown"
-    )
-
-    cost = calculate_cost(model, input_tokens, output_tokens, cache_read, cache_write)
+    model = payload.get("model") or payload.get("stop_model") or "cursor-unknown"
 
     session = AiSession(
         start=start,
         end=now,
-        tool="claude-code",
+        tool="cursor",
         model=model,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
-        cost_usd=cost,
+        cost_usd=0.0,
         project=_read_active_project(),
         cache_read=cache_read or None,
         cache_write=cache_write or None,
         tokens_available=tokens_available,
+        billing="credits",
         source="hook",
     )
 
@@ -91,6 +87,22 @@ def handle_stop_hook() -> int:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_project_dir(payload: dict) -> Path | None:  # type: ignore[type-arg]
+    """Return the Halyard project dir, preferring workspace_roots from the payload.
+
+    If workspace_roots is non-empty but none match a Halyard project, return None
+    rather than falling back to CWD — the workspace is authoritative for Cursor.
+    """
+    roots = payload.get("workspace_roots") or []
+    for root in roots:
+        project_dir = find_project_dir(start=Path(root))
+        if project_dir is not None:
+            return project_dir
+    if roots:
+        return None  # roots were given but none matched — don't use CWD
+    return find_project_dir()
+
+
 def _read_payload() -> dict:  # type: ignore[type-arg]
     try:
         raw = sys.stdin.read()
@@ -100,16 +112,16 @@ def _read_payload() -> dict:  # type: ignore[type-arg]
 
 
 def _read_session_start() -> datetime | None:
-    if not _CC_SESSION_FILE.exists():
+    if not _CURSOR_SESSION_FILE.exists():
         return None
     try:
-        return datetime.fromisoformat(_CC_SESSION_FILE.read_text().strip())
+        return datetime.fromisoformat(_CURSOR_SESSION_FILE.read_text().strip())
     except ValueError:
         return None
 
 
 def _clear_session_start() -> None:
-    _CC_SESSION_FILE.unlink(missing_ok=True)
+    _CURSOR_SESSION_FILE.unlink(missing_ok=True)
 
 
 def _read_active_project() -> str | None:
@@ -118,20 +130,4 @@ def _read_active_project() -> str | None:
     for line in _HALYARD_ACTIVE.read_text().splitlines():
         if line.startswith("slug="):
             return line[5:]
-    return None
-
-
-def _read_model_from_settings(project_dir: Path) -> str | None:
-    for path in [
-        project_dir / ".claude" / "settings.json",
-        Path.home() / ".claude" / "settings.json",
-    ]:
-        if path.exists():
-            try:
-                data = json.loads(path.read_text())
-                model = data.get("model")
-                if model and model_is_known(model):
-                    return str(model)
-            except Exception:
-                continue
     return None
