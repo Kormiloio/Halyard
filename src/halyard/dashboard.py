@@ -143,6 +143,17 @@ def _render_state(state: DashboardState) -> str:
         <div class="health-list">{"".join(_health_row(check.label, check.status, check.detail) for check in state.health)}</div>
       </article>
 
+      <article class="panel span-12 attention-{_e("on" if report.unattributed_count else "off")}">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Needs Attention</p>
+            <h2>Unattributed Sessions</h2>
+          </div>
+          <span class="pill">{report.unattributed_count} open</span>
+        </div>
+        {_unattributed_table(report.unattributed_sessions)}
+      </article>
+
       <article class="panel span-6">
         <div class="panel-head">
           <div>
@@ -250,6 +261,26 @@ def _bucket_table(buckets: Iterable[CostBucket], label: str) -> str:
     )
 
 
+def _unattributed_table(sessions: Iterable[AiSession]) -> str:
+    rows = []
+    for session in list(sessions)[-8:][::-1]:
+        rows.append(
+            "<tr>"
+            f"<td>{_e(session.end.strftime('%Y-%m-%d %H:%M'))}</td>"
+            f"<td>{_e(session.tool)}</td>"
+            f"<td>{_e(session.model)}</td>"
+            f"<td>{session.input_tokens:,} / {session.output_tokens:,}</td>"
+            f"<td>${session.cost_usd:.4f}</td>"
+            "</tr>"
+        )
+    if not rows:
+        return '<p class="empty">No unattributed sessions. Everything is invoice-ready.</p>'
+    return (
+        "<table><thead><tr><th>Time</th><th>Tool</th><th>Model</th>"
+        "<th>Tokens</th><th>Cost</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+    )
+
+
 def _time_table(buckets: Iterable[TimeBucket]) -> str:
     rows = []
     for bucket in buckets:
@@ -339,10 +370,13 @@ h2 { font-size: 17px; }
 .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
 .panel { min-height: 260px; padding: 16px; overflow: hidden; }
 .span-7 { grid-column: span 7; }
+.span-12 { grid-column: span 12; }
 .span-6 { grid-column: span 6; }
 .span-5 { grid-column: span 5; }
 .span-3 { grid-column: span 3; }
 .panel-head { min-height: 42px; display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.attention-on { border-color: rgba(243, 191, 91, .62); }
+.attention-on .pill { color: var(--amber); border-color: rgba(243, 191, 91, .45); }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 th, td { border-bottom: 1px solid rgba(37, 64, 74, .72); padding: 10px 8px; text-align: left; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 th { color: var(--muted); font-size: 11px; text-transform: uppercase; }

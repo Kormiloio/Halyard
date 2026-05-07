@@ -62,3 +62,25 @@ def test_render_dashboard_shows_human_time(tmp_path: Path) -> None:
     assert "Human Time" in html
     assert "Timeclock" in html
     assert "acme:auth" in html
+
+
+def test_render_dashboard_marks_unattributed_sessions(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 7, 10, 0),
+            end=datetime(2026, 5, 7, 10, 30),
+            tool="codex",
+            model="codex-local",
+            input_tokens=1000,
+            output_tokens=500,
+            cost_usd=0.0,
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "Needs Attention" in html
+    assert "Unattributed Sessions" in html
+    assert "codex-local" in html

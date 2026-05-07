@@ -94,6 +94,27 @@ def parse_sessions(project_dir: Path) -> list[AiSession]:
     return sessions
 
 
+def assign_unattributed_sessions(project_dir: Path, project: str) -> int:
+    """Assign all session lines missing `project=` to a project slug."""
+    log_path = project_dir / AI_LOG_FILENAME
+    if not log_path.exists():
+        return 0
+
+    changed = 0
+    lines = []
+    for line in log_path.read_text().splitlines():
+        if _is_assignable_session_line(line):
+            lines.append(f"{line} project={project}")
+            changed += 1
+        else:
+            lines.append(line)
+
+    if changed:
+        log_path.write_text("\n".join(lines) + "\n")
+
+    return changed
+
+
 def find_project_dir(start: Path | None = None) -> Path | None:
     """Walk up from start (default CWD) to find a directory containing halyard.toml."""
     current = (start or Path.cwd()).resolve()
@@ -160,3 +181,8 @@ def _parse_line(line: str) -> AiSession | None:
                 session.note = v.replace("_", " ")
 
     return session
+
+
+def _is_assignable_session_line(line: str) -> bool:
+    stripped = line.strip()
+    return stripped.startswith("s ") and " project=" not in stripped

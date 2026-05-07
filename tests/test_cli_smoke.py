@@ -30,5 +30,6 @@ def test_v0_commands_registered() -> None:
         "dashboard",
         "record-session",
         "sample-session",
+        "assign-unattributed",
     ):
         assert cmd in result.stdout, f"command {cmd!r} not registered"

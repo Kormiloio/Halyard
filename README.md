@@ -66,6 +66,7 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 
 - [`v0-time-and-invoice`](./openspec/changes/v0-time-and-invoice/) — time tracking + invoicing CLI. *In progress.*
 - [`v1-ai-intelligence`](./openspec/changes/v1-ai-intelligence/) — AI usage event schema + Claude Code collector + local analytics. *Proposed.*
+- [`v3-org-admin-dashboard`](./openspec/changes/v3-org-admin-dashboard/) — team, manager, CIO, governance, and finance rollups. *Proposed.*
 
 ---
 
@@ -74,7 +75,7 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 - **v0** — time tracking + invoicing CLI + Claude REPL. *In progress.*
 - **v1** — AI usage event schema, Claude Code collector, API proxy collector, local `halyard report`.
 - **v2** — team sync, web dashboard, cost allocation by project/model/person.
-- **v3** — enterprise: SSO, multi-tenant, compliance audit trails, BI API.
+- **v3** — org admin dashboard: manager/CIO rollups, governance, finance exports, SSO.
 - **v4+** — productivity measurement, ROI reporting, outcome-based billing support.
 
 ---

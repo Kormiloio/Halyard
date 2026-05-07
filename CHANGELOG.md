@@ -16,8 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collector health.
 - `halyard record-session` and `halyard sample-session` commands for manual,
   Codex/local, and demo AI usage capture.
+- `halyard assign-unattributed` command and dashboard Needs Attention panel for
+  assigning AI sessions that do not yet have project attribution.
 - Reusable AI report and dashboard health services shared by CLI reporting and
   the local dashboard.
+- Product requirements and OpenSpec stories for an org admin dashboard covering
+  manager, CIO, governance, and finance rollups.
 - Auto-detection of business name from `git config user.name` during `init`.
   Falls back to a generic placeholder if git is unavailable or unset.
 - `.DS_Store` to the project `.gitignore` written by `halyard init`.

@@ -141,6 +141,20 @@ def _ensure_gitignore(path: Path) -> None:
     path.write_text(existing + separator + "\n".join(missing_lines) + "\n")
 
 
+def _active_project_for(project_dir: Path) -> str | None:
+    """Return active project only when the active timer belongs to project_dir."""
+    from halyard.reports import read_active_timer
+
+    active = read_active_timer()
+    if active is None or active.timeclock is None:
+        return None
+    try:
+        active.timeclock.resolve().relative_to(project_dir.resolve())
+    except ValueError:
+        return None
+    return active.slug
+
+
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
@@ -382,7 +396,6 @@ def record_session(
     """Append a manual/Codex AI session record to ai-sessions.log."""
     from halyard.ai_log import AiSession, append_session, find_project_dir
     from halyard.pricing import calculate_cost
-    from halyard.reports import read_active_timer
 
     project_dir = find_project_dir()
     if project_dir is None:
@@ -391,8 +404,7 @@ def record_session(
         )
         raise typer.Exit(code=1)
 
-    active = read_active_timer()
-    attributed_project = project or (active.slug if active else None)
+    attributed_project = project or _active_project_for(project_dir)
     end = datetime.now()
     start_time = end - timedelta(minutes=max(0, minutes))
     session_cost = (
@@ -431,11 +443,8 @@ def sample_session(
     ),
 ) -> None:
     """Append a realistic sample AI session for dashboard demos."""
-    from halyard.reports import read_active_timer
-
-    active = read_active_timer()
     record_session(
-        project=project or (active.slug if active else None),
+        project=project,
         tool="claude-code",
         model="claude-sonnet-4-6",
         input_tokens=18_000,
@@ -444,6 +453,42 @@ def sample_session(
         minutes=6,
         note="dashboard sample",
     )
+
+
+@app.command(name="assign-unattributed")
+def assign_unattributed(
+    project: str | None = typer.Option(
+        None,
+        "--project",
+        help="Project slug as client:project. Defaults to the active timer project.",
+    ),
+) -> None:
+    """Assign unattributed AI sessions to a project."""
+    from halyard.ai_log import assign_unattributed_sessions, find_project_dir
+
+    project_dir = find_project_dir()
+    if project_dir is None:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
+        raise typer.Exit(code=1)
+
+    target_project = project or _active_project_for(project_dir)
+    if not target_project:
+        console.print(
+            "[bold red]Error:[/] No project provided and no active timer. "
+            "Use [bold]--project client:project[/]."
+        )
+        raise typer.Exit(code=1)
+
+    changed = assign_unattributed_sessions(project_dir, target_project)
+    if changed:
+        console.print(
+            f"[bold green]Assigned[/] {changed} unattributed session(s) to "
+            f"[bold]{target_project}[/]."
+        )
+    else:
+        console.print("[yellow]No unattributed sessions found.[/]")
 
 
 # ---------------------------------------------------------------------------

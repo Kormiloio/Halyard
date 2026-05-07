@@ -12,6 +12,7 @@ from halyard.ai_log import (
     HEADER,
     AiSession,
     append_session,
+    assign_unattributed_sessions,
     find_project_dir,
     parse_sessions,
 )
@@ -167,6 +168,30 @@ def test_parse_ignores_unknown_kv(tmp_path: Path) -> None:
     )
     sessions = parse_sessions(tmp_path)
     assert len(sessions) == 1
+
+
+def test_assign_unattributed_sessions_adds_project(tmp_path: Path) -> None:
+    log = tmp_path / AI_LOG_FILENAME
+    log.write_text(
+        HEADER + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 codex codex-local "
+        "5000 1000 0.0000 source=codex\n"
+    )
+
+    changed = assign_unattributed_sessions(tmp_path, "acme:auth")
+
+    assert changed == 1
+    session = parse_sessions(tmp_path)[0]
+    assert session.project == "acme:auth"
+    assert session.source == "codex"
+
+
+def test_assign_unattributed_sessions_skips_attributed_records(tmp_path: Path) -> None:
+    append_session(tmp_path, _session(project="acme:auth"))
+
+    changed = assign_unattributed_sessions(tmp_path, "globex:reports")
+
+    assert changed == 0
+    assert parse_sessions(tmp_path)[0].project == "acme:auth"
 
 
 def test_append_multiple_sessions(tmp_path: Path) -> None:

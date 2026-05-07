@@ -67,3 +67,17 @@ def test_sample_session_appends_realistic_session(
     assert session.project == "acme:auth"
     assert session.input_tokens > 0
     assert session.cost_usd > 0
+
+
+def test_assign_unattributed_command_uses_project_option(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+    runner.invoke(app, ["record-session", "--tool", "codex"])
+
+    result = runner.invoke(app, ["assign-unattributed", "--project", "acme:auth"])
+
+    assert result.exit_code == 0, result.output
+    assert parse_sessions(tmp_path)[0].project == "acme:auth"

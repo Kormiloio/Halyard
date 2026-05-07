@@ -60,4 +60,6 @@ Implementation checklist for v2 — Local Activity Dashboard.
 
 - [x] 8.1 Add manual/Codex session capture command.
 - [x] 8.2 Add sample session command for demos and UI testing.
-- [ ] 8.3 Add first-class Codex hook integration when a stable hook surface exists.
+- [x] 8.3 Add unattributed session attention panel.
+- [x] 8.4 Add command to assign unattributed sessions to a project.
+- [ ] 8.5 Add first-class Codex hook integration when a stable hook surface exists.

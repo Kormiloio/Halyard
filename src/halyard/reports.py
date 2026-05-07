@@ -40,6 +40,7 @@ class AiReport:
     by_model: list[CostBucket]
     by_tool: list[CostBucket]
     unattributed_count: int
+    unattributed_sessions: list[AiSession]
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,7 @@ def summarize_ai_sessions(sessions: list[AiSession], *, period_label: str) -> Ai
     total_output = sum(session.output_tokens for session in sessions)
     total_cache_read = sum(session.cache_read or 0 for session in sessions)
     total_cache_write = sum(session.cache_write or 0 for session in sessions)
+    unattributed = [session for session in sessions if not session.project]
 
     return AiReport(
         sessions=sessions,
@@ -122,7 +124,8 @@ def summarize_ai_sessions(sessions: list[AiSession], *, period_label: str) -> Ai
         ),
         by_model=_bucket_costs((session.model, session.cost_usd) for session in sessions),
         by_tool=_bucket_costs((session.tool, session.cost_usd) for session in sessions),
-        unattributed_count=sum(1 for session in sessions if not session.project),
+        unattributed_count=len(unattributed),
+        unattributed_sessions=unattributed,
     )
 
 
