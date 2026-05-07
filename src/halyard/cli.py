@@ -260,6 +260,7 @@ def start(
         f.write(f"i {ts} {account}\n")
 
     from halyard.reports import _HALYARD_ACTIVE
+
     _HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
     _HALYARD_ACTIVE.write_text(f"timeclock={timeclock}\nslug={account}\nstarted={ts}\n")
 
@@ -703,6 +704,7 @@ def check_log(
     resolved_log_path: Path
     if log_path is None:
         from halyard.hub import find_hub
+
         project_dir = find_project_dir() or find_hub()
         if project_dir is None:
             console.print(
@@ -1021,8 +1023,7 @@ def report(
     console.print(f"  AI cost      [bold green]${report.total_cost:.2f}[/]")
     if report.total_input_tokens:
         console.print(
-            f"  Tokens       in {report.total_input_tokens:,}  "
-            f"out {report.total_output_tokens:,}"
+            f"  Tokens       in {report.total_input_tokens:,}  out {report.total_output_tokens:,}"
         )
 
     if not project and report.by_project:

@@ -269,7 +269,6 @@ def test_trust_label_allocated_for_seat_only() -> None:
     assert summary.entries[0].trust == "allocated"
 
 
-
 def test_trust_label_mixed_for_direct_and_allocated() -> None:
     """Both direct API and seat costs in same project → 'mixed'."""
     sessions = [

@@ -120,10 +120,10 @@ def build_filtered_ai_report(
     """Build an AI report with optional project or client filters."""
     clock = now or datetime.now()
     report = build_ai_report(project_dir, all_time=all_time, now=clock)
-    
+
     sessions = filter_ai_sessions(report.sessions, project=project, client=client)
     period_label = "All time" if all_time else clock.strftime("%B %Y")
-    
+
     return summarize_ai_sessions(sessions, period_label=period_label)
 
 

@@ -231,6 +231,7 @@ def interactive_assign_unattributed(
         return
 
     from halyard.reports import get_active_project
+
     target_project = explicit_project or get_active_project(project_dir)
     if not target_project:
         console.print(

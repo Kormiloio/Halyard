@@ -306,9 +306,7 @@ def _execute_tool(name: str, args: dict[str, Any], project_dir: Path, now: datet
                 continue
             if end_date and start.date() > end_date:
                 continue
-            filtered.append(
-                {"start": start.isoformat(), "end": end.isoformat(), "note": note}
-            )
+            filtered.append({"start": start.isoformat(), "end": end.isoformat(), "note": note})
             total_minutes += max(0, int((end - start).total_seconds() // 60))
         return {"total_minutes": total_minutes, "entries": filtered[:50]}
 
