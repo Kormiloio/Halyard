@@ -193,10 +193,12 @@ def purge_user(db_path: Path, org_id: str, user_id: str, purged_by: str) -> int:
     """
     ensure_schema(db_path)
     with _connect(db_path) as conn:
-        count = conn.execute(
-            "SELECT COUNT(*) FROM org_sessions WHERE org_id = ? AND user_id = ?",
-            [org_id, user_id],
-        ).fetchone()[0]
+        count = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM org_sessions WHERE org_id = ? AND user_id = ?",
+                [org_id, user_id],
+            ).fetchone()[0]
+        )
         conn.execute(
             "DELETE FROM org_sessions WHERE org_id = ? AND user_id = ?",
             [org_id, user_id],
