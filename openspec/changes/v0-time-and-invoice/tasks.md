@@ -20,6 +20,7 @@ task, update both the code and tick the box here.
        `projects.toml` (round-trip safe; preserves comments where possible)
 - [x] 2.3 Implement `halyard init` — creates the full project layout from
        sensible defaults
+- [x] 2.4 Preserve existing `.gitignore` contents during `halyard init`
 
 ## 3. Time tracking
 

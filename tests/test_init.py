@@ -64,3 +64,30 @@ def test_init_existing_project_writes_no_files(tmp_path: Path, monkeypatch: obje
 
     assert not (tmp_path / "clients.toml").exists()
     assert not (tmp_path / "projects.toml").exists()
+
+
+def test_init_creates_gitignore_when_missing(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+
+    result = runner.invoke(app, ["init"])
+
+    assert result.exit_code == 0, result.output
+    content = (tmp_path / ".gitignore").read_text()
+    assert ".halyard-cache/" in content
+    assert ".DS_Store" in content
+
+
+def test_init_preserves_existing_gitignore(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    existing = "# Python\n__pycache__/\ndist/\n"
+    (tmp_path / ".gitignore").write_text(existing)
+
+    result = runner.invoke(app, ["init"])
+
+    assert result.exit_code == 0, result.output
+    content = (tmp_path / ".gitignore").read_text()
+    assert content.startswith(existing)
+    assert "__pycache__/" in content
+    assert "dist/" in content
+    assert ".halyard-cache/" in content
+    assert content.count(".halyard-cache/") == 1

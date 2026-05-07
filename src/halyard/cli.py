@@ -122,6 +122,25 @@ def _detect_business_name() -> str:
     return "Your Name Consulting"
 
 
+def _ensure_gitignore(path: Path) -> None:
+    """Create or append the Halyard .gitignore block without removing user rules."""
+    if not path.exists():
+        path.write_text(_GITIGNORE)
+        return
+
+    existing = path.read_text()
+    existing_lines = set(existing.splitlines())
+    missing_lines = [
+        line for line in _GITIGNORE.splitlines() if line and line not in existing_lines
+    ]
+
+    if not missing_lines:
+        return
+
+    separator = "\n" if existing.endswith("\n") else "\n\n"
+    path.write_text(existing + separator + "\n".join(missing_lines) + "\n")
+
+
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
@@ -171,7 +190,7 @@ def init() -> None:
     (cwd / "time.timeclock").write_text(_TIMECLOCK)
     (cwd / "ai-sessions.log").write_text(_AI_SESSIONS_LOG)
     (cwd / "invoices").mkdir(exist_ok=True)
-    (cwd / ".gitignore").write_text(_GITIGNORE)
+    _ensure_gitignore(cwd / ".gitignore")
 
     console.print("[bold green]Halyard project initialized.[/]\n")
     console.print("Next steps:")

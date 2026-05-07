@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `halyard init` next-steps message now only references implemented commands;
   unimplemented commands are listed under "more commands will land later" so
   users aren't pointed at stubs.
+- `halyard init` now preserves existing `.gitignore` files and appends only
+  missing Halyard ignore patterns.
 
 ## [0.0.1] — 2026-05-06
 
