@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -137,24 +138,18 @@ def _parse_line(line: str) -> AiSession | None:
             case "user":
                 session.user = v
             case "cache_read":
-                try:
+                with suppress(ValueError):
                     session.cache_read = int(v)
-                except ValueError:
-                    pass
             case "cache_write":
-                try:
+                with suppress(ValueError):
                     session.cache_write = int(v)
-                except ValueError:
-                    pass
             case "tokens_available":
                 session.tokens_available = v.lower() != "false"
             case "billing":
                 session.billing = v
             case "credits":
-                try:
+                with suppress(ValueError):
                     session.credits = float(v)
-                except ValueError:
-                    pass
             case "job_id":
                 session.job_id = v
             case "source":

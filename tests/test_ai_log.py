@@ -21,15 +21,15 @@ END = datetime(2026, 5, 6, 11, 15, 0)
 
 
 def _session(**kwargs) -> AiSession:  # type: ignore[no-untyped-def]
-    defaults = dict(
-        start=START,
-        end=END,
-        tool="claude-code",
-        model="claude-sonnet-4-6",
-        input_tokens=10000,
-        output_tokens=2000,
-        cost_usd=0.0600,
-    )
+    defaults = {
+        "start": START,
+        "end": END,
+        "tool": "claude-code",
+        "model": "claude-sonnet-4-6",
+        "input_tokens": 10000,
+        "output_tokens": 2000,
+        "cost_usd": 0.0600,
+    }
     defaults.update(kwargs)
     return AiSession(**defaults)
 
@@ -162,8 +162,7 @@ def test_parse_ignores_comments_and_blanks(tmp_path: Path) -> None:
 def test_parse_ignores_unknown_kv(tmp_path: Path) -> None:
     log = tmp_path / AI_LOG_FILENAME
     log.write_text(
-        HEADER
-        + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-opus-4-7 "
+        HEADER + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-opus-4-7 "
         "5000 1000 0.8250 future_field=xyz\n"
     )
     sessions = parse_sessions(tmp_path)

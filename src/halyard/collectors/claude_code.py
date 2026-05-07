@@ -45,19 +45,11 @@ def handle_stop_hook() -> int:
     start = _read_session_start() or now
     _clear_session_start()
 
-    usage = (
-        payload.get("usage")
-        or payload.get("message", {}).get("usage", {})
-        or {}
-    )
+    usage = payload.get("usage") or payload.get("message", {}).get("usage", {}) or {}
     input_tokens = int(usage.get("input_tokens", 0))
     output_tokens = int(usage.get("output_tokens", 0))
-    cache_read = int(
-        usage.get("cache_read_input_tokens", 0) or usage.get("cache_read", 0)
-    )
-    cache_write = int(
-        usage.get("cache_creation_input_tokens", 0) or usage.get("cache_write", 0)
-    )
+    cache_read = int(usage.get("cache_read_input_tokens", 0) or usage.get("cache_read", 0))
+    cache_write = int(usage.get("cache_creation_input_tokens", 0) or usage.get("cache_write", 0))
     tokens_available = input_tokens > 0 or output_tokens > 0
 
     model = (

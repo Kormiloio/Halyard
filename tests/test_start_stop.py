@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
@@ -36,7 +35,7 @@ def test_start_writes_i_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 
     assert result.exit_code == 0, result.output
     lines = (tmp_path / "time.timeclock").read_text().splitlines()
-    i_lines = [l for l in lines if l.startswith("i ")]
+    i_lines = [line for line in lines if line.startswith("i ")]
     assert len(i_lines) == 1
     assert "acme:auth-migration" in i_lines[0]
 
@@ -97,7 +96,7 @@ def test_stop_writes_o_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
     assert result.exit_code == 0, result.output
     lines = (tmp_path / "time.timeclock").read_text().splitlines()
-    o_lines = [l for l in lines if l.startswith("o ")]
+    o_lines = [line for line in lines if line.startswith("o ")]
     assert len(o_lines) == 1
 
 
@@ -118,7 +117,10 @@ def test_stop_no_active_exits_nonzero(tmp_path: Path, monkeypatch: pytest.Monkey
     assert "No active timer" in result.output
 
 
-def test_start_stop_timeclock_is_hledger_compatible(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_start_stop_timeclock_is_hledger_compatible(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The i/o lines must match hledger timeclock format exactly."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER)
@@ -126,12 +128,16 @@ def test_start_stop_timeclock_is_hledger_compatible(tmp_path: Path, monkeypatch:
     runner.invoke(app, ["start", "acme/auth-migration"])
     runner.invoke(app, ["stop"])
 
-    lines = [l for l in (tmp_path / "time.timeclock").read_text().splitlines() if l and not l.startswith(";")]
+    lines = [
+        line
+        for line in (tmp_path / "time.timeclock").read_text().splitlines()
+        if line and not line.startswith(";")
+    ]
     assert lines[0].startswith("i ")
     parts_i = lines[0].split()
     assert parts_i[0] == "i"
     assert len(parts_i[1]) == 10  # YYYY-MM-DD
-    assert len(parts_i[2]) == 8   # HH:MM:SS
+    assert len(parts_i[2]) == 8  # HH:MM:SS
     assert parts_i[3] == "acme:auth-migration"
 
     assert lines[1].startswith("o ")

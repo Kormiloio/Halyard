@@ -35,8 +35,8 @@ PRICING: dict[str, tuple[float, float]] = {
 }
 
 # Anthropic prompt cache pricing multipliers (relative to input rate)
-_CACHE_READ_MULTIPLIER = 0.10    # cache reads = 10% of input price
-_CACHE_WRITE_MULTIPLIER = 1.25   # cache writes = 125% of input price
+_CACHE_READ_MULTIPLIER = 0.10  # cache reads = 10% of input price
+_CACHE_WRITE_MULTIPLIER = 1.25  # cache writes = 125% of input price
 
 
 def calculate_cost(

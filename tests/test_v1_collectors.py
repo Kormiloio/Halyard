@@ -133,9 +133,17 @@ def test_stop_hook_silent_when_not_in_halyard_project(tmp_path: Path) -> None:
 def test_stop_hook_picks_up_active_project(tmp_path: Path) -> None:
     _init_project(tmp_path)
     HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
-    HALYARD_ACTIVE.write_text(f"timeclock={tmp_path}/time.timeclock\nslug=acme:auth\nstarted=2026-05-06 10:00:00\n")
+    HALYARD_ACTIVE.write_text(
+        f"timeclock={tmp_path}/time.timeclock\nslug=acme:auth\nstarted=2026-05-06 10:00:00\n"
+    )
 
-    _run_stop_hook(tmp_path, {"model": "claude-opus-4-7", "usage": {"input_tokens": 1000, "output_tokens": 200}})
+    _run_stop_hook(
+        tmp_path,
+        {
+            "model": "claude-opus-4-7",
+            "usage": {"input_tokens": 1000, "output_tokens": 200},
+        },
+    )
 
     s = parse_sessions(tmp_path)[0]
     assert s.project == "acme:auth"
@@ -182,7 +190,10 @@ def test_install_hook_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert len(settings["hooks"]["Stop"]) == 1
 
 
-def test_install_hook_preserves_existing_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_install_hook_preserves_existing_settings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.chdir(tmp_path)
     settings_dir = tmp_path / ".claude"
     settings_dir.mkdir()

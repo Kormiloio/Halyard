@@ -6,10 +6,10 @@ import json
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
-from rich.table import Table
 
 _HALYARD_ACTIVE = Path.home() / ".halyard" / "active"
 
@@ -23,11 +23,16 @@ def _now_str() -> str:
 
 
 def _parse_active() -> dict[str, str]:
-    return dict(line.split("=", 1) for line in _HALYARD_ACTIVE.read_text().splitlines() if "=" in line)
+    return dict(
+        line.split("=", 1) for line in _HALYARD_ACTIVE.read_text().splitlines() if "=" in line
+    )
 
 
 def _elapsed_str(started: str, stopped: str) -> str:
-    delta = datetime.strptime(stopped, "%Y-%m-%d %H:%M:%S") - datetime.strptime(started, "%Y-%m-%d %H:%M:%S")
+    delta = datetime.strptime(stopped, "%Y-%m-%d %H:%M:%S") - datetime.strptime(
+        started,
+        "%Y-%m-%d %H:%M:%S",
+    )
     total_mins = int(delta.total_seconds() // 60)
     h, m = divmod(total_mins, 60)
     return f"{h}h {m:02d}m" if h else f"{m}m"
@@ -93,13 +98,11 @@ _GITIGNORE = """\
 """
 
 # Claude Code hook config injected by `halyard install-hook`
-_CC_HOOKS = {
+_CC_HOOKS: dict[str, list[dict[str, Any]]] = {
     "UserPromptSubmit": [
         {"matcher": "", "hooks": [{"type": "command", "command": "halyard cc-session"}]}
     ],
-    "Stop": [
-        {"matcher": "", "hooks": [{"type": "command", "command": "halyard cc-hook"}]}
-    ],
+    "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "halyard cc-hook"}]}],
 }
 
 
@@ -174,7 +177,9 @@ def init() -> None:
     console.print("Next steps:")
     console.print("  1. Edit [bold]halyard.toml[/] — confirm your business name and currency.")
     console.print("  2. Edit [bold]clients.toml[/] — add your first client with an hourly rate.")
-    console.print("  3. Run [bold]halyard install-hook[/] — auto-capture AI sessions from Claude Code.")
+    console.print(
+        "  3. Run [bold]halyard install-hook[/] — auto-capture AI sessions from Claude Code."
+    )
     console.print("\nTrack time: halyard start/stop   |   View AI spend: halyard report")
 
 
@@ -213,7 +218,10 @@ def start(
         raise typer.Exit(code=1)
 
     if "/" not in slug or slug.startswith("/") or slug.endswith("/"):
-        console.print("[bold red]Error:[/] Slug must be [bold]client/project[/], e.g. [bold]acme/auth-migration[/].")
+        console.print(
+            "[bold red]Error:[/] Slug must be [bold]client/project[/], "
+            "e.g. [bold]acme/auth-migration[/]."
+        )
         raise typer.Exit(code=1)
 
     account = slug.replace("/", ":", 1)
@@ -233,7 +241,8 @@ def stop() -> None:
     """Stop the active timer."""
     if not _HALYARD_ACTIVE.exists():
         console.print(
-            "[bold red]Error:[/] No active timer. Run [bold]halyard start <client/project>[/] first."
+            "[bold red]Error:[/] No active timer. Run "
+            "[bold]halyard start <client/project>[/] first."
         )
         raise typer.Exit(code=1)
 
@@ -268,7 +277,7 @@ def invoice(
 
 
 # ---------------------------------------------------------------------------
-# AI session collectors (task v1 2.1–2.3)
+# AI session collectors (task v1 2.1-2.3)
 # ---------------------------------------------------------------------------
 
 
@@ -276,6 +285,7 @@ def invoice(
 def cc_session() -> None:
     """Record Claude Code session start (called by UserPromptSubmit hook)."""
     from halyard.collectors.claude_code import record_session_start
+
     raise typer.Exit(code=record_session_start())
 
 
@@ -283,12 +293,17 @@ def cc_session() -> None:
 def cc_hook() -> None:
     """Process Claude Code Stop hook payload (called by Stop hook)."""
     from halyard.collectors.claude_code import handle_stop_hook
+
     raise typer.Exit(code=handle_stop_hook())
 
 
 @app.command(name="install-hook")
 def install_hook(
-    global_: bool = typer.Option(False, "--global", help="Install into ~/.claude/settings.json instead of .claude/settings.json."),
+    global_: bool = typer.Option(
+        False,
+        "--global",
+        help="Install into ~/.claude/settings.json instead of .claude/settings.json.",
+    ),
 ) -> None:
     """Install Claude Code hooks to auto-capture AI sessions."""
     if global_:
@@ -298,7 +313,7 @@ def install_hook(
 
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
-    existing: dict = {}  # type: ignore[type-arg]
+    existing: dict[str, Any] = {}
     if settings_path.exists():
         try:
             existing = json.loads(settings_path.read_text())
@@ -312,9 +327,7 @@ def install_hook(
         current = hooks.setdefault(event, [])
         command = entries[0]["hooks"][0]["command"]
         already = any(
-            h.get("command") == command
-            for entry in current
-            for h in entry.get("hooks", [])
+            h.get("command") == command for entry in current for h in entry.get("hooks", [])
         )
         if not already:
             current.extend(entries)
@@ -327,7 +340,9 @@ def install_hook(
         for event in added:
             console.print(f"  {event}")
     else:
-        console.print(f"[yellow]Hooks already present[/] in [bold]{settings_path}[/] — nothing changed.")
+        console.print(
+            f"[yellow]Hooks already present[/] in [bold]{settings_path}[/] — nothing changed."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +359,9 @@ def report(
 
     project_dir = find_project_dir()
     if project_dir is None:
-        console.print("[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first.")
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
         raise typer.Exit(code=1)
 
     sessions = parse_sessions(project_dir)
@@ -356,7 +373,9 @@ def report(
     if not sessions:
         period = "all time" if all_time else datetime.now().strftime("%B %Y")
         console.print(f"[yellow]No AI sessions recorded for {period}.[/]")
-        console.print("Run [bold]halyard install-hook[/] to start capturing sessions automatically.")
+        console.print(
+            "Run [bold]halyard install-hook[/] to start capturing sessions automatically."
+        )
         raise typer.Exit(code=0)
 
     total_cost = sum(s.cost_usd for s in sessions)

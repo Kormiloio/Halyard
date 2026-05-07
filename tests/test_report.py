@@ -6,7 +6,6 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from typer.testing import CliRunner
 
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
@@ -62,7 +61,7 @@ def test_report_shows_session_count_and_cost(tmp_path: Path) -> None:
     with patch("halyard.ai_log.Path.cwd", return_value=tmp_path):
         result = runner.invoke(app, ["report"])
     assert result.exit_code == 0
-    assert "2" in result.output      # session count
+    assert "2" in result.output  # session count
     assert "$4.00" in result.output  # total cost
 
 

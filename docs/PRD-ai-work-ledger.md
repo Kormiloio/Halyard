@@ -1,0 +1,208 @@
+# PRD: Halyard AI Work Ledger
+
+## Summary
+
+Halyard should become the local-first ledger for AI-assisted work: human time,
+AI time, token usage, model mix, plan/seat costs, API spend, and project
+attribution, all captured where the work happens and stored in plain text.
+
+The existing freelancer time, expense, and invoicing workflow remains the first
+user experience. The strategic shift is that Halyard is not only an invoicing
+assistant. It is the instrument panel for modern AI labor.
+
+## Problem
+
+Freelancers and teams are now hired to produce outcomes with AI. A client may
+hire Mario to build an auth migration, a prototype, or an internal automation,
+and the real work is a mix of:
+
+- human judgment and project direction;
+- Claude Code, Codex, Cursor, API calls, and other AI tool sessions;
+- token consumption and model selection;
+- subscription seats, credits, and API invoices;
+- project-specific artifacts, plans, prompts, and implementation sessions.
+
+Current time trackers only capture the human clock. Finance tools only see
+monthly vendor bills. AI tools expose usage in different places, if they expose
+it at all. Nobody can answer, with local evidence:
+
+- How much human time did this project take?
+- How much AI work did it consume?
+- Which models and tools were used?
+- What did it cost in API usage, credits, and seats?
+- What should be passed through, marked up, or absorbed?
+- What evidence supports the invoice?
+
+## Product Thesis
+
+The cool part of Halyard is not the invoice CLI. The cool part is a
+user-owned ledger of AI labor and AI spend.
+
+Halyard should define the open local protocol first, then build product
+experiences and business layers on top. The plaintext files are the durable
+asset. The CLI, reports, local activity dashboard, and future cloud sync are
+views over that asset.
+
+## Goals
+
+- Capture AI-assisted work as a first-class ledger beside human time.
+- Attribute AI usage to clients, projects, tasks, and eventually deliverables.
+- Support API, credit, and seat-based billing models.
+- Let freelancers turn AI usage into invoice evidence and margin analysis.
+- Let teams aggregate the same data into cost allocation and productivity
+  intelligence.
+- Keep the solo developer flow local-first, offline-capable, and plain text.
+- Make the data format open enough that other tools can write compatible
+  collectors.
+
+## Non-Goals
+
+- Replace accounting systems in the first version.
+- Require cloud sync or an account.
+- Guarantee exact per-session cost for tools that only expose monthly seat
+  pricing.
+- Capture private prompt or code content by default.
+- Build an enterprise dashboard before the local data model proves itself.
+
+## Primary Users
+
+### AI-assisted freelancer
+
+Mario is hired to build software using AI-heavy workflows. He wants to know
+what each client project consumed in human time and AI resources, then generate
+an invoice with defensible detail.
+
+### Solo consultant with multiple AI plans
+
+A consultant pays for Claude, ChatGPT, Cursor, and API credits. They need to
+understand which clients or projects justify those subscriptions.
+
+### Engineering lead
+
+A lead wants to understand AI investment by project, team, model, and time
+period without relying on each vendor dashboard.
+
+### Finance / operations buyer
+
+Finance needs cost allocation and auditability for AI spend. They need a clean
+source of truth that can be exported or synced.
+
+## Core Concepts
+
+### Human time
+
+The clock time a person spends directing, reviewing, building, communicating,
+and making decisions. Stored in `time.timeclock`.
+
+### AI session
+
+A bounded unit of AI tool activity: a Claude Code session, Codex session, API
+proxy window, Cursor operation, or agentic job segment. Stored in
+`ai-sessions.log`.
+
+### AI work unit
+
+A higher-level aggregation of one or more AI sessions that belong to a task,
+plan, deliverable, or job. This may be represented by `job_id`, `task_id`, or
+future record types.
+
+### Plan and entitlement cost
+
+Costs that are not naturally per-token: Claude Max, ChatGPT Plus/Team, Cursor
+credits, Copilot seats, Devin/Factory credits, or enterprise contracts.
+
+### Attribution
+
+Mapping human time and AI usage to `client:project`, plus optional task,
+deliverable, user, tool, model, and billing metadata.
+
+## MVP Scope
+
+The MVP should answer:
+
+> For this client project, how much human time and AI resource usage went into
+> the work, and what did it cost?
+
+Required capabilities:
+
+- Capture Claude Code sessions automatically into `ai-sessions.log`.
+- Track active project attribution from `halyard start`.
+- Record token counts, model, cache tokens, cost, and source.
+- Support manual plan/seat cost configuration for tools with subscriptions.
+- Produce a local report combining human hours and AI usage by project.
+- Run a local dashboard showing the active timer, recent AI sessions, collector
+  health, and cost attribution as work happens.
+- Show margin inputs: human billable amount, AI cost, and AI cost percentage.
+- Export invoice evidence as markdown.
+
+## Later Scope
+
+- API proxy collector for Anthropic, OpenAI, Gemini, and OpenRouter.
+- SDK wrappers for scripts and internal tools.
+- Tool-specific collectors for Codex, Cursor, Copilot, Devin, Factory, and
+  other AI work surfaces.
+- Plan allocation rules: by session count, active minutes, project weight, or
+  manual allocation.
+- Deduplication across tool-wraps-tool scenarios.
+- Team sync and dashboard.
+- Compliance/audit exports.
+- Outcome-based billing support.
+
+## Key User Stories
+
+- As a freelancer, I can start work on `acme/auth-migration`, use Claude Code,
+  stop work, and see both my human time and AI cost attributed to ACME.
+- As a freelancer, I can configure my Claude Max, ChatGPT, Cursor, or Copilot
+  plan cost and have Halyard allocate a reasonable project share.
+- As a consultant, I can show a client a concise invoice appendix listing AI
+  tools, models, sessions, and cost without exposing private prompts.
+- As an engineering lead, I can summarize AI spend by project and model for a
+  sprint.
+- As a future enterprise admin, I can sync the same local records into a
+  central system without changing their meaning.
+
+## Data Principles
+
+- Plain text is the source of truth.
+- Usage records are append-only.
+- Unknown fields are ignored by old parsers.
+- Captured cost is snapshotted at the time of capture.
+- Sensitive content is opt-in, not default.
+- Local project data and per-user state remain separate.
+- Reports may derive allocations, but raw logs should not be rewritten.
+
+## UX Principles
+
+- The best capture is invisible: users do the work and the ledger fills in.
+- The user should not have to become a usage-accounting expert.
+- Reports should explain uncertainty, especially with seat and credit costs.
+- The local dashboard should make invisible capture visible without becoming a
+  required cloud product.
+- Invoice evidence should be clear enough for clients and conservative enough
+  for trust.
+- The CLI should stay fast and terminal-native.
+
+## Success Metrics
+
+- A new user can initialize Halyard, install the Claude Code hook, and capture
+  the first AI session in under two minutes.
+- `halyard report` can answer human hours plus AI spend by project in under
+  100ms for a one-year local log.
+- A freelancer can generate an invoice appendix with human hours, AI sessions,
+  model usage, and total AI cost.
+- The file format is clear enough for a third party to implement a compatible
+  collector.
+- The README demo makes the AI work ledger obvious within the first minute.
+
+## Open Questions
+
+- Should plan/seat costs live in `halyard.toml`, `plans.toml`, or per-user
+  `~/.halyard/config.toml`?
+- What allocation rule should be the default for monthly seats: session count,
+  active minutes, token-equivalent weight, or manual allocation?
+- Should invoice appendices include AI cost as pass-through, markup, internal
+  margin evidence, or all three?
+- How should Halyard capture AI work from Codex specifically?
+- When should a sequence of AI sessions become one higher-level AI work unit?
+- How much project/task context should be captured without risking sensitive
+  content exposure?
