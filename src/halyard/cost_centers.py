@@ -55,8 +55,12 @@ def read_cost_center_config(hub_dir: Path) -> CostCenterConfig:
         return CostCenterConfig()
     data = tomllib.loads(path.read_text())
     return CostCenterConfig(
-        project_mappings=[ProjectCostMapping.model_validate(m) for m in data.get("project_mapping", [])],
-        team_mappings=[TeamCostMapping.model_validate(m) for m in data.get("team_mapping", [])],
+        project_mappings=[
+            ProjectCostMapping.model_validate(m) for m in data.get("project_mapping", [])
+        ],
+        team_mappings=[
+            TeamCostMapping.model_validate(m) for m in data.get("team_mapping", [])
+        ],
     )
 
 

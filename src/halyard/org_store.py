@@ -10,10 +10,10 @@ re-syncing the same log line is a no-op.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Generator
 
 from halyard.org import OrgSession
 
@@ -160,7 +160,8 @@ def record_sync(
     with _connect(db_path) as conn:
         conn.execute(
             """
-            INSERT INTO sync_audit (org_id, synced_by, synced_at, source_path, inserted, skipped, event)
+            INSERT INTO sync_audit
+                (org_id, synced_by, synced_at, source_path, inserted, skipped, event)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             [org_id, synced_by, datetime.now().isoformat(), source_path, inserted, skipped, event],
@@ -202,7 +203,8 @@ def purge_user(db_path: Path, org_id: str, user_id: str, purged_by: str) -> int:
         )
         conn.execute(
             """
-            INSERT INTO sync_audit (org_id, synced_by, synced_at, source_path, inserted, skipped, event)
+            INSERT INTO sync_audit
+                (org_id, synced_by, synced_at, source_path, inserted, skipped, event)
             VALUES (?, ?, ?, ?, 0, 0, ?)
             """,
             [org_id, purged_by, datetime.now().isoformat(), user_id, f"purge:{user_id}"],

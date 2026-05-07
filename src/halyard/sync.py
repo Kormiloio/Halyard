@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession
-from halyard.org import OrgConfig, normalize_session, read_org_config
+from halyard.org import normalize_session, read_org_config
 from halyard.org_store import ORG_DB_FILENAME, insert_sessions, record_sync
 
 ORG_TOML_FILENAME = "org.toml"
@@ -52,10 +52,10 @@ def sync_project(project_dir: Path, hub_dir: Path | None = None) -> SyncResult:
     raw_lines, sessions = _read_log_with_lines(log_path)
 
     org_sessions = []
-    for raw, session in zip(raw_lines, sessions):
+    for raw, session in zip(raw_lines, sessions, strict=False):
         try:
             org_sessions.append(normalize_session(raw, session, org_config))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             result.errors.append(f"Normalization error for line '{raw[:60]}': {exc}")
 
     inserted, skipped = insert_sessions(db_path, org_sessions)
@@ -65,7 +65,7 @@ def sync_project(project_dir: Path, hub_dir: Path | None = None) -> SyncResult:
     import getpass
     try:
         synced_by = getpass.getuser()
-    except Exception:  # noqa: BLE001
+    except Exception:
         synced_by = "unknown"
     record_sync(
         db_path,

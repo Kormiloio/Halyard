@@ -1341,7 +1341,7 @@ def org_report(
     team: str = typer.Option(None, "--team", help="Filter by team ID."),
     project_filter: str = typer.Option(None, "--project", help="Filter by project ID."),
     hub: Path = typer.Option(None, "--hub", help="Hub directory."),
-    csv_out: Path = typer.Option(None, "--csv", help="Write CSV output to this file (finance view)."),
+    csv_out: Path = typer.Option(None, "--csv", help="Write CSV to this file (finance view)."),
 ) -> None:
     """Show org admin dashboard views."""
     from halyard.ai_log import find_project_dir
@@ -1379,7 +1379,7 @@ def org_report(
             year, month = int(period[:4]), int(period[5:7])
         except (ValueError, IndexError):
             console.print("[bold red]Invalid --period format.[/] Use YYYY-MM.")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
     else:
         year, month = now.year, now.month
 
@@ -1419,11 +1419,12 @@ def org_audit(
     limit: int = typer.Option(50, "--limit", help="Number of recent audit events to show."),
 ) -> None:
     """Show the sync audit log."""
+    from rich.table import Table
+
     from halyard.ai_log import find_project_dir
     from halyard.hub import find_hub
     from halyard.org import read_org_config
     from halyard.org_store import ORG_DB_FILENAME, read_sync_audit
-    from rich.table import Table
 
     effective_hub = hub or find_hub() or find_project_dir()
     if effective_hub is None:
@@ -1458,11 +1459,12 @@ def org_purge_user(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt."),
 ) -> None:
     """Permanently delete a user's session records from the org store (GDPR removal)."""
+    import getpass
+
     from halyard.ai_log import find_project_dir
     from halyard.hub import find_hub
     from halyard.org import read_org_config
     from halyard.org_store import ORG_DB_FILENAME, purge_user
-    import getpass
 
     effective_hub = hub or find_hub() or find_project_dir()
     if effective_hub is None:
@@ -1486,7 +1488,7 @@ def org_purge_user(
 
     try:
         purged_by = getpass.getuser()
-    except Exception:  # noqa: BLE001
+    except Exception:
         purged_by = "unknown"
 
     db_path = effective_hub / ORG_DB_FILENAME

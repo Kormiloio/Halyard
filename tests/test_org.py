@@ -8,17 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from halyard.ai_log import AiSession, AI_LOG_FILENAME
-from halyard.org import (
-    OrgConfig,
-    OrgInfo,
-    Team,
-    Member,
-    Department,
-    OrgSession,
-    normalize_session,
-    read_org_config,
-)
+from halyard.ai_log import AI_LOG_FILENAME, AiSession
 from halyard.cost_centers import (
     CostCenterConfig,
     ProjectCostMapping,
@@ -27,23 +17,31 @@ from halyard.cost_centers import (
     read_project_cost_centers,
     resolve_cost_center,
 )
+from halyard.org import (
+    Department,
+    Member,
+    OrgConfig,
+    OrgInfo,
+    OrgSession,
+    Team,
+    normalize_session,
+    read_org_config,
+)
 from halyard.org_store import (
     ORG_DB_FILENAME,
-    ensure_schema,
+    finance_export,
+    governance_gaps,
     insert_session,
     insert_sessions,
+    org_monthly_summary,
+    project_monthly_rollup,
     purge_user,
     read_sync_audit,
     record_sync,
     team_monthly_rollup,
-    project_monthly_rollup,
     user_monthly_rollup,
-    org_monthly_summary,
-    governance_gaps,
-    finance_export,
 )
 from halyard.sync import sync_project
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -492,21 +490,26 @@ def test_sync_project_missing_log_returns_error(tmp_path: Path):
 def test_resolve_cost_center_from_project_override(tmp_path: Path):
     overrides = {"acme:auth": "CC-001"}
     cfg = CostCenterConfig()
-    assert resolve_cost_center("acme:auth", "auth-team", project_overrides=overrides, org_config=cfg) == "CC-001"
+    result = resolve_cost_center(
+        "acme:auth", "auth-team", project_overrides=overrides, org_config=cfg
+    )
+    assert result == "CC-001"
 
 
 def test_resolve_cost_center_from_org_project_mapping():
     cfg = CostCenterConfig(
         project_mappings=(ProjectCostMapping(project_slug="acme:auth", cost_center="CC-ORG-001"),),
     )
-    assert resolve_cost_center("acme:auth", "auth-team", project_overrides={}, org_config=cfg) == "CC-ORG-001"
+    result = resolve_cost_center("acme:auth", "auth-team", project_overrides={}, org_config=cfg)
+    assert result == "CC-ORG-001"
 
 
 def test_resolve_cost_center_falls_back_to_team_mapping():
     cfg = CostCenterConfig(
         team_mappings=(TeamCostMapping(team_id="auth-team", cost_center="CC-TEAM-010"),),
     )
-    assert resolve_cost_center("acme:auth", "auth-team", project_overrides={}, org_config=cfg) == "CC-TEAM-010"
+    result = resolve_cost_center("acme:auth", "auth-team", project_overrides={}, org_config=cfg)
+    assert result == "CC-TEAM-010"
 
 
 def test_resolve_cost_center_project_override_beats_org_mapping():
@@ -514,12 +517,16 @@ def test_resolve_cost_center_project_override_beats_org_mapping():
         project_mappings=(ProjectCostMapping(project_slug="acme:auth", cost_center="CC-ORG-001"),),
     )
     overrides = {"acme:auth": "CC-LOCAL-999"}
-    assert resolve_cost_center("acme:auth", "auth-team", project_overrides=overrides, org_config=cfg) == "CC-LOCAL-999"
+    result = resolve_cost_center(
+        "acme:auth", "auth-team", project_overrides=overrides, org_config=cfg
+    )
+    assert result == "CC-LOCAL-999"
 
 
 def test_resolve_cost_center_unattributed_returns_empty():
     cfg = CostCenterConfig()
-    assert resolve_cost_center("", "auth-team", project_overrides={}, org_config=cfg) == ""
+    result = resolve_cost_center("", "auth-team", project_overrides={}, org_config=cfg)
+    assert result == ""
 
 
 def test_read_cost_center_config_missing(tmp_path: Path):
@@ -541,7 +548,8 @@ def test_read_cost_center_config_parses(tmp_path: Path):
 
 def test_read_project_cost_centers(tmp_path: Path):
     (tmp_path / "projects.toml").write_text(
-        '[[project]]\nslug = "acme:auth"\nclient_slug = "acme"\nname = "Auth"\ncost_center = "CC-042"\n'
+        "[[project]]\nslug = \"acme:auth\"\nclient_slug = \"acme\"\n"
+        "name = \"Auth\"\ncost_center = \"CC-042\"\n"
     )
     result = read_project_cost_centers(tmp_path)
     assert result == {"acme:auth": "CC-042"}
@@ -595,10 +603,8 @@ def test_purge_user_deletes_records_and_logs_audit(tmp_path: Path):
     assert count == 2
 
     # Alice's sessions gone, Bob's intact
-    rows = team_monthly_rollup(db, "acme", 2026, 5)
     users_remaining = set()
-    from halyard.org_store import user_monthly_rollup as umr
-    for r in umr(db, "acme", 2026, 5):
+    for r in user_monthly_rollup(db, "acme", 2026, 5):
         users_remaining.add(r["user_id"])
     assert "alice@acme.example" not in users_remaining
     assert "bob@acme.example" in users_remaining

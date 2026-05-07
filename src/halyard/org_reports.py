@@ -238,7 +238,6 @@ def _enrich_cost_centers(rows: list[dict], hub_dir: Path | None) -> list[dict]: 
             r.setdefault("cost_center", "")
         return rows
     from halyard.cost_centers import (
-        CostCenterConfig,
         read_cost_center_config,
         read_project_cost_centers,
         resolve_cost_center,
@@ -267,7 +266,8 @@ def print_finance_table(
         return
 
     t = Table(
-        "Cost center", "Team", "Project", "Tool", "Sessions", "Direct", "Allocated", "Total", "Trust",
+        "Cost center", "Team", "Project", "Tool",
+        "Sessions", "Direct", "Allocated", "Total", "Trust",
         title=f"Finance Export — {period}",
         box=None,
         padding=(0, 2),
