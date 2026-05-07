@@ -198,3 +198,45 @@ def test_check_log_reports_invalid_line(
     assert result.exit_code == 1
     assert "Line 3: expected session line" in result.output
     assert "s bad" in result.output
+
+
+def test_check_log_uses_hub_when_no_project_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """check-log falls back to hub log when run outside a project directory."""
+    hub = tmp_path / "hub"
+    hub.mkdir()
+    (hub / "halyard.toml").write_text("[business]\nhub = true\n")
+    (hub / AI_LOG_FILENAME).write_text(HEADER)
+
+    non_project = tmp_path / "elsewhere"
+    non_project.mkdir()
+    monkeypatch.chdir(non_project)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    set_hub(hub)
+
+    result = runner.invoke(app, ["check-log"])
+
+    assert result.exit_code == 0
+    assert "valid" in result.output.lower()
+
+
+def test_assign_unattributed_rejects_unknown_project_slug(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """assign-unattributed --project exits 1 when slug not in projects.toml.
+
+    No sessions in the unattributed log so the non-interactive path is taken,
+    where _is_valid_project raises typer.Exit(code=1) on an unknown slug.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    _init_project(tmp_path)
+    # Do NOT write any unattributed sessions — forces the non-interactive path.
+
+    result = runner.invoke(app, ["assign-unattributed", "--project", "unknown:slug"])
+
+    assert result.exit_code == 1
+    assert "unknown:slug" in result.output

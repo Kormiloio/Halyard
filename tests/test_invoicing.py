@@ -248,7 +248,7 @@ def test_log_filters_project_model_and_branch(tmp_path: Path, monkeypatch: objec
         app,
         [
             "log",
-            "cost for acme/auth using model sonnet on main",
+            "cost for acme/auth using model sonnet on branch main",
             "--json",
         ],
     )

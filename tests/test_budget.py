@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 import halyard.budget as budget_mod
 from halyard.budget import (
     check_budget,
@@ -250,3 +252,64 @@ def test_set_budget_preserves_other_entries(tmp_path: Path) -> None:
         result = load_budgets()
     assert "globex:reporting" in result
     assert "acme:auth" in result
+
+
+# ---------------------------------------------------------------------------
+# budget_status — multi-project correctness
+# ---------------------------------------------------------------------------
+
+_SESSION_ACME = (
+    "s 2026-05-07T10:00:00 2026-05-07T11:00:00 claude-code claude-sonnet-4-6 "
+    "100000 50000 20.0000 project=acme:auth"
+)
+_SESSION_GLOBEX = (
+    "s 2026-05-07T10:00:00 2026-05-07T11:00:00 claude-code claude-sonnet-4-6 "
+    "100000 50000 8.0000 project=globex:reporting"
+)
+_BUDGETS_TWO = (
+    '["acme:auth"]\ndaily_usd = 50.0\nmonthly_usd = 500.0\n'
+    '["globex:reporting"]\ndaily_usd = 30.0\nmonthly_usd = 200.0\n'
+)
+
+
+def test_budget_status_multi_project_hub(tmp_path: Path) -> None:
+    """Hub log with two projects: each slug sees only its own spend."""
+    hub = tmp_path / "hub"
+    hub.mkdir()
+    _write_log(hub, [_SESSION_ACME, _SESSION_GLOBEX])
+    bf = tmp_path / "budgets.toml"
+    _write_budgets(bf, _BUDGETS_TWO)
+
+    with (
+        patch.object(budget_mod, "_BUDGETS_FILE", bf),
+        patch("halyard.hub.find_hub", return_value=hub),
+        patch("halyard.ai_log.find_project_dir", return_value=None),
+    ):
+        statuses = budget_mod.budget_status(now=_NOW)
+
+    by_slug = {s.slug: s for s in statuses}
+    assert by_slug["acme:auth"].today_spend == pytest.approx(20.0)
+    assert by_slug["globex:reporting"].today_spend == pytest.approx(8.0)
+    # Crucially: acme does NOT include globex spend and vice versa
+    assert by_slug["acme:auth"].today_spend != by_slug["globex:reporting"].today_spend
+
+
+def test_budget_status_no_hub_uses_project_dir(tmp_path: Path) -> None:
+    """Without a hub, falls back to project dir and still filters by slug."""
+    project = tmp_path / "project"
+    project.mkdir()
+    # Log contains sessions for two slugs — only the budgeted one should count
+    _write_log(project, [_SESSION_ACME, _SESSION_GLOBEX])
+    bf = tmp_path / "budgets.toml"
+    _write_budgets(bf, '["acme:auth"]\ndaily_usd = 50.0\nmonthly_usd = 500.0\n')
+
+    with (
+        patch.object(budget_mod, "_BUDGETS_FILE", bf),
+        patch("halyard.hub.find_hub", return_value=None),
+        patch("halyard.ai_log.find_project_dir", return_value=project),
+    ):
+        statuses = budget_mod.budget_status(now=_NOW)
+
+    assert len(statuses) == 1
+    # Only acme:auth sessions counted — globex sessions not included
+    assert statuses[0].today_spend == pytest.approx(20.0)

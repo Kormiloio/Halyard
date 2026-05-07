@@ -463,7 +463,9 @@ def _infer_model(query: str) -> str | None:
 
 
 def _infer_branch(query: str) -> str | None:
-    for marker in ("branch ", "on branch ", "on "):
+    # Only match explicit "branch" keyword — "on " alone is too broad and
+    # produces false positives for common phrasing like "cost on cursor".
+    for marker in ("on branch ", "branch "):
         if marker in query:
             tail = query.split(marker, 1)[1].strip()
             return tail.split()[0].strip("?!'\"()[]{}") if tail else None

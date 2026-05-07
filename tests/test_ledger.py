@@ -255,3 +255,33 @@ def test_unattributed_count_is_correct() -> None:
     ]
     summary = build_ledger(sessions, [], [], year=2026, month=5)
     assert summary.unattributed_count == 1  # one "(unattributed)" bucket
+
+
+# ---------------------------------------------------------------------------
+# Trust label coverage
+# ---------------------------------------------------------------------------
+
+
+def test_trust_label_allocated_for_seat_only() -> None:
+    """Seat-billed sessions with no direct cost produce 'allocated' trust."""
+    sessions = [_session(tool="claude-code", cost=0.0, minutes=60)]
+    summary = build_ledger(sessions, [_seat_plan(monthly_usd=60.0)], [], year=2026, month=5)
+    assert summary.entries[0].trust == "allocated"
+
+
+
+def test_trust_label_mixed_for_direct_and_allocated() -> None:
+    """Both direct API and seat costs in same project → 'mixed'."""
+    sessions = [
+        _session(project="acme:auth", tool="claude-api", cost=5.0),
+        _session(project="acme:auth", tool="claude-code", cost=0.0, minutes=60),
+    ]
+    summary = build_ledger(
+        sessions,
+        [_api_plan(), _seat_plan(monthly_usd=60.0)],
+        [],
+        year=2026,
+        month=5,
+    )
+    entry = summary.entries[0]
+    assert entry.trust == "mixed"
