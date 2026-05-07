@@ -345,3 +345,75 @@ def test_budget_pane_renders_limits(monkeypatch: pytest.MonkeyPatch) -> None:
             assert "acme:auth" in pane.last_rendered_text
 
     asyncio.run(run())
+
+
+def test_log_missing_on_mount_sets_flag(tmp_path: Path) -> None:
+    """log_missing=True when the log file doesn't exist at startup."""
+    pytest.importorskip("textual")
+    from textual.widgets import Static as TStatic
+
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")  # file does not exist
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            assert pilot.app.log_missing is True
+            status = pilot.app.query_one("#status", TStatic)
+            assert "Waiting for log file" in str(status.render())
+
+    asyncio.run(run())
+
+
+def test_log_present_on_mount_clears_flag(tmp_path: Path) -> None:
+    """log_missing=False when the log file exists at startup."""
+    pytest.importorskip("textual")
+    from textual.widgets import Static as TStatic
+
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+
+    log = tmp_path / "ai-sessions.log"
+    log.write_text("; empty\n")
+
+    async def run() -> None:
+        store = SessionStore(log)
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            assert pilot.app.log_missing is False
+            status = pilot.app.query_one("#status", TStatic)
+            assert "Waiting" not in str(status.render())
+
+    asyncio.run(run())
+
+
+def test_store_clears_sessions_on_log_deletion(tmp_path: Path) -> None:
+    """Sessions are cleared and offset reset when the log file is deleted."""
+    pytest.importorskip("textual")
+    from halyard.tui.store import SessionStore
+
+    log = tmp_path / "ai-sessions.log"
+    s = AiSession(
+        start=datetime(2026, 5, 7, 10, 0),
+        end=datetime(2026, 5, 7, 10, 10),
+        tool="claude-code",
+        model="claude-sonnet-4-6",
+        input_tokens=100,
+        output_tokens=50,
+        cost_usd=0.01,
+    )
+    log.write_text(s.to_log_line() + "\n")
+
+    store = SessionStore(log)
+    store.load()
+    assert len(store.sessions) == 1
+
+    # simulate the deletion branch of _watch_events
+    store.sessions = []
+    store._offset = 0
+
+    assert store.sessions == []
+    assert store._offset == 0

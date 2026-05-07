@@ -47,6 +47,7 @@ class HalyardApp(App[None]):
     project_scope: reactive[ProjectScope] = reactive("hub")
     branch_filter: reactive[str | None] = reactive(None)
     detail_project: reactive[str | None] = reactive(None)
+    log_missing: reactive[bool] = reactive(False)
 
     def __init__(
         self,
@@ -76,16 +77,15 @@ class HalyardApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.log_missing = not self.store.log_path.exists()
         self.store.load()
         self.refresh_views()
         self.run_worker(self._watch_and_refresh(), exclusive=True, thread=False)
 
     async def _watch_and_refresh(self) -> None:
-        before = len(self.store.sessions)
-        async for _event in _watch_events(self.store):
-            if len(self.store.sessions) != before:
-                before = len(self.store.sessions)
-                self.refresh_views()
+        async for log_present in _watch_events(self.store):
+            self.log_missing = not log_present
+            self.refresh_views()
 
     def action_set_time_window(self, window: TimeWindow) -> None:
         self.time_window = window
@@ -180,6 +180,8 @@ class HalyardApp(App[None]):
         )
 
     def _status_text(self) -> str:
+        if self.log_missing:
+            return f"  HALYARD  Waiting for log file: {self.store.log_path}"
         scope = "hub"
         if self.project_scope == "project":
             scope = f"project: {self.project_slug or 'unknown'}"
@@ -199,8 +201,11 @@ class HalyardApp(App[None]):
         self.selected_index = max(0, min(self.selected_index, len(sessions) - 1))
 
 
-async def _watch_events(store: SessionStore) -> AsyncIterator[None]:
-    """Yield after log updates; isolated for tests and graceful no-watch fallback."""
+async def _watch_events(store: SessionStore) -> AsyncIterator[bool]:
+    """Yield after log updates; isolated for tests and graceful no-watch fallback.
+
+    Yields True when the log file is present, False when it was just deleted.
+    """
     try:
         from watchfiles import Change, awatch
     except ImportError:
@@ -216,6 +221,8 @@ async def _watch_events(store: SessionStore) -> AsyncIterator[None]:
         if log_deleted:
             store.sessions = []
             store._offset = 0
+            yield False
         else:
-            store.read_new_lines()
-        yield None
+            if store.log_path.exists():
+                store.read_new_lines()
+            yield True
