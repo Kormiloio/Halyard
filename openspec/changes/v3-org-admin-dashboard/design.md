@@ -59,11 +59,38 @@ one false-precision total.
 Initial design target: 500 users, 1 year of AI session logs, sub-second
 dashboard queries for common monthly/team/project rollups.
 
-## Open Questions
+## Identity Model
 
-- What is the org identity model: Halyard-native users, SSO, or GitHub/SCIM
-  mapping?
-- Should sync be push-only from clients or pull-based from managed agents?
-- How are cost centers mapped: project config, identity provider metadata, or
-  finance upload?
-- What is the minimum viable governance policy model?
+Org identity is file-based and local-first. An `org.toml` file at the Halyard
+hub root defines org, teams, and user-to-team mappings. This can be machine-
+generated from GitHub/SCIM or maintained manually. SSO integration is additive
+and optional — the file is the source of truth regardless.
+
+User identity is the git user email from the contributor's environment
+(`git config user.email`). This is already recorded in session metadata.
+
+## Sync Model
+
+Sync is push-only from clients. Contributors decide when to sync. There is no
+pull-based architecture in v3. A sync command (`halyard sync` or equivalent)
+uploads normalized metadata records to a configured org endpoint.
+
+## Cost Centers
+
+Cost centers are mapped in `projects.toml` as an optional `cost_center` field
+on each project. Finance teams that need finer control can supply an
+`org-cost-centers.toml` file at the hub root that maps project slugs or team
+slugs to cost center codes. The project-level field wins if both are present.
+
+## Minimum Viable Governance Policy
+
+Three built-in checks cover the governance floor:
+
+1. **Collector health** — expected tools per user are configured; missing
+   data triggers a health flag. "Expected" is inferred from history or
+   configured explicitly.
+2. **Unknown model** — any model slug not in the local pricing table is
+   flagged for review.
+3. **Unattributed rate** — when more than a configurable threshold (default
+   10%) of a team's sessions are unattributed, the governance view raises
+   a cleanup alert.
