@@ -28,20 +28,23 @@ def test_find_hub_returns_none_when_pointer_missing(hub_pointer: Path) -> None:
 def test_set_hub_then_find_hub(hub_pointer: Path, tmp_path: Path) -> None:
     project = tmp_path / "myproject"
     project.mkdir()
+    (project / "halyard.toml").touch()
     set_hub(project)
     assert hub_pointer.exists()
     assert find_hub() == project
 
 
 def test_find_hub_returns_none_when_dir_missing(hub_pointer: Path, tmp_path: Path) -> None:
+    # We bypass set_hub's validation to test find_hub's resilience
     missing = tmp_path / "gone"
-    set_hub(missing)
+    hub_pointer.write_text(str(missing))
     assert find_hub() is None
 
 
 def test_clear_hub(hub_pointer: Path, tmp_path: Path) -> None:
     project = tmp_path / "p"
     project.mkdir()
+    (project / "halyard.toml").touch()
     set_hub(project)
     assert find_hub() is not None
     clear_hub()

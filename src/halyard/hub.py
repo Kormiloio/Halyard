@@ -11,7 +11,17 @@ Set it with ``halyard init --hub`` or ``halyard hub set <path>``.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+
+from halyard.ai_log import AI_LOG_FILENAME
+
+
+@dataclass(frozen=True)
+class HubStatus:
+    path: Path | None
+    session_count: int = 0
+
 
 _HUB_POINTER: Path | None = None
 
@@ -36,6 +46,8 @@ def find_hub() -> Path | None:
 
 def set_hub(path: Path) -> None:
     """Designate path as the hub directory."""
+    if not (path / "halyard.toml").exists():
+        raise ValueError(f"Directory {path} has no halyard.toml")
     pointer = _hub_pointer()
     pointer.parent.mkdir(parents=True, exist_ok=True)
     pointer.write_text(str(path.resolve()) + "\n")
@@ -43,3 +55,18 @@ def set_hub(path: Path) -> None:
 
 def clear_hub() -> None:
     _hub_pointer().unlink(missing_ok=True)
+
+
+def get_hub_status() -> HubStatus:
+    """Return a summary of the current hub state."""
+    hub_dir = find_hub()
+    if hub_dir is None:
+        return HubStatus(path=None)
+
+    log_path = hub_dir / AI_LOG_FILENAME
+    lines = (
+        sum(1 for ln in log_path.read_text().splitlines() if ln.startswith("s "))
+        if log_path.exists()
+        else 0
+    )
+    return HubStatus(path=hub_dir, session_count=lines)

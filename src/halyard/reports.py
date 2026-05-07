@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, parse_sessions
+from halyard.pricing import pricing_table_age_days
 
 _HALYARD_ACTIVE = Path.home() / ".halyard" / "active"
 
@@ -102,6 +103,44 @@ def build_ai_report(
     return summarize_ai_sessions(sessions, period_label=period_label)
 
 
+def check_pricing_staleness() -> tuple[int | None, bool]:
+    """Return (age_days, is_stale). Stale means missing or >= 30 days old."""
+    age = pricing_table_age_days()
+    return age, (age is None or age >= 30)
+
+
+def build_filtered_ai_report(
+    project_dir: Path,
+    *,
+    project: str | None = None,
+    client: str | None = None,
+    all_time: bool = False,
+    now: datetime | None = None,
+) -> AiReport:
+    """Build an AI report with optional project or client filters."""
+    clock = now or datetime.now()
+    report = build_ai_report(project_dir, all_time=all_time, now=clock)
+    
+    sessions = filter_ai_sessions(report.sessions, project=project, client=client)
+    period_label = "All time" if all_time else clock.strftime("%B %Y")
+    
+    return summarize_ai_sessions(sessions, period_label=period_label)
+
+
+def filter_ai_sessions(
+    sessions: list[AiSession],
+    *,
+    project: str | None = None,
+    client: str | None = None,
+) -> list[AiSession]:
+    """Filter AI sessions by project slug or client slug."""
+    if project:
+        return [s for s in sessions if s.project == project]
+    if client:
+        return [s for s in sessions if (s.project or "").startswith(f"{client}:")]
+    return sessions
+
+
 def summarize_ai_sessions(sessions: list[AiSession], *, period_label: str) -> AiReport:
     """Aggregate parsed AI sessions into project/model/tool buckets."""
     total_cost = sum(session.cost_usd for session in sessions)
@@ -143,6 +182,18 @@ def read_active_timer(active_path: Path = _HALYARD_ACTIVE) -> ActiveTimer | None
     started = data.get("started")
     elapsed = _elapsed_minutes(started, datetime.now()) if started else 0
     return ActiveTimer(slug=slug, timeclock=timeclock, started=started, elapsed_minutes=elapsed)
+
+
+def get_active_project(project_dir: Path) -> str | None:
+    """Return active project only when the active timer belongs to project_dir."""
+    active = read_active_timer()
+    if active is None or active.timeclock is None:
+        return None
+    try:
+        active.timeclock.resolve().relative_to(project_dir.resolve())
+    except ValueError:
+        return None
+    return active.slug
 
 
 def build_human_time_report(project_dir: Path, *, now: datetime | None = None) -> HumanTimeReport:

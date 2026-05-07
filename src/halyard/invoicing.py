@@ -65,6 +65,25 @@ class InvoiceError(Exception):
     """Raised when an invoice cannot be generated."""
 
 
+def normalize_invoice_month(month: str | None) -> str:
+    """Resolve 'last', 'this', or YYYY-MM into a YYYY-MM string."""
+    now = datetime.now()
+    if month is None or month == "this":
+        return now.strftime("%Y-%m")
+    if month == "last":
+        year = now.year
+        month_num = now.month - 1
+        if month_num == 0:
+            year -= 1
+            month_num = 12
+        return f"{year}-{month_num:02d}"
+    try:
+        datetime.strptime(month, "%Y-%m")
+    except ValueError as exc:
+        raise ValueError("--month must be last, this, or YYYY-MM") from exc
+    return month
+
+
 def generate_invoice(
     client_slug: str,
     *,

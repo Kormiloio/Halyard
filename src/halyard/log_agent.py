@@ -11,7 +11,6 @@ from typing import Any, Literal
 
 from halyard.ai_log import AiSession, parse_sessions
 from halyard.reports import (
-    AiReport,
     format_minutes,
     parse_timeclock,
     summarize_ai_sessions,
@@ -70,9 +69,19 @@ _TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "start_date": {"type": "string", "description": "ISO date (YYYY-MM-DD)"},
                 "end_date": {"type": "string", "description": "ISO date (YYYY-MM-DD)"},
-                "tool": {"type": "string", "description": "Filter by tool name (cursor, codex, etc.)"},
-                "project": {"type": "string", "description": "Filter by project slug (client:project)"},
-                "limit": {"type": "integer", "description": "Max sessions to return", "default": 20},
+                "tool": {
+                    "type": "string",
+                    "description": "Filter by tool name (cursor, codex, etc.)",
+                },
+                "project": {
+                    "type": "string",
+                    "description": "Filter by project slug (client:project)",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max sessions to return",
+                    "default": 20,
+                },
             },
         },
     },

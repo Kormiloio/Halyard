@@ -1,9 +1,11 @@
-from unittest.mock import MagicMock, patch
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pytest
 
-from halyard.log_agent import run_claude_log_query, LogBucket, LogAgentError
+from halyard.log_agent import LogAgentError, run_claude_log_query
+
 
 @pytest.fixture
 def mock_anthropic(monkeypatch):

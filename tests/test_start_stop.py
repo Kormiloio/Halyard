@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from halyard.cli import _HALYARD_ACTIVE, app
+from halyard.cli import app
+from halyard.reports import _HALYARD_ACTIVE
 
 runner = CliRunner()
 

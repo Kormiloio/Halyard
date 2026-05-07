@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -12,8 +11,6 @@ from typing import Any
 
 import typer
 from rich.console import Console
-
-_HALYARD_ACTIVE = Path.home() / ".halyard" / "active"
 
 
 def _halyard_exe() -> str:
@@ -31,109 +28,6 @@ def _halyard_exe() -> str:
         return str(Path(found).resolve())
     return "halyard"  # fallback: trust PATH at hook-run time
 
-
-# ---------------------------------------------------------------------------
-# Helpers — time tracking
-# ---------------------------------------------------------------------------
-
-
-def _now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _parse_active() -> dict[str, str]:
-    return dict(
-        line.split("=", 1) for line in _HALYARD_ACTIVE.read_text().splitlines() if "=" in line
-    )
-
-
-# ---------------------------------------------------------------------------
-# Default file contents written by `halyard init`
-# ---------------------------------------------------------------------------
-
-_HALYARD_TOML_TEMPLATE = """\
-[business]
-name = "{business_name}"
-currency = "USD"
-default_due_days = 30
-
-[invoicing]
-counter = 0
-prefix = "{{year}}-{{month:02d}}-{{client_slug}}"
-"""
-
-_CLIENTS_TOML = """\
-# Add your clients here — one [[client]] block per client.
-#
-# [[client]]
-# slug = "acme"            # required; lowercase letters, digits, hyphens
-# name = "Acme Corp"       # required; display name on invoices
-# hourly_rate = 150        # required; numeric, in the project currency
-# email = "ap@acme.com"    # optional
-# address = \"\"\"           # optional; multi-line OK
-# 123 Main St
-# Anytown, ST 12345
-# \"\"\"
-"""
-
-_PROJECTS_TOML = """\
-# Add your projects here — one [[project]] block per project.
-#
-# [[project]]
-# slug = "auth-migration"   # required; scoped under the client
-# client_slug = "acme"      # required; must match a slug in clients.toml
-# name = "Auth migration"   # required; display name on invoices
-# hourly_rate = 175         # optional; overrides the client rate for this project
-"""
-
-_TIMECLOCK = """\
-; Halyard timeclock — hledger-compatible
-; i YYYY-MM-DD HH:MM:SS client:project  optional comment
-; o YYYY-MM-DD HH:MM:SS
-"""
-
-_AI_SESSIONS_LOG = """\
-; Halyard AI session log — spec: https://halyard.dev/spec/ai-sessions/v1
-; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd> [key=value ...]
-"""
-
-_AI_PLANS_TOML = """\
-# AI Plans — configure how Halyard tracks AI subscription and seat costs.
-# Uncomment and fill in the blocks below for your active plans.
-#
-# [[plan]]
-# slug = "claude-max"            # unique name for this plan
-# tool = "claude-code"           # tool slug: claude-code, cursor, copilot, ...
-# billing = "seat"               # seat | api | credits
-# monthly_usd = 200              # cost per month in USD
-# allocation = "active_minutes"  # active_minutes | session_count | manual
-# starts_on = "2026-01-01"       # ISO date when plan began
-#
-# [[plan]]
-# slug = "cursor-pro"
-# tool = "cursor"
-# billing = "credits"
-# monthly_usd = 20
-# included_credits = 500
-# credit_to_usd = 0.04           # USD per credit (monthly_usd / included_credits)
-# allocation = "credits"
-# starts_on = "2026-01-01"
-#
-# [[plan]]
-# slug = "anthropic-api"
-# tool = "claude-api"
-# billing = "api"
-# allocation = "direct"          # uses cost_usd captured in ai-sessions.log
-"""
-
-_GITIGNORE = """\
-# Halyard
-.halyard-cache/
-.DS_Store
-
-# Uncomment the line below to keep generated PDFs out of version control.
-# invoices/*.pdf
-"""
 
 # Claude Code hook config injected by `halyard install-hook`
 _CC_HOOKS: dict[str, list[dict[str, Any]]] = {
@@ -155,80 +49,6 @@ _CURSOR_HOOKS: dict[str, str] = {
     "beforeSubmitPrompt": "halyard cursor-session",
     "stop": "halyard cursor-hook",
 }
-
-
-def _detect_business_name() -> str:
-    try:
-        result = subprocess.run(
-            ["git", "config", "user.name"],
-            capture_output=True,
-            text=True,
-            timeout=3,
-        )
-        name = result.stdout.strip()
-        if name:
-            return f"{name} Consulting"
-    except Exception:
-        pass
-    return "Your Name Consulting"
-
-
-def _ensure_gitignore(path: Path) -> None:
-    """Create or append the Halyard .gitignore block without removing user rules."""
-    if not path.exists():
-        path.write_text(_GITIGNORE)
-        return
-
-    existing = path.read_text()
-    existing_lines = set(existing.splitlines())
-    missing_lines = [
-        line for line in _GITIGNORE.splitlines() if line and line not in existing_lines
-    ]
-
-    if not missing_lines:
-        return
-
-    separator = "\n" if existing.endswith("\n") else "\n\n"
-    path.write_text(existing + separator + "\n".join(missing_lines) + "\n")
-
-
-def _active_project_for(project_dir: Path) -> str | None:
-    """Return active project only when the active timer belongs to project_dir."""
-    from halyard.reports import read_active_timer
-
-    active = read_active_timer()
-    if active is None or active.timeclock is None:
-        return None
-    try:
-        active.timeclock.resolve().relative_to(project_dir.resolve())
-    except ValueError:
-        return None
-    return active.slug
-
-
-def _normalize_invoice_month(month: str | None) -> str:
-    now = datetime.now()
-    if month is None or month == "this":
-        return now.strftime("%Y-%m")
-    if month == "last":
-        year = now.year
-        month_num = now.month - 1
-        if month_num == 0:
-            year -= 1
-            month_num = 12
-        return f"{year}-{month_num:02d}"
-    try:
-        datetime.strptime(month, "%Y-%m")
-    except ValueError as exc:
-        raise typer.BadParameter("--month must be last, this, or YYYY-MM") from exc
-    return month
-
-
-def _rewrite_lines_atomic(path: Path, lines: list[str]) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    content = "\n".join(lines)
-    tmp.write_text((content + "\n") if content else "")
-    tmp.replace(path)
 
 
 # ---------------------------------------------------------------------------
@@ -267,42 +87,9 @@ def init(
     ),
 ) -> None:
     """Scaffold a new Halyard project in the current directory."""
-    from halyard.hub import set_hub
+    from halyard.orchestration import scaffold_project
 
-    cwd = Path.cwd()
-    config_file = cwd / "halyard.toml"
-
-    if config_file.exists():
-        console.print(
-            "[bold red]Error:[/] [bold]halyard.toml[/] already exists here.\n"
-            "Remove or move it before re-initializing."
-        )
-        raise typer.Exit(code=1)
-
-    halyard_toml = _HALYARD_TOML_TEMPLATE.format(business_name=_detect_business_name())
-    config_file.write_text(halyard_toml)
-    (cwd / "clients.toml").write_text(_CLIENTS_TOML)
-    (cwd / "projects.toml").write_text(_PROJECTS_TOML)
-    (cwd / "time.timeclock").write_text(_TIMECLOCK)
-    (cwd / "ai-sessions.log").write_text(_AI_SESSIONS_LOG)
-    (cwd / "ai-plans.toml").write_text(_AI_PLANS_TOML)
-    (cwd / "invoices").mkdir(exist_ok=True)
-    _ensure_gitignore(cwd / ".gitignore")
-
-    if hub:
-        set_hub(cwd)
-
-    console.print("[bold green]Halyard project initialized.[/]\n")
-    if hub:
-        console.print("[bold cyan]Hub set.[/] Sessions from all tools will land here by default.")
-        console.print()
-    console.print("Next steps:")
-    console.print("  1. Edit [bold]halyard.toml[/] — confirm your business name and currency.")
-    console.print("  2. Edit [bold]clients.toml[/] — add your first client with an hourly rate.")
-    console.print(
-        "  3. Run [bold]halyard install-hook[/] — auto-capture AI sessions from Claude Code."
-    )
-    console.print("\nTrack time: halyard in/out   |   View AI spend: halyard report")
+    scaffold_project(Path.cwd(), hub=hub)
 
 
 @app.command()
@@ -312,22 +99,21 @@ def hub(
     ),
 ) -> None:
     """Show or set the global hub directory for cross-project session capture."""
-    from halyard.hub import find_hub, set_hub
+    from halyard.hub import get_hub_status, set_hub
 
     if set_path is not None:
         target = Path(set_path).resolve()
-        if not (target / "halyard.toml").exists():
-            console.print(
-                f"[bold red]Error:[/] {target} has no halyard.toml —"
-                " run [bold]halyard init[/] there first."
-            )
-            raise typer.Exit(code=1)
-        set_hub(target)
+        try:
+            set_hub(target)
+        except ValueError as e:
+            console.print(f"[bold red]Error:[/] {e} — run [bold]halyard init[/] there first.")
+            raise typer.Exit(code=1) from None
+
         console.print(f"[bold green]Hub set[/] → [bold]{target}[/]")
         return
 
-    hub_dir = find_hub()
-    if hub_dir is None:
+    status = get_hub_status()
+    if status.path is None:
         console.print(
             "[yellow]No hub configured.[/]\n"
             "Sessions outside any halyard.toml directory are currently dropped.\n\n"
@@ -335,13 +121,9 @@ def hub(
             "        [bold]halyard hub <path>[/] to point at an existing project."
         )
     else:
-        log_path = hub_dir / "ai-sessions.log"
-        lines = (
-            sum(1 for ln in log_path.read_text().splitlines() if ln.startswith("s "))
-            if log_path.exists()
-            else 0
+        console.print(
+            f"[bold cyan]Hub[/] → [bold]{status.path}[/]  ({status.session_count} sessions)"
         )
-        console.print(f"[bold cyan]Hub[/] → [bold]{hub_dir}[/]  ({lines} sessions)")
 
 
 @app.command(name="link-repo")
@@ -446,10 +228,12 @@ def start(
     slug: str = typer.Argument(..., help="client/project slug, e.g. acme/auth-migration"),
 ) -> None:
     """Start the active timer."""
-    if _HALYARD_ACTIVE.exists():
-        active = _parse_active()
+    from halyard.reports import read_active_timer
+
+    active = read_active_timer()
+    if active:
         console.print(
-            f"[bold red]Error:[/] Timer already running for [bold]{active.get('slug', '?')}[/].\n"
+            f"[bold red]Error:[/] Timer already running for [bold]{active.slug}[/].\n"
             "Run [bold]halyard stop[/] first."
         )
         raise typer.Exit(code=1)
@@ -470,11 +254,12 @@ def start(
         raise typer.Exit(code=1)
 
     account = slug.replace("/", ":", 1)
-    ts = _now_str()
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     with timeclock.open("a") as f:
         f.write(f"i {ts} {account}\n")
 
+    from halyard.reports import _HALYARD_ACTIVE
     _HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
     _HALYARD_ACTIVE.write_text(f"timeclock={timeclock}\nslug={account}\nstarted={ts}\n")
 
@@ -484,18 +269,24 @@ def start(
 @app.command()
 def stop() -> None:
     """Stop the active timer."""
-    if not _HALYARD_ACTIVE.exists():
+    from halyard.reports import _HALYARD_ACTIVE, read_active_timer
+
+    active = read_active_timer()
+    if active is None:
         console.print(
             "[bold red]Error:[/] No active timer. Run "
             "[bold]halyard start <client/project>[/] first."
         )
         raise typer.Exit(code=1)
 
-    active = _parse_active()
-    timeclock = Path(active["timeclock"])
-    slug = active["slug"]
-    started = active["started"]
-    ts = _now_str()
+    timeclock = active.timeclock
+    if timeclock is None or not timeclock.exists():
+        console.print("[bold red]Error:[/] Active timer has no valid timeclock path.")
+        _HALYARD_ACTIVE.unlink(missing_ok=True)
+        raise typer.Exit(code=1)
+
+    slug = active.slug
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     with timeclock.open("a") as f:
         f.write(f"o {ts}\n")
@@ -504,26 +295,26 @@ def stop() -> None:
 
     from halyard.reports import _elapsed_minutes, format_minutes
 
-    elapsed = format_minutes(_elapsed_minutes(started, datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")))
+    elapsed = format_minutes(_elapsed_minutes(active.started or ts, datetime.now()))
     console.print(f"[bold green]Stopped[/] [bold]{slug}[/]. Elapsed: {elapsed}.")
 
 
 @app.command()
 def status() -> None:
     """Show the active timer, or report that none is running."""
-    from halyard.reports import _elapsed_minutes, format_minutes
+    from halyard.reports import read_active_timer
 
-    if not _HALYARD_ACTIVE.exists():
+    active = read_active_timer()
+    if active is None:
         console.print(
             "[yellow]No active timer.[/] Start one with [bold]halyard start <project>[/]."
         )
         return
 
-    active = _parse_active()
-    slug = active.get("slug", "(unknown)")
-    started = active.get("started", "")
-    elapsed = format_minutes(_elapsed_minutes(started, datetime.now())) if started else "?"
-    console.print(f"[bold cyan]{slug}[/]  {elapsed} elapsed  (started {started})")
+    console.print(
+        f"[bold cyan]{active.slug}[/]  {active.elapsed_label} elapsed  "
+        f"(started {active.started or '?'})"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -548,7 +339,12 @@ def invoice(
 ) -> None:
     """Generate an invoice from logged time entries."""
     from halyard.ai_log import find_project_dir
-    from halyard.invoicing import InvoiceError, generate_invoice, render_pdf
+    from halyard.invoicing import (
+        InvoiceError,
+        generate_invoice,
+        normalize_invoice_month,
+        render_pdf,
+    )
 
     if from_ or to:
         console.print(
@@ -563,7 +359,11 @@ def invoice(
         )
         raise typer.Exit(code=1)
 
-    invoice_period = period or _normalize_invoice_month(month)
+    try:
+        invoice_period = period or normalize_invoice_month(month)
+    except ValueError as exc:
+        console.print(f"[bold red]Error:[/] {exc}")
+        raise typer.Exit(code=1) from None
     try:
         result = generate_invoice(
             client,
@@ -815,6 +615,7 @@ def record_session(
     """Append a manual/Codex AI session record to ai-sessions.log."""
     from halyard.ai_log import AiSession, append_session, find_project_dir
     from halyard.pricing import calculate_cost
+    from halyard.reports import get_active_project
 
     project_dir = find_project_dir()
     if project_dir is None:
@@ -823,7 +624,7 @@ def record_session(
         )
         raise typer.Exit(code=1)
 
-    attributed_project = project or _active_project_for(project_dir)
+    attributed_project = project or get_active_project(project_dir)
     end = datetime.now()
     start_time = end - timedelta(minutes=max(0, minutes))
     session_cost = (
@@ -883,108 +684,9 @@ def assign_unattributed(
     ),
 ) -> None:
     """Assign unattributed AI sessions to a project."""
-    from dataclasses import replace
+    from halyard.orchestration import interactive_assign_unattributed
 
-    from halyard.ai_log import (
-        AiSession,
-        append_session,
-        assign_unattributed_sessions,
-        find_project_dir,
-        unattributed_log_path,
-    )
-    from halyard.hub import find_hub
-
-    global_log = unattributed_log_path()
-    if global_log.exists() and any(
-        line.strip().startswith("s ") for line in global_log.read_text().splitlines()
-    ):
-        remaining = global_log.read_text().splitlines()
-        assigned = 0
-        hubbed = 0
-        discarded = 0
-        skipped = 0
-
-        for line in list(remaining):
-            if not line.strip().startswith("s "):
-                continue
-            session = AiSession.from_log_line(line)
-            if session is None:
-                skipped += 1
-                continue
-
-            console.print(
-                "\n[bold]Unattributed session[/]\n"
-                f"  {session.start:%Y-%m-%d %H:%M} → {session.end:%H:%M}\n"
-                f"  {session.tool} / {session.model}  ${session.cost_usd:.4f}\n"
-                f"  tags: {', '.join(session.tags) if session.tags else '(none)'}"
-            )
-
-            choice = (
-                "a"
-                if project
-                else typer.prompt("[a]ssign / [h]ub / [d]iscard / [s]kip", default="s")
-                .strip()
-                .lower()[:1]
-            )
-
-            if choice == "a":
-                target_project = project or typer.prompt("Project slug").strip()
-                target_dir = find_project_dir() or find_hub()
-                if target_dir is None:
-                    console.print("[bold red]No current project or hub found.[/] Skipping session.")
-                    skipped += 1
-                    continue
-                append_session(target_dir, replace(session, project=target_project))
-                remaining.remove(line)
-                _rewrite_lines_atomic(global_log, remaining)
-                assigned += 1
-            elif choice == "h":
-                hub_dir = find_hub()
-                if hub_dir is None:
-                    console.print("[bold red]No hub configured.[/] Skipping session.")
-                    skipped += 1
-                    continue
-                append_session(hub_dir, session)
-                remaining.remove(line)
-                _rewrite_lines_atomic(global_log, remaining)
-                hubbed += 1
-            elif choice == "d":
-                if typer.confirm("Discard this session?", default=False):
-                    remaining.remove(line)
-                    _rewrite_lines_atomic(global_log, remaining)
-                    discarded += 1
-                else:
-                    skipped += 1
-            else:
-                skipped += 1
-
-        console.print(
-            f"\n[bold green]Done.[/] {assigned} assigned, {hubbed} moved to hub, "
-            f"{discarded} discarded, {skipped} skipped."
-        )
-        return
-
-    project_dir = find_project_dir()
-    if project_dir is None:
-        console.print("[yellow]No unattributed sessions.[/]")
-        return
-
-    target_project = project or _active_project_for(project_dir)
-    if not target_project:
-        console.print(
-            "[bold red]Error:[/] No project provided and no active timer. "
-            "Use [bold]--project client:project[/]."
-        )
-        raise typer.Exit(code=1)
-
-    changed = assign_unattributed_sessions(project_dir, target_project)
-    if changed:
-        console.print(
-            f"[bold green]Assigned[/] {changed} unattributed session(s) to "
-            f"[bold]{target_project}[/]."
-        )
-    else:
-        console.print("[yellow]No unattributed sessions found.[/]")
+    interactive_assign_unattributed(explicit_project=project)
 
 
 @app.command(name="check-log")
@@ -1252,12 +954,11 @@ def report(
     from datetime import datetime
 
     from halyard.ai_log import find_project_dir
-    from halyard.pricing import pricing_table_age_days
     from halyard.reports import (
-        build_ai_report,
+        build_filtered_ai_report,
         build_human_time_report,
+        check_pricing_staleness,
         format_minutes,
-        summarize_ai_sessions,
     )
 
     project_dir = find_project_dir()
@@ -1268,8 +969,8 @@ def report(
         raise typer.Exit(code=1)
 
     # Staleness warning for pricing table
-    age = pricing_table_age_days()
-    if age is None or age >= 30:
+    age, is_stale = check_pricing_staleness()
+    if is_stale:
         if age is None:
             console.print(
                 "[yellow]⚠  No local pricing table found.[/] "
@@ -1292,25 +993,13 @@ def report(
     else:
         period = now
 
-    report_data = build_ai_report(project_dir, all_time=all_time, now=period)
+    report = build_filtered_ai_report(
+        project_dir, project=project, client=client, all_time=all_time, now=period
+    )
     human = build_human_time_report(project_dir, now=period)
 
-    # Apply project / client filters
-    filter_slug = project
-    filter_client = client
-    if filter_slug:
-        report_data_sessions = [s for s in report_data.sessions if s.project == filter_slug]
-    elif filter_client:
-        report_data_sessions = [
-            s for s in report_data.sessions if (s.project or "").startswith(f"{filter_client}:")
-        ]
-    else:
-        report_data_sessions = report_data.sessions
-
-    period_label = "All time" if all_time else period.strftime("%B %Y")
-    filtered_report = summarize_ai_sessions(report_data_sessions, period_label=period_label)
-    filter_label = f" — {filter_slug or filter_client}" if (filter_slug or filter_client) else ""
-    console.print(f"\n[bold]Report — {period_label}{filter_label}[/]")
+    filter_label = f" — {project or client}" if (project or client) else ""
+    console.print(f"\n[bold]Report — {report.period_label}{filter_label}[/]")
     console.print("─" * 48)
 
     if human.month_minutes:
@@ -1319,32 +1008,32 @@ def report(
             f"  (today: {format_minutes(human.today_minutes)})"
         )
 
-    if not report_data_sessions:
-        console.print(f"  [yellow]No AI sessions recorded for {period_label}.[/]")
+    if not report.sessions:
+        console.print(f"  [yellow]No AI sessions recorded for {report.period_label}.[/]")
         console.print(
             "\n  Run [bold]halyard install-hook[/] to start capturing sessions automatically."
         )
         console.print("─" * 48 + "\n")
         raise typer.Exit(code=0)
 
-    total_cost = sum(s.cost_usd for s in report_data_sessions)
-    total_input = sum(s.input_tokens for s in report_data_sessions)
-    total_output = sum(s.output_tokens for s in report_data_sessions)
-    console.print(f"  AI sessions  [bold]{len(report_data_sessions)}[/]")
-    console.print(f"  AI cost      [bold green]${total_cost:.2f}[/]")
-    if total_input:
-        console.print(f"  Tokens       in {total_input:,}  out {total_output:,}")
+    console.print(f"  AI sessions  [bold]{len(report.sessions)}[/]")
+    console.print(f"  AI cost      [bold green]${report.total_cost:.2f}[/]")
+    if report.total_input_tokens:
+        console.print(
+            f"  Tokens       in {report.total_input_tokens:,}  "
+            f"out {report.total_output_tokens:,}"
+        )
 
-    if not filter_slug and filtered_report.by_project:
+    if not project and report.by_project:
         console.print("\n[bold]By project[/]")
-        for bucket in filtered_report.by_project:
+        for bucket in report.by_project:
             console.print(
                 f"  {bucket.label:<32} [green]${bucket.cost_usd:.2f}[/]  {bucket.sessions} sessions"
             )
 
-    if filtered_report.by_model:
+    if report.by_model:
         console.print("\n[bold]By model[/]")
-        for bucket in filtered_report.by_model:
+        for bucket in report.by_model:
             console.print(
                 f"  {bucket.label:<32} [green]${bucket.cost_usd:.2f}[/]  {bucket.sessions} sessions"
             )
@@ -1364,7 +1053,7 @@ def report(
         if plans:
             tc_entries = parse_timeclock(project_dir / "time.timeclock")
             summary = build_ledger(
-                report_data.sessions, plans, tc_entries, year=period.year, month=period.month
+                report.sessions, plans, tc_entries, year=period.year, month=period.month
             )
             console.print(f"\n[bold]AI Work Ledger — {summary.period_label}[/]")
             console.print(
