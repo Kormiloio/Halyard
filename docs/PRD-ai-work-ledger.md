@@ -139,11 +139,13 @@ Required capabilities:
 
 - API proxy collector for Anthropic, OpenAI, Gemini, and OpenRouter.
 - SDK wrappers for scripts and internal tools.
-- Tool-specific collectors for Codex, Cursor, Copilot, Devin, Factory, and
-  other AI work surfaces.
-- Plan allocation rules: by session count, active minutes, project weight, or
-  manual allocation.
-- Deduplication across tool-wraps-tool scenarios.
+- ~~Tool-specific collectors for Codex, Cursor, Copilot, Devin, Factory, and
+  other AI work surfaces.~~ **Shipped (v1.5):** Codex, Cursor, and Gemini CLI
+  collectors are live. Copilot, Devin, Factory remain future work.
+- ~~Plan allocation rules: by session count, active minutes, project weight, or
+  manual allocation.~~ **Shipped (v2):** `ai-plans.toml` + `halyard report --ledger`.
+- ~~Deduplication across tool-wraps-tool scenarios.~~ **Shipped (v1.5):** The
+  `cursor_version` guard in the Claude Code collector prevents double-recording.
 - Team sync and dashboard.
 - Compliance/audit exports.
 - Outcome-based billing support.
