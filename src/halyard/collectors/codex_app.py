@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
+from halyard.git_context import infer_project
+from halyard.hub import find_hub
 
 _CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 _IMPORTED_STATE_FILE = Path.home() / ".halyard" / "codex-imported"
@@ -55,10 +57,16 @@ def import_codex_sessions(
         target_dir = project_dir
         if target_dir is None and cwd is not None:
             target_dir = find_project_dir(start=Path(cwd))
+        if target_dir is None:
+            target_dir = find_hub()
         if target_dir is None and not all_projects:
             continue  # can't associate with any Halyard project
         if target_dir is not None and not (target_dir / AI_LOG_FILENAME).exists():
             continue  # project not initialised
+
+        # Enrich project attribution via git when not already set
+        if session.project is None and cwd is not None:
+            session.project = infer_project(Path(cwd))
 
         if not dry_run and target_dir is not None:
             append_session(target_dir, session)

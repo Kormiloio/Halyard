@@ -29,6 +29,8 @@ from pathlib import Path
 from typing import Any
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
+from halyard.git_context import infer_project
+from halyard.hub import find_hub
 
 _GC_SESSION_FILE = Path.home() / ".halyard" / "gc-session"
 
@@ -81,7 +83,8 @@ def handle_agent_stop() -> int:
     state = _read_state()
 
     cwd_str = (state or {}).get("cwd") or payload.get("cwd") or ""
-    project_dir = find_project_dir(start=Path(cwd_str)) if cwd_str else find_project_dir()
+    cwd = Path(cwd_str) if cwd_str else Path.cwd()
+    project_dir = (find_project_dir(start=cwd) if cwd_str else find_project_dir()) or find_hub()
 
     if project_dir is None or not (project_dir / AI_LOG_FILENAME).exists():
         _reset_state(payload)
@@ -107,7 +110,7 @@ def handle_agent_stop() -> int:
         input_tokens=prompt_tokens,
         output_tokens=output_tokens,
         cost_usd=0.0,
-        project=_read_active_project(),
+        project=_read_active_project() or infer_project(cwd),
         tokens_available=tokens_available,
         billing="seat",
         source="hook",

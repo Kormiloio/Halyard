@@ -236,8 +236,14 @@ def default(ctx: typer.Context) -> None:
 
 
 @app.command()
-def init() -> None:
+def init(
+    hub: bool = typer.Option(
+        False, "--hub", help="Also designate this directory as the global hub for all tools."
+    ),
+) -> None:
     """Scaffold a new Halyard project in the current directory."""
+    from halyard.hub import set_hub
+
     cwd = Path.cwd()
     config_file = cwd / "halyard.toml"
 
@@ -258,14 +264,83 @@ def init() -> None:
     (cwd / "invoices").mkdir(exist_ok=True)
     _ensure_gitignore(cwd / ".gitignore")
 
+    if hub:
+        set_hub(cwd)
+
     console.print("[bold green]Halyard project initialized.[/]\n")
+    if hub:
+        console.print("[bold cyan]Hub set.[/] Sessions from all tools will land here by default.")
+        console.print()
     console.print("Next steps:")
     console.print("  1. Edit [bold]halyard.toml[/] — confirm your business name and currency.")
     console.print("  2. Edit [bold]clients.toml[/] — add your first client with an hourly rate.")
     console.print(
         "  3. Run [bold]halyard install-hook[/] — auto-capture AI sessions from Claude Code."
     )
-    console.print("\nTrack time: halyard start/stop   |   View AI spend: halyard report")
+    console.print("\nTrack time: halyard in/out   |   View AI spend: halyard report")
+
+
+@app.command()
+def hub(
+    set_path: str | None = typer.Argument(
+        None, metavar="PATH", help="Set hub to this directory (must contain halyard.toml)."
+    ),
+) -> None:
+    """Show or set the global hub directory for cross-project session capture."""
+    from halyard.hub import find_hub, set_hub
+
+    if set_path is not None:
+        target = Path(set_path).resolve()
+        if not (target / "halyard.toml").exists():
+            console.print(
+                f"[bold red]Error:[/] {target} has no halyard.toml —"
+                " run [bold]halyard init[/] there first."
+            )
+            raise typer.Exit(code=1)
+        set_hub(target)
+        console.print(f"[bold green]Hub set[/] → [bold]{target}[/]")
+        return
+
+    hub_dir = find_hub()
+    if hub_dir is None:
+        console.print(
+            "[yellow]No hub configured.[/]\n"
+            "Sessions outside any halyard.toml directory are currently dropped.\n\n"
+            "To fix: [bold]halyard init --hub[/] in a central directory, or\n"
+            "        [bold]halyard hub <path>[/] to point at an existing project."
+        )
+    else:
+        log_path = hub_dir / "ai-sessions.log"
+        lines = (
+            sum(1 for ln in log_path.read_text().splitlines() if ln.startswith("s "))
+            if log_path.exists()
+            else 0
+        )
+        console.print(f"[bold cyan]Hub[/] → [bold]{hub_dir}[/]  ({lines} sessions)")
+
+
+@app.command(name="link-repo")
+def link_repo(
+    project: str = typer.Argument(..., help="Project slug (client:project) to map this repo to."),
+    remote: str | None = typer.Option(
+        None, "--remote", help="Remote URL/pattern to map. Defaults to current repo's origin."
+    ),
+) -> None:
+    """Map the current git repo's remote to a project slug for automatic attribution."""
+    from halyard.git_context import current_remote, register_repo
+
+    if remote is None:
+        remote = current_remote()
+        if remote is None:
+            console.print(
+                "[bold red]Error:[/] Not in a git repo with an origin remote.\n"
+                "Pass --remote explicitly or run from inside a git repository."
+            )
+            raise typer.Exit(code=1)
+
+    register_repo(remote, project)
+    console.print(f"[bold green]Linked[/] [dim]{remote}[/] → [bold]{project}[/]")
+    console.print("Future sessions from this repo will be attributed automatically.")
 
 
 # ---------------------------------------------------------------------------

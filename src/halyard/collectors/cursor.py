@@ -22,6 +22,8 @@ from datetime import datetime
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
+from halyard.git_context import infer_project
+from halyard.hub import find_hub
 
 _CURSOR_SESSION_FILE = Path.home() / ".halyard" / "cursor-session"
 _HALYARD_ACTIVE = Path.home() / ".halyard" / "active"
@@ -40,7 +42,7 @@ def handle_stop_hook() -> int:
     """Called by stop hook. Reads JSON payload from stdin, writes session record."""
     payload = _read_payload()
 
-    project_dir = _resolve_project_dir(payload)
+    project_dir = _resolve_project_dir(payload) or find_hub()
     if project_dir is None:
         _clear_session_start()
         return 0
@@ -62,6 +64,11 @@ def handle_stop_hook() -> int:
 
     model = payload.get("model") or payload.get("stop_model") or "cursor-unknown"
 
+    # Infer project from workspace root when no active timer is running
+    roots = payload.get("workspace_roots") or []
+    cwd_for_git = Path(roots[0]) if roots else None
+    project = _read_active_project() or (infer_project(cwd_for_git) if cwd_for_git else None)
+
     session = AiSession(
         start=start,
         end=now,
@@ -70,7 +77,7 @@ def handle_stop_hook() -> int:
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cost_usd=0.0,
-        project=_read_active_project(),
+        project=project,
         cache_read=cache_read or None,
         cache_write=cache_write or None,
         tokens_available=tokens_available,
