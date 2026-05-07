@@ -38,6 +38,8 @@ Halyard has two layers:
 
 **Intelligence** — Analytics built on that log. Local CLI reports for solo users. Team dashboards and cost allocation for organizations. The same data, different lenses.
 
+**Glass Cockpit** — A local dashboard for watching capture happen. Run `halyard dashboard` inside a Halyard project to see the active timer, recent AI sessions, token totals, cost, attribution, model mix, and collector health from the same plain-text files.
+
 ---
 
 ## Quickstart
@@ -52,6 +54,7 @@ halyard start acme/auth-migration
 # ... do AI-assisted work ...
 halyard stop
 cat time.timeclock   # plain text, hledger-compatible
+halyard dashboard    # local Glass Cockpit for AI work capture
 ```
 
 ---

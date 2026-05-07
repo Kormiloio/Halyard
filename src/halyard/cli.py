@@ -355,7 +355,8 @@ def report(
     all_time: bool = typer.Option(False, "--all", help="Show all time instead of current month."),
 ) -> None:
     """Show AI usage and cost summary."""
-    from halyard.ai_log import find_project_dir, parse_sessions
+    from halyard.ai_log import find_project_dir
+    from halyard.reports import build_ai_report
 
     project_dir = find_project_dir()
     if project_dir is None:
@@ -364,52 +365,59 @@ def report(
         )
         raise typer.Exit(code=1)
 
-    sessions = parse_sessions(project_dir)
+    report_data = build_ai_report(project_dir, all_time=all_time)
 
-    if not all_time:
-        now = datetime.now()
-        sessions = [s for s in sessions if s.start.year == now.year and s.start.month == now.month]
-
-    if not sessions:
-        period = "all time" if all_time else datetime.now().strftime("%B %Y")
-        console.print(f"[yellow]No AI sessions recorded for {period}.[/]")
+    if not report_data.sessions:
+        console.print(f"[yellow]No AI sessions recorded for {report_data.period_label}.[/]")
         console.print(
             "Run [bold]halyard install-hook[/] to start capturing sessions automatically."
         )
         raise typer.Exit(code=0)
 
-    total_cost = sum(s.cost_usd for s in sessions)
-    total_input = sum(s.input_tokens for s in sessions)
-    total_output = sum(s.output_tokens for s in sessions)
-
-    by_project: dict[str, list[float]] = {}
-    for s in sessions:
-        key = s.project or "(unattributed)"
-        by_project.setdefault(key, []).append(s.cost_usd)
-
-    by_model: dict[str, list[float]] = {}
-    for s in sessions:
-        by_model.setdefault(s.model, []).append(s.cost_usd)
-
-    period_label = "All time" if all_time else datetime.now().strftime("%B %Y")
-    console.print(f"\n[bold]AI Report — {period_label}[/]")
+    console.print(f"\n[bold]AI Report — {report_data.period_label}[/]")
     console.print("─" * 48)
-    console.print(f"  Sessions   [bold]{len(sessions)}[/]")
-    console.print(f"  Cost       [bold green]${total_cost:.2f}[/]")
-    if total_input:
-        console.print(f"  Tokens     in {total_input:,}  out {total_output:,}")
+    console.print(f"  Sessions   [bold]{len(report_data.sessions)}[/]")
+    console.print(f"  Cost       [bold green]${report_data.total_cost:.2f}[/]")
+    if report_data.total_input_tokens:
+        console.print(
+            f"  Tokens     in {report_data.total_input_tokens:,}  "
+            f"out {report_data.total_output_tokens:,}"
+        )
 
-    if by_project:
+    if report_data.by_project:
         console.print("\n[bold]By project[/]")
-        for proj, costs in sorted(by_project.items(), key=lambda x: -sum(x[1])):
-            console.print(f"  {proj:<32} [green]${sum(costs):.2f}[/]  {len(costs)} sessions")
+        for bucket in report_data.by_project:
+            console.print(
+                f"  {bucket.label:<32} [green]${bucket.cost_usd:.2f}[/]  {bucket.sessions} sessions"
+            )
 
-    if by_model:
+    if report_data.by_model:
         console.print("\n[bold]By model[/]")
-        for model, costs in sorted(by_model.items(), key=lambda x: -sum(x[1])):
-            console.print(f"  {model:<32} [green]${sum(costs):.2f}[/]  {len(costs)} sessions")
+        for bucket in report_data.by_model:
+            console.print(
+                f"  {bucket.label:<32} [green]${bucket.cost_usd:.2f}[/]  {bucket.sessions} sessions"
+            )
 
     console.print("─" * 48 + "\n")
+
+
+@app.command()
+def dashboard(
+    port: int = typer.Option(0, "--port", help="Local port. 0 picks an available port."),
+    open_: bool = typer.Option(False, "--open", help="Open the dashboard in a browser."),
+) -> None:
+    """Start the local Halyard Glass Cockpit dashboard."""
+    from halyard.ai_log import find_project_dir
+    from halyard.dashboard import run_dashboard
+
+    project_dir = find_project_dir()
+    if project_dir is None:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
+        raise typer.Exit(code=1)
+
+    run_dashboard(project_dir, port=port, open_browser=open_)
 
 
 if __name__ == "__main__":

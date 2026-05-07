@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `halyard init` command — scaffolds a new Halyard project with `halyard.toml`,
   `clients.toml`, `projects.toml`, `time.timeclock`, `invoices/`, and
   `.gitignore`. (v0 task 2.3)
+- `halyard dashboard` command — starts a local Glass Cockpit dashboard showing
+  AI sessions, cost, token totals, project attribution, active timer state, and
+  collector health.
+- Reusable AI report and dashboard health services shared by CLI reporting and
+  the local dashboard.
 - Auto-detection of business name from `git config user.name` during `init`.
   Falls back to a generic placeholder if git is unavailable or unset.
 - `.DS_Store` to the project `.gitignore` written by `halyard init`.
