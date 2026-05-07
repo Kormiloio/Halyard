@@ -4,7 +4,7 @@
 
 **AI work intelligence infrastructure.** Time, tokens, models, and cost — captured where the work happens, owned by you, readable by anyone.
 
-**Status:** pre-alpha. v0 in development. Watch the repo for the first release.
+**Status:** alpha. v0–v2.3 shipped and in daily use.
 
 ---
 
@@ -32,51 +32,153 @@ The solo developer experience is the entry point. The enterprise layer is option
 
 ## How it works
 
-Halyard has two layers:
+Halyard has three layers:
 
-**Collection** — Lightweight agents that run where AI work happens. Claude Code hooks, API proxies, SDK wrappers. Every AI session is captured: time, tokens, model, cost, project. Written to a plain-text log you own. Open format, open source.
+**Collection** — Lightweight hooks that run where AI work happens. Claude Code, Cursor, and Gemini CLI hooks capture every session: time, tokens, model, cost, project, branch. Written to a plain-text append-only log you own. Nothing is lost silently.
 
-**Intelligence** — Analytics built on that log. Local CLI reports for solo users. Team dashboards and cost allocation for organizations. The same data, different lenses.
+**Intelligence** — Analytics built on that log. Local CLI reports, cost-by-project breakdowns, per-model spend, budget alerts, and trust-labeled totals (captured vs. calculated vs. allocated). Works offline, no account required.
 
-**Glass Cockpit** — A local dashboard for watching capture happen. Run `halyard dashboard` inside a Halyard project to see the active timer, recent AI sessions, token totals, cost, attribution, model mix, and collector health from the same plain-text files.
+**Glass Cockpit** — A local dashboard for watching capture happen in real time. Run `halyard dashboard` inside any Halyard project.
 
 ---
 
 ## Quickstart
 
-> Coming with v0.1.0. See [`openspec/changes/v0-time-and-invoice/`](./openspec/changes/v0-time-and-invoice/) for what's being built.
-
 ```bash
 pipx install halyard
 cd ~/businesses/my-freelance
 halyard init
-halyard start acme/auth-migration
-# ... do AI-assisted work ...
-halyard stop
-cat time.timeclock   # plain text, hledger-compatible
-halyard dashboard    # local Glass Cockpit for AI work capture
-halyard sample-session  # seed demo AI usage if hooks are not firing yet
+
+# Human time
+halyard in acme/auth-migration
+# ... do work ...
+halyard out
+
+# Check what's been captured
+halyard report
+halyard dashboard
+
+# AI sessions are captured automatically by hooks
+# Install hooks once per tool:
+halyard install-hook          # Claude Code
+halyard install-cursor-hook   # Cursor
+halyard install-gemini-hook   # Gemini CLI
+
+# Retroactive Gemini import
+halyard import-gemini
+
+# Budget limits
+halyard set-budget acme --daily 10.00 --monthly 200.00
+halyard budget
+
+# Keep pricing table fresh
+halyard update-pricing
 ```
+
+---
+
+## Collector coverage
+
+| Tool | How it's captured | Status |
+|------|-------------------|--------|
+| Claude Code | `Stop` hook — fires on every session end | Shipped |
+| Cursor | `stop` hook — fires when agent completes | Shipped |
+| Gemini CLI | `SessionStart` / `AfterModel` / `AfterAgent` hooks + history file enrichment | Shipped |
+| Codex Desktop | JSONL session importer | Shipped |
+| GitHub Copilot | No public hook API | Future |
+| Windsurf | TBD | Future |
+| OpenAI API direct | SDK wrapper or proxy | Future |
+
+Gemini CLI sessions include per-model token breakdowns (flash vs. pro vs. thinking), tool call counts, and accurate multi-model cost — derived from the same history file Gemini CLI uses for its own shutdown summary.
+
+---
+
+## What gets captured
+
+Per session (one line in `ai-sessions.log`):
+
+- Start and end time
+- Tool (`claude-code`, `cursor`, `gemini-cli`, …)
+- Model identifier
+- Input tokens, output tokens, cache read/write
+- Cost in USD (from local pricing table, snapshotted at capture)
+- Project attribution (`client:project`)
+- Git branch
+- Billing model (`api`, `credits`, `seat`)
+- Capture source (`hook`, `sdk`, `manual`)
+
+What is **not** captured: prompt content, code context, file contents, any user data beyond session metadata.
+
+---
+
+## Budget limits
+
+Set per-project spend limits in your personal `~/.halyard/budgets.toml` — never committed to the repo. Warnings fire at session start when you've exceeded a daily or monthly threshold. Sessions always proceed; this is instrumentation, not a gate.
+
+```bash
+halyard set-budget acme --daily 15.00 --monthly 300.00
+halyard budget   # shows current spend vs limits across all projects
+```
+
+---
+
+## Data files
+
+```
+my-business/
+├── halyard.toml          # business name, currency, invoice counter
+├── clients.toml          # array of clients
+├── projects.toml         # array of projects
+├── time.timeclock        # hledger-compatible human time log
+├── ai-sessions.log       # AI usage events (append-only, open format)
+├── ledger.beancount      # Beancount double-entry ledger
+└── invoices/             # generated invoice markdown + PDF
+```
+
+Agent state (hooks, API keys, budgets, active timer) lives in `~/.halyard/`, separate from the project folder.
 
 ---
 
 ## How it's being built
 
-This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-driven development. Every feature lives as a change folder under `openspec/changes/` with a proposal, specs, design, and tasks.
+This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-driven development. Every feature lives as a change folder under `openspec/changes/` with a proposal, specs, design, and task checklist.
 
-- [`v0-time-and-invoice`](./openspec/changes/v0-time-and-invoice/) — time tracking + invoicing CLI. *In progress.*
-- [`v1-ai-intelligence`](./openspec/changes/v1-ai-intelligence/) — AI usage event schema + Claude Code collector + local analytics. *Proposed.*
-- [`v3-org-admin-dashboard`](./openspec/changes/v3-org-admin-dashboard/) — team, manager, CIO, governance, and finance rollups. *Proposed.*
+### Shipped
+
+| Change | Description |
+|--------|-------------|
+| [`v0-time-and-invoice`](./openspec/changes/v0-time-and-invoice/) | Time tracking + invoicing CLI |
+| [`v1-ai-intelligence`](./openspec/changes/v1-ai-intelligence/) | AI session schema + Claude Code collector + local reports |
+| [`v1.5-multi-tool-collectors`](./openspec/changes/v1.5-multi-tool-collectors/) | Cursor, Gemini CLI, and Codex collectors |
+| [`v2-ai-work-ledger`](./openspec/changes/v2-ai-work-ledger/) | Beancount ledger + plan cost allocation |
+| [`v2-local-activity-dashboard`](./openspec/changes/v2-local-activity-dashboard/) | Glass Cockpit local dashboard |
+| [`v2.1-dynamic-pricing`](./openspec/changes/v2.1-dynamic-pricing/) | `halyard update-pricing` — live pricing table sync |
+| [`v2.2-budget-limits`](./openspec/changes/v2.2-budget-limits/) | Per-project daily/monthly budget alerts |
+| [`v2.3-gemini-history`](./openspec/changes/v2.3-gemini-history/) | Gemini history file enrichment + `halyard import-gemini` |
+
+### In progress
+
+| Change | Description |
+|--------|-------------|
+| [`v0.1-log-and-invoice`](./openspec/changes/v0.1-log-and-invoice/) | `halyard log` agent + `halyard invoice` generator — closes the v0 loop |
+| [`v2.4-data-integrity`](./openspec/changes/v2.4-data-integrity/) | No-silent-writes UX + `AiSession` schema validation |
+
+### Proposed
+
+| Change | Description |
+|--------|-------------|
+| [`v3-org-admin-dashboard`](./openspec/changes/v3-org-admin-dashboard/) | Team, manager, CIO, and finance rollups |
+| [`v4-tui`](./openspec/changes/v4-tui/) | Textual interactive terminal dashboard |
 
 ---
 
 ## Roadmap
 
-- **v0** — time tracking + invoicing CLI + Claude REPL. *In progress.*
-- **v1** — AI usage event schema, Claude Code collector, API proxy collector, local `halyard report`.
-- **v2** — team sync, web dashboard, cost allocation by project/model/person.
-- **v3** — org admin dashboard: manager/CIO rollups, governance, finance exports, SSO.
-- **v4+** — productivity measurement, ROI reporting, outcome-based billing support.
+- **v0.1** — `halyard log` (AI agent, structured output) + `halyard invoice`. *In progress.*
+- **v2.4** — Data integrity: no-silent-writes + AiSession schema validation. *In progress.*
+- **v3** — Org admin dashboard: manager/CIO rollups, governance, finance exports.
+- **v4** — Textual TUI: interactive terminal dashboard replacing Rich tables.
+- **v5+** — Productivity measurement, ROI reporting, outcome-based billing support.
 
 ---
 
@@ -87,14 +189,15 @@ These hold at every tier:
 - **Local-first.** The core product runs offline. Cloud is optional and additive.
 - **Plain text forever.** Your data is yours, in formats that outlast any startup.
 - **Files are the source of truth.** No hidden state, no proprietary database.
-- **No silent writes.** Every AI-proposed change is shown to you before it's written.
+- **Append-only logs.** Raw logs are never rewritten. Corrections happen in the analytics layer.
+- **No silent writes.** Every AI-proposed change is shown before it's applied.
 - **MIT licensed.** Permissively. Forever.
 
 ---
 
 ## Contributing
 
-Too early. Star the repo and watch for v0.1.0.
+Early but open. See the openspec change folders for what's actively being built. Issues and PRs welcome — start with a proposal.
 
 ## License
 
