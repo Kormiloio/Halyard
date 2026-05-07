@@ -75,7 +75,7 @@ pip install halyard[all]      # adds both
 
 - No support for providers that don't implement OpenAI-compatible function
   calling (e.g., raw HuggingFace Inference API). If a model doesn't support
-  tool use, the query falls back to the `local` provider with a warning.
+  tool use, the command exits with a clear error and suggests `--agent local`.
 - No streaming output. Single-turn response, same as the Claude provider.
 - No automatic model selection. The user chooses the model; Halyard doesn't
   try to pick the "best" one for a query.

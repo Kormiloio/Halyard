@@ -1,7 +1,8 @@
 # PRD: Developer Experience Wave
 
 **Status:** In progress  
-**Covers:** v0.1 (log + invoice), v2.4 (data integrity), v4 (TUI)  
+**Covers:** v0.1 (log + invoice), v0.2/v0.3 (`halyard log` agents),
+v2.4 (data integrity), v4 (TUI)  
 **Last meaningful update:** May 2026
 
 ---
@@ -49,7 +50,7 @@ team.
 
 ### Implementation status — May 7, 2026
 
-First slice implemented.
+Agent-backed log slice implemented.
 
 - `halyard invoice` now generates markdown invoices from local
   `time.timeclock`, `clients.toml`, `projects.toml`, and `halyard.toml`; it
@@ -57,17 +58,27 @@ First slice implemented.
   `--rate`.
 - `halyard log` now returns a deterministic local metadata summary with
   `--json`, `--agent local`, and simple named periods (`today`, `week`,
-  `month`, `all`). The query layer is provider-neutral: model-backed agents
-  such as `--agent claude` are reasoning providers over the same local data,
-  not filters on which AI tools can be queried.
+  `month`, `all`). The query layer is provider-neutral: model-backed agents are
+  reasoning providers over the same local data, not filters on which AI tools
+  can be queried.
 - The local provider now recognizes simple query intent for tool names
   (`cursor`, `claude`, `gemini`, `codex`), periods, project slugs, model
   substrings, and branch tags. Explicit flags (`--tool`, `--project`,
   `--model-filter`, `--branch`) override inferred intent.
+- `--agent claude` runs the Anthropic SDK tool-use loop against local Halyard
+  metadata and requires `ANTHROPIC_API_KEY`.
+- `--agent openai` runs an OpenAI-compatible tool-use loop against OpenAI,
+  Ollama, LM Studio, vLLM, or similar endpoints. `OPENAI_API_KEY` is required
+  only for the hosted OpenAI API; local endpoints can be selected with
+  `--base-url`.
+- `~/.halyard/config.toml` can set personal defaults for `log.default_agent`,
+  `log.openai_base_url`, `log.openai_model`, and `log.claude_model`; CLI flags
+  override config values.
 
-Still pending: the full Anthropic SDK structured-output agent loop described
-below. The current `log` command is a useful local bridge, not the final agent
-architecture.
+Still pending: broader structured-output hardening and richer tool coverage
+against ledger/budget data. The current agent loop answers through a typed
+`LogQueryResponse` wrapper and captures structured summaries from tool calls,
+but final model text is still provider-native prose.
 
 ### The gap
 
@@ -82,14 +93,14 @@ optionally generate a PDF. Also a stub.
 
 ### What we're building
 
-**`halyard log`** — An AI agent command backed by the Anthropic SDK:
+**`halyard log`** — An AI agent command backed by local, Anthropic, or
+OpenAI-compatible providers:
 
 - Single-turn tool use loop. The model receives system context (project config,
   pricing table, budget state) and the contents of `ai-sessions.log`.
-- Structured output using the SDK's native structured response mode. The model
-  returns a typed response object (`LogQueryResponse`), not free-form text. This
-  makes the command composable: `halyard log --json` pipes to `jq`; the test
-  suite can assert on structure.
+- Structured rendering through `LogQueryResponse`. Tool-derived summaries are
+  normalized for tables and `--json`; final answer prose still comes from the
+  selected provider.
 - Tools available to the agent: `read_sessions`, `read_timeclock`,
   `read_ledger`, `summarize_by_project`, `summarize_by_model`, `cost_by_branch`.
 - Natural language queries: "What did I spend on the Acme project this month?"
@@ -116,7 +127,7 @@ and `halyard.toml` to generate a Jinja2-rendered invoice markdown file:
   file. The counter increments. Re-running the same command with `--dry-run`
   shows a preview without writing.
 - Both commands are covered by pytest (golden-file tests for invoice render;
-  mock-SDK tests for log agent).
+  mock-SDK tests for log agents).
 
 ---
 

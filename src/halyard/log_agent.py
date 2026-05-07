@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 from dataclasses import asdict, dataclass
@@ -16,7 +17,7 @@ from halyard.reports import (
     summarize_ai_sessions,
 )
 
-LogAgent = Literal["local", "claude"]
+LogAgent = Literal["local", "claude", "openai"]
 
 
 @dataclass(frozen=True)
@@ -121,26 +122,63 @@ _TOOLS: list[dict[str, Any]] = [
 ]
 
 
+def _tools_for_openai() -> list[dict[str, Any]]:
+    """Convert shared _TOOLS list to OpenAI function-calling format."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t["name"],
+                "description": t["description"],
+                "parameters": t["input_schema"],
+            },
+        }
+        for t in _TOOLS
+    ]
+
+
 def run_log_query(
     query: str,
     *,
     project_dir: Path,
-    agent: LogAgent = "local",
+    agent: LogAgent | None = None,
     period: str = "month",
     model: str | None = None,
+    base_url: str | None = None,
     filters: LogQueryFilters | None = None,
     now: datetime | None = None,
 ) -> LogQueryResponse:
-    """Run a query through the selected provider."""
+    """Dispatch a query to the selected provider."""
+    cfg = None
+    if agent is None:
+        from halyard.log_config import load_log_config
+
+        cfg = load_log_config()
+        agent = cfg.default_agent
+
     if agent == "local":
         return run_local_log_query(
             query, project_dir=project_dir, period=period, filters=filters, now=now
         )
     if agent == "claude":
+        from halyard.log_config import load_log_config
+
+        cfg = cfg or load_log_config()
         return run_claude_log_query(
             query,
             project_dir=project_dir,
-            model=model or "claude-3-5-sonnet-20241022",
+            model=model or cfg.claude_model,
+            now=now,
+        )
+    if agent == "openai":
+        from halyard.log_config import load_log_config
+
+        cfg = cfg or load_log_config()
+        return run_openai_log_query(
+            query,
+            project_dir=project_dir,
+            model=model or cfg.openai_model,
+            base_url=base_url or cfg.openai_base_url,
             now=now,
         )
     raise LogAgentError(f"Unknown log agent: {agent}")
@@ -263,6 +301,134 @@ def run_claude_log_query(
 
     except anthropic.AnthropicError as exc:
         raise LogAgentError(f"Anthropic API error: {exc}") from exc
+
+
+_OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
+
+
+def run_openai_log_query(
+    query: str,
+    *,
+    project_dir: Path,
+    model: str,
+    base_url: str,
+    now: datetime | None = None,
+) -> LogQueryResponse:
+    """Answer via OpenAI-compatible SDK (supports Ollama, LM Studio, vLLM, etc.)."""
+    try:
+        openai = importlib.import_module("openai")
+    except ImportError:
+        raise LogAgentError(
+            "The openai package is required for --agent openai. Install it with:\n"
+            "  pip install halyard[openai]"
+        ) from None
+
+    is_openai_endpoint = base_url.rstrip("/") == _OPENAI_DEFAULT_BASE_URL.rstrip("/")
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if is_openai_endpoint and not api_key:
+        raise LogAgentError(
+            "OPENAI_API_KEY not set. Set it or use --base-url to point to a local server."
+        )
+
+    clock = now or datetime.now()
+    client = openai.OpenAI(
+        api_key=api_key or "local",  # local servers ignore the key
+        base_url=base_url,
+    )
+
+    system_prompt = (
+        f"You are the Halyard AI Assistant. Today is {clock.strftime('%Y-%m-%d %A')}. "
+        "Your role is to answer questions about the user's work sessions and costs. "
+        "Use the provided tools to fetch data from the local Halyard logs. "
+        "Never make up data; if tools return no results, say so. "
+        "When summarizing costs, use the USD totals from the tools."
+    )
+
+    messages: list[Any] = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": query},
+    ]
+    oai_tools = _tools_for_openai()
+    captured_buckets_project: list[LogBucket] = []
+    captured_buckets_model: list[LogBucket] = []
+    total_cost = 0.0
+    session_count = 0
+    human_minutes = 0
+
+    try:
+        for _ in range(3):
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                tools=oai_tools,
+            )
+
+            choice = response.choices[0]
+            msg = choice.message
+
+            if not msg.tool_calls:
+                return LogQueryResponse(
+                    answer=msg.content or "(No answer provided)",
+                    query=query,
+                    agent="openai",
+                    data_source=str(project_dir),
+                    period="dynamic",
+                    cost_usd_total=round(total_cost, 4),
+                    session_count=session_count,
+                    human_minutes=human_minutes,
+                    filters=LogQueryFilters(),
+                    projects=captured_buckets_project,
+                    models=captured_buckets_model,
+                )
+
+            messages.append(msg)
+            for tool_call in msg.tool_calls:
+                tool_name = tool_call.function.name
+                tool_args = json.loads(tool_call.function.arguments)
+                tool_result = _execute_tool(tool_name, tool_args, project_dir, clock)
+
+                if isinstance(tool_result, dict):
+                    if "total_cost" in tool_result:
+                        total_cost = max(total_cost, tool_result.get("total_cost", 0.0))
+                        session_count = max(session_count, tool_result.get("session_count", 0))
+                    if "by_project" in tool_result:
+                        captured_buckets_project = [
+                            LogBucket(
+                                label=b["label"],
+                                cost_usd=b["cost_usd"],
+                                sessions=b["sessions"],
+                            )
+                            for b in tool_result["by_project"]
+                        ]
+                    if "by_model" in tool_result:
+                        captured_buckets_model = [
+                            LogBucket(
+                                label=b["label"],
+                                cost_usd=b["cost_usd"],
+                                sessions=b["sessions"],
+                            )
+                            for b in tool_result["by_model"]
+                        ]
+                    if "total_minutes" in tool_result:
+                        human_minutes = max(human_minutes, tool_result["total_minutes"])
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": json.dumps(tool_result),
+                    }
+                )
+
+        raise LogAgentError("Agent exceeded maximum turn limit (3) without a final answer.")
+
+    except openai.BadRequestError as exc:
+        raise LogAgentError(
+            f"The model '{model}' does not support tool use. "
+            "Try a different model or use --agent local."
+        ) from exc
+    except openai.OpenAIError as exc:
+        raise LogAgentError(f"OpenAI API error: {exc}") from exc
 
 
 def _execute_tool(name: str, args: dict[str, Any], project_dir: Path, now: datetime) -> Any:

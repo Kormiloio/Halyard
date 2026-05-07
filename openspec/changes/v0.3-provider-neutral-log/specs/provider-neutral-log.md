@@ -3,6 +3,7 @@
 ## Provider selection
 
 ### WHEN the user runs `halyard log "query"` with no `--agent` flag
+AND `~/.halyard/config.toml` does not set `log.default_agent`
 THEN the `local` deterministic provider is used. No API key required.
 
 ### WHEN the user runs `halyard log --agent claude "query"`
@@ -81,4 +82,5 @@ and continues with the `local` provider.
 | `--model <id>` | Model identifier (provider-specific; overrides config default) |
 | `--base-url <url>` | Base URL for OpenAI-compatible endpoint (default: OpenAI API) |
 
-All existing `halyard log` flags (`--json`, `--period`, `--log`) are unchanged.
+All existing `halyard log` flags (`--json`, `--period`, `--tool`, `--project`,
+`--model-filter`, `--branch`) are unchanged.

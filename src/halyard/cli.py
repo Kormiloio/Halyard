@@ -7,7 +7,7 @@ import shutil
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import typer
 from rich.console import Console
@@ -160,9 +160,19 @@ def log(
     message: str = typer.Argument(..., help="Natural-language description of work."),
     json_output: bool = typer.Option(False, "--json", help="Emit structured JSON."),
     period: str = typer.Option("month", "--period", help="today | week | month | all"),
-    agent: str = typer.Option("local", "--agent", help="Query provider: local | claude."),
+    agent: str | None = typer.Option(
+        None,
+        "--agent",
+        help="Query provider: local | claude | openai. Defaults to ~/.halyard/config.toml value.",
+    ),
     model: str | None = typer.Option(
         None, "--model", help="Provider model for model-backed agents."
+    ),
+    base_url: str | None = typer.Option(
+        None,
+        "--base-url",
+        help="Base URL for OpenAI-compatible endpoint (default: https://api.openai.com/v1). "
+        "Use http://localhost:11434/v1 for Ollama.",
     ),
     tool: str | None = typer.Option(None, "--tool", help="Filter local queries by tool."),
     project: str | None = typer.Option(None, "--project", help="Filter local queries by project."),
@@ -171,9 +181,14 @@ def log(
     ),
     branch: str | None = typer.Option(None, "--branch", help="Filter local queries by branch tag."),
 ) -> None:
-    """Answer a natural-language query about captured work metadata."""
+    """Answer a natural-language query about captured work metadata.
+
+    Providers: local (no API key), claude (ANTHROPIC_API_KEY),
+    openai (OPENAI_API_KEY or --base-url for local servers like Ollama).
+    """
     from halyard.ai_log import find_project_dir
-    from halyard.log_agent import LogAgentError, LogQueryFilters, run_log_query
+    from halyard.log_agent import LogAgent, LogAgentError, LogQueryFilters, run_log_query
+    from halyard.log_config import load_log_config
 
     project_dir = find_project_dir()
     if project_dir is None:
@@ -182,17 +197,21 @@ def log(
         )
         raise typer.Exit(code=1)
 
-    if agent not in {"local", "claude"}:
-        console.print("[bold red]Error:[/] --agent must be one of: local, claude.")
+    cfg = load_log_config()
+    resolved_agent = agent or cfg.default_agent
+
+    if resolved_agent not in {"local", "claude", "openai"}:
+        console.print("[bold red]Error:[/] --agent must be one of: local, claude, openai.")
         raise typer.Exit(code=1)
 
     try:
         response = run_log_query(
             message,
             project_dir=project_dir,
-            agent=agent,  # type: ignore[arg-type]
+            agent=cast(LogAgent, resolved_agent),
             period=period,
             model=model,
+            base_url=base_url,
             filters=LogQueryFilters(
                 tool=tool,
                 project=project,

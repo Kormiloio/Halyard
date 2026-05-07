@@ -8,6 +8,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+import halyard.log_config as log_config
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
 from halyard.cli import app
 
@@ -123,10 +124,37 @@ def test_log_rejects_unknown_agent(tmp_path: Path, monkeypatch: object) -> None:
     monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
     _init_project(tmp_path)
 
-    result = runner.invoke(app, ["log", "what did I spend?", "--agent", "openai"])
+    result = runner.invoke(app, ["log", "what did I spend?", "--agent", "unknown-agent"])
 
     assert result.exit_code == 1
     assert "--agent must be one of" in result.output
+
+
+def test_log_cli_agent_overrides_config(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime.now(),
+            end=datetime.now(),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=100,
+            output_tokens=50,
+            cost_usd=1.25,
+            project="acme:auth",
+        ),
+    )
+    config_file = tmp_path / "config.toml"
+    config_file.write_text('[log]\ndefault_agent = "claude"\n')
+    monkeypatch.setattr(log_config, "_LOG_CONFIG_FILE", config_file)  # type: ignore[attr-defined]
+
+    result = runner.invoke(app, ["log", "what did I spend?", "--agent", "local", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["agent"] == "local"
 
 
 def test_log_infers_tool_and_period_from_query(tmp_path: Path, monkeypatch: object) -> None:
