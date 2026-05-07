@@ -21,15 +21,23 @@ class HelpModal(ModalScreen[None]):
             yield Static(
                 "\n".join(
                     [
-                        "d    today",
-                        "w    week",
-                        "m    month",
-                        "a    all time",
-                        "p    toggle project scope",
-                        "b    branch filter",
-                        "?    help",
-                        "Esc  clear filter / close modal",
-                        "q    quit",
+                        "Time window",
+                        "  d    today",
+                        "  w    this week",
+                        "  m    this month",
+                        "  a    all time",
+                        "",
+                        "Navigation",
+                        "  ↑ ↓  select project",
+                        "  Enter  drill into project",
+                        "  Esc  back / clear filter",
+                        "",
+                        "Filters",
+                        "  p    toggle project scope",
+                        "  b    filter by git branch",
+                        "",
+                        "  ?    this help",
+                        "  q    quit",
                     ]
                 )
             )

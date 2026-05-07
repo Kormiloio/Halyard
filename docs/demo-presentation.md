@@ -191,7 +191,7 @@ cat invoices/2026-05-001-acme.md
 
 ---
 
-## Part 6 — The live dashboard (1 min)
+## Part 6 — The live dashboard (2 min)
 
 > "One more thing. If you want to watch your AI usage in real time — like
 > a cockpit for your work — we built this:"
@@ -204,11 +204,35 @@ halyard tui
 
 > "This updates live. Every time an AI session completes, it appears here.
 > Sessions, costs, which models you're hitting — all updating as you work.
-> Press Q to exit."
+>
+> It has keyboard shortcuts so you can navigate without touching the mouse:"
 
-```
-q
-```
+| Key | What it does |
+|-----|--------------|
+| `d` | Show only today's sessions |
+| `w` | Show this week |
+| `m` | Show this month |
+| `a` | Show all time |
+| `↑` `↓` | Move up and down the project list |
+| `Enter` | Drill into a project — see its sessions in detail |
+| `Esc` | Go back |
+| `b` | Filter by git branch — see only work on a specific branch |
+| `p` | Toggle between hub view and single-project view |
+| `?` | Open this keyboard help inside the dashboard |
+| `q` | Quit |
+
+*Press `?` to show the help modal on screen.*
+
+> "Press `?` and it shows you the whole cheat sheet right there in the app.
+> You never have to remember them — just hit question mark."
+
+*Press `m` to switch to month view, then arrow down and Enter to drill into a project.*
+
+> "See — I can arrow down to a project and hit Enter to zoom in. It shows me
+> every session for that project: when it happened, how long, which model,
+> what it cost. Then Escape takes me back to the overview."
+
+*Press `Esc`, then `q` to exit.*
 
 ---
 
