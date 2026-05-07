@@ -295,6 +295,8 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "textual" },
+    { name = "watchfiles" },
 ]
 openai = [
     { name = "openai" },
@@ -318,11 +320,13 @@ requires-dist = [
     { name = "rich", specifier = ">=13.7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
     { name = "textual", marker = "extra == 'all'", specifier = ">=0.60" },
+    { name = "textual", marker = "extra == 'dev'", specifier = ">=0.60" },
     { name = "textual", marker = "extra == 'tui'", specifier = ">=0.60" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "tomli-w", specifier = ">=1.0" },
     { name = "typer", specifier = ">=0.12" },
     { name = "watchfiles", marker = "extra == 'all'", specifier = ">=0.21" },
+    { name = "watchfiles", marker = "extra == 'dev'", specifier = ">=0.21" },
     { name = "watchfiles", marker = "extra == 'tui'", specifier = ">=0.21" },
 ]
 provides-extras = ["dev", "openai", "tui", "all"]
