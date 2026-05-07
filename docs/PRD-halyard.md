@@ -217,8 +217,11 @@ These apply to every layer of the product:
 2. **Plain text forever.** `time.timeclock`, `ai-sessions.log`, TOML configs.
    No SQLite as source of truth. No proprietary formats.
 3. **Files are the source of truth.** Any UI is a view onto the files.
-4. **Append-only logs.** Raw logs are never rewritten. Corrections happen in
-   the analytics layer only.
+4. **Append-only logs, with one carve-out.** New sessions are always appended.
+   Attribution corrections (assigning an unattributed session to a project via
+   `halyard assign-unattributed`) may atomically rewrite the log to update the
+   `project=` field. No captured data is discarded; only metadata is corrected.
+   All other modifications happen in the analytics layer only.
 5. **MIT licensed.** The collection protocol and CLI are open source, permanently.
 6. **No silent writes.** Modifications to user data are proposed, not applied
    automatically.

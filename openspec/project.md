@@ -62,9 +62,12 @@ my-business/
 Per-user agent state (skills, API keys, active timer) lives in
 `~/.halyard/`, not in the project folder.
 
-`ai-sessions.log` is append-only, plain text, open format — the same
-local-first guarantee as `time.timeclock`. The cloud sync and enterprise
-layers read from this file; they do not replace it.
+`ai-sessions.log` is plain text, open format — the same local-first guarantee
+as `time.timeclock`. New sessions are always appended. The one permitted
+exception is attribution correction: when a user runs `halyard assign-unattributed`,
+the file is atomically rewritten to update the `project=` field on previously
+unattributed lines. No captured data is discarded; only the metadata is corrected.
+The cloud sync and enterprise layers read from this file; they do not replace it.
 
 ## Active focus (May 2026)
 

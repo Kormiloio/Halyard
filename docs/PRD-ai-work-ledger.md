@@ -174,7 +174,7 @@ Required capabilities:
 ## Data Principles
 
 - Plain text is the source of truth.
-- Usage records are append-only.
+- Usage records are append-only. Attribution corrections (via `halyard assign-unattributed`) are the one permitted atomic rewrite — no captured data is discarded.
 - Unknown fields are ignored by old parsers.
 - Captured cost is snapshotted at the time of capture.
 - Sensitive content is opt-in, not default.

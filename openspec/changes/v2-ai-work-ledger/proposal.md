@@ -30,7 +30,7 @@ ledger. It introduces:
 
 - The freelancer time and invoice workflow remains intact.
 - `time.timeclock` remains the source of truth for human time.
-- `ai-sessions.log` remains the append-only source of truth for AI sessions.
+- `ai-sessions.log` remains the source of truth for AI sessions. New sessions are appended; attribution corrections via `assign-unattributed` may atomically rewrite project metadata — no data is discarded.
 - Cloud sync is optional and not required for the local workflow.
 - User data remains plain text and owned by the user.
 
