@@ -271,3 +271,79 @@ def test_costs_panel_unattributed_project_label(tmp_path: Path) -> None:
 
     assert "(unattributed)" in html
     assert "trust-captured" in html
+
+
+def test_panel_status_pills_no_sessions(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+
+    html = render_dashboard(tmp_path)
+
+    assert "no captures yet" in html
+    assert "all attributed" in html
+    assert "no data" in html  # projects pill
+
+
+def test_panel_status_sessions_pill_healthy(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 7, 10, 0),
+            end=datetime(2026, 5, 7, 10, 30),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=500,
+            output_tokens=200,
+            cost_usd=0.01,
+            project="acme:auth",
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "pill-healthy" in html
+    assert "1 captured" in html
+    assert "1 project" in html
+
+
+def test_panel_status_unattributed_warning(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 7, 10, 0),
+            end=datetime(2026, 5, 7, 10, 30),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=500,
+            output_tokens=200,
+            cost_usd=0.01,
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "pill-warning" in html
+    assert "1 open" in html
+    assert "all unattributed" in html  # projects pill
+
+
+def test_panel_status_costs_trust_pill_warning(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 7, 10, 0),
+            end=datetime(2026, 5, 7, 10, 30),
+            tool="cursor",
+            model="gpt-4o",
+            input_tokens=500,
+            output_tokens=200,
+            cost_usd=0.0,
+            project="acme:auth",
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "1 missing" in html  # costs trust pill

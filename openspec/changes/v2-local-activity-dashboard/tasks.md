@@ -31,7 +31,7 @@ Implementation checklist for v2 — Local Activity Dashboard.
 - [x] 4.2 Build Today view.
 - [x] 4.3 Build Projects view.
 - [x] 4.4 Build Sessions view with filters.
-- [ ] 4.5 Build Costs view with trust labels.
+- [x] 4.5 Build Costs view with trust labels.
 - [x] 4.6 Build Health view for collector status.
 
 ## 5. Modern UI quality
@@ -40,7 +40,7 @@ Implementation checklist for v2 — Local Activity Dashboard.
       metrics, and status indicators.
 - [x] 5.2 Add responsive layouts for laptop and desktop viewports.
 - [x] 5.3 Ensure live updates do not shift or resize core dashboard regions.
-- [ ] 5.4 Add empty, loading, healthy, warning, and error states for each view.
+- [x] 5.4 Add empty, loading, healthy, warning, and error states for each view.
 - [ ] 5.5 Verify dashboard screenshots before release.
 
 ## 6. Safety and trust

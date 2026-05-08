@@ -114,6 +114,70 @@ def _render_state(state: DashboardState) -> str:
         else None
     )
 
+    # --- per-panel status pills ---
+    session_count = len(report.sessions)
+    sessions_pill = (
+        _panel_status_pill(f"{session_count} captured", "healthy")
+        if session_count
+        else _panel_status_pill("no captures yet", "muted")
+    )
+
+    unattr_count = report.unattributed_count
+    unattr_pill = (
+        _panel_status_pill(f"{unattr_count} open", "warning")
+        if unattr_count
+        else _panel_status_pill("all attributed", "healthy")
+    )
+
+    time_state = "healthy" if human_time.month_minutes > 0 else "muted"
+    time_pill = _panel_status_pill(
+        format_minutes(human_time.month_minutes) + " this month", time_state
+    )
+
+    proj_count = len([b for b in report.by_project if b.label != "(unattributed)"])
+    if session_count == 0:
+        projects_pill = _panel_status_pill("no data", "muted")
+    elif proj_count == 0:
+        projects_pill = _panel_status_pill("all unattributed", "warning")
+    else:
+        label = "project" if proj_count == 1 else "projects"
+        projects_pill = _panel_status_pill(f"{proj_count} {label}", "healthy")
+
+    model_count = len(list(report.by_model))
+    models_pill = (
+        _panel_status_pill(f"{model_count} model{'s' if model_count != 1 else ''}", "muted")
+        if model_count
+        else ""
+    )
+
+    tool_count = len(list(report.by_tool))
+    tools_pill = (
+        _panel_status_pill(f"{tool_count} tool{'s' if tool_count != 1 else ''}", "muted")
+        if tool_count
+        else ""
+    )
+
+    budget_classes = [_budget_class(b.today_spend, b.today_limit) for b in budgets] + [
+        _budget_class(b.month_spend, b.month_limit) for b in budgets
+    ]
+    if not budgets:
+        budget_pill = _panel_status_pill("no limits set", "muted")
+    elif "over" in budget_classes:
+        budget_pill = _panel_status_pill("over limit", "error")
+    elif "high" in budget_classes or "warn" in budget_classes:
+        budget_pill = _panel_status_pill("near limit", "warning")
+    else:
+        budget_pill = _panel_status_pill("on track", "healthy")
+
+    if session_count == 0:
+        costs_trust_pill = _panel_status_pill("no sessions", "muted")
+    else:
+        missing_trust = sum(1 for s in report.sessions if session_trust(s) == "missing")
+        if missing_trust:
+            costs_trust_pill = _panel_status_pill(f"{missing_trust} missing", "warning")
+        else:
+            costs_trust_pill = _panel_status_pill("all captured", "healthy")
+
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -147,7 +211,7 @@ def _render_state(state: DashboardState) -> str:
             <p class="eyebrow">Live Stream</p>
             <h2>Recent AI Sessions</h2>
           </div>
-          <span class="pill">refreshes every 10s</span>
+          <div class="pill-group">{sessions_pill}<span class="pill">↺ 10s</span></div>
         </div>
         {_sessions_table(report.sessions)}
       </article>
@@ -168,7 +232,7 @@ def _render_state(state: DashboardState) -> str:
             <p class="eyebrow">Needs Attention</p>
             <h2>Unattributed Sessions</h2>
           </div>
-          <span class="pill">{report.unattributed_count} open</span>
+          {unattr_pill}
         </div>
         {_unattributed_table(report.unattributed_sessions)}
       </article>
@@ -179,7 +243,7 @@ def _render_state(state: DashboardState) -> str:
             <p class="eyebrow">Human Work</p>
             <h2>Timeclock</h2>
           </div>
-          <span class="pill">{_e(format_minutes(human_time.month_minutes))} this month</span>
+          {time_pill}
         </div>
         {_time_table(human_time.by_project)}
       </article>
@@ -190,6 +254,7 @@ def _render_state(state: DashboardState) -> str:
             <p class="eyebrow">Attribution</p>
             <h2>Projects</h2>
           </div>
+          {projects_pill}
         </div>
         {_bucket_table(report.by_project, "Project")}
       </article>
@@ -200,6 +265,7 @@ def _render_state(state: DashboardState) -> str:
             <p class="eyebrow">Mix</p>
             <h2>Models</h2>
           </div>
+          {models_pill}
         </div>
         {_model_table(report.by_model)}
       </article>
@@ -210,6 +276,7 @@ def _render_state(state: DashboardState) -> str:
             <p class="eyebrow">Capture</p>
             <h2>Tools</h2>
           </div>
+          {tools_pill}
         </div>
         {_bucket_table(report.by_tool, "Tool")}
       </article>
@@ -220,6 +287,7 @@ def _render_state(state: DashboardState) -> str:
             <p class="eyebrow">Spend Limits</p>
             <h2>Budget</h2>
           </div>
+          {budget_pill}
         </div>
         {_budget_panel(budgets)}
       </article>
@@ -230,7 +298,7 @@ def _render_state(state: DashboardState) -> str:
             <p class="eyebrow">Cost Allocation</p>
             <h2>Costs</h2>
           </div>
-          <span class="pill">{_e(report.period_label)}</span>
+          <div class="pill-group"><span class="pill">{_e(report.period_label)}</span>{costs_trust_pill}</div>
         </div>
         {_costs_panel(ledger, report.by_project, report.sessions)}
       </article>
@@ -282,7 +350,7 @@ def _sessions_table(sessions: Iterable[AiSession]) -> str:
             "</tr>"
         )
     if not rows:
-        return '<p class="empty">No AI sessions captured for this period.</p>'
+        return '<p class="empty">No AI sessions captured this period.<br>Start Claude Code, Cursor, or Gemini CLI in this directory.</p>'
     return (
         "<table><thead><tr><th>Time</th><th>Tool</th><th>Project</th><th>Model</th>"
         "<th>Dur</th><th>Tokens</th><th>Cost</th><th>Health</th></tr></thead><tbody>"
@@ -480,7 +548,7 @@ def _time_table(buckets: Iterable[TimeBucket]) -> str:
             f"<tr><td>{_e(bucket.label)}</td><td class='num'>{_e(format_minutes(bucket.minutes))}</td></tr>"
         )
     if not rows:
-        return '<p class="empty">No human time recorded this month.</p>'
+        return '<p class="empty">No human time recorded this month.<br>Run <code>halyard start &lt;project&gt;</code> to begin tracking.</p>'
     return (
         "<table><thead><tr><th>Project</th><th>Time</th></tr></thead><tbody>"
         + "".join(rows)
@@ -554,6 +622,10 @@ def _e(value: object) -> str:
     return html.escape(str(value))
 
 
+def _panel_status_pill(text: str, state: str) -> str:
+    return f"<span class='pill pill-{_e(state)}'>{_e(text)}</span>"
+
+
 _CSS = """
 :root {
   color-scheme: dark;
@@ -597,6 +669,11 @@ h2 { font-size: 17px; }
 .status-healthy { color: var(--green); border-color: rgba(112, 225, 143, .4); }
 .status-warning { color: var(--amber); border-color: rgba(243, 191, 91, .45); }
 .status-error { color: var(--red); border-color: rgba(255, 111, 111, .5); }
+.pill-healthy { color: var(--green); border-color: rgba(112, 225, 143, .4); background: rgba(112, 225, 143, .08); }
+.pill-warning { color: var(--amber); border-color: rgba(243, 191, 91, .45); background: rgba(243, 191, 91, .08); }
+.pill-error { color: var(--red); border-color: rgba(255, 111, 111, .5); background: rgba(255, 111, 111, .08); }
+.pill-muted { color: var(--muted); }
+.pill-group { display: flex; gap: 6px; align-items: center; }
 .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
 .metric, .panel {
   border: 1px solid var(--line);
