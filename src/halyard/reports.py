@@ -358,7 +358,7 @@ def _cursor_hook_check() -> HealthCheck:
         data = json.loads(path.read_text())
     except (json.JSONDecodeError, ValueError):
         return HealthCheck("Cursor hook", "error", "hooks.json is malformed")
-    hooks: dict = data.get("hooks", {})
+    hooks: dict[str, object] = data.get("hooks", {})
     commands = [
         entry.get("command", "")
         for entries in hooks.values()
@@ -383,7 +383,7 @@ def _gemini_hook_check() -> HealthCheck:
         data = json.loads(path.read_text())
     except (json.JSONDecodeError, ValueError):
         return HealthCheck("Gemini CLI hook", "error", "settings.json is malformed")
-    hooks: dict = data.get("hooks", {})
+    hooks: dict[str, object] = data.get("hooks", {})
     commands = [
         h.get("command", "")
         for entries in hooks.values()
