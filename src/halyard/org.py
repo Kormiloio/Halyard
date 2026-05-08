@@ -103,9 +103,9 @@ def read_org_config(hub_dir: Path) -> OrgConfig | None:
     data = tomllib.loads(path.read_text())
     return OrgConfig(
         org=OrgInfo.model_validate(data["org"]),
-        departments=[Department.model_validate(d) for d in data.get("department", [])],
-        teams=[Team.model_validate(t) for t in data.get("team", [])],
-        members=[Member.model_validate(m) for m in data.get("member", [])],
+        departments=tuple(Department.model_validate(d) for d in data.get("department", [])),
+        teams=tuple(Team.model_validate(t) for t in data.get("team", [])),
+        members=tuple(Member.model_validate(m) for m in data.get("member", [])),
     )
 
 
