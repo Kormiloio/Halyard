@@ -295,6 +295,8 @@ def build_health_checks(
         _file_check("AI session log", ai_log),
         _file_check("Timeclock", project_dir / "time.timeclock"),
         _hook_check(project_dir),
+        _cursor_hook_check(),
+        _gemini_hook_check(),
     ]
 
     if active_timer:
@@ -344,6 +346,57 @@ def _hook_check(project_dir: Path) -> HealthCheck:
         if _settings_has_halyard_hooks(path):
             return HealthCheck("Claude Code hook", "healthy", f"Installed in {path}")
     return HealthCheck("Claude Code hook", "warning", "Run halyard install-hook")
+
+
+def _cursor_hook_check() -> HealthCheck:
+    path = Path.home() / ".cursor" / "hooks.json"
+    if not path.exists():
+        return HealthCheck(
+            "Cursor hook", "neutral", "Not installed — run halyard install-cursor-hook"
+        )  # noqa: E501
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, ValueError):
+        return HealthCheck("Cursor hook", "error", "hooks.json is malformed")
+    hooks: dict = data.get("hooks", {})
+    commands = [
+        entry.get("command", "")
+        for entries in hooks.values()
+        if isinstance(entries, list)
+        for entry in entries
+        if isinstance(entry, dict)
+    ]
+    if any("halyard cursor-session" in c for c in commands) and any(
+        "halyard cursor-hook" in c for c in commands
+    ):
+        return HealthCheck("Cursor hook", "healthy", f"Installed in {path}")
+    return HealthCheck("Cursor hook", "warning", "Incomplete — run halyard install-cursor-hook")
+
+
+def _gemini_hook_check() -> HealthCheck:
+    path = Path.home() / ".gemini" / "settings.json"
+    if not path.exists():
+        return HealthCheck(
+            "Gemini CLI hook", "neutral", "Not installed — run halyard install-gemini-hook"
+        )  # noqa: E501
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, ValueError):
+        return HealthCheck("Gemini CLI hook", "error", "settings.json is malformed")
+    hooks: dict = data.get("hooks", {})
+    commands = [
+        h.get("command", "")
+        for entries in hooks.values()
+        if isinstance(entries, list)
+        for entry in entries
+        if isinstance(entry, dict)
+        for h in entry.get("hooks", [])
+        if isinstance(h, dict)
+    ]
+    required = {"halyard gc-session", "halyard gc-model", "halyard gc-hook"}
+    if all(any(r in c for c in commands) for r in required):
+        return HealthCheck("Gemini CLI hook", "healthy", f"Installed in {path}")
+    return HealthCheck("Gemini CLI hook", "warning", "Incomplete — run halyard install-gemini-hook")
 
 
 def _settings_has_halyard_hooks(path: Path) -> bool:

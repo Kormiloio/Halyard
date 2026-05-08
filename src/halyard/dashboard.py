@@ -353,7 +353,7 @@ def _sessions_table(sessions: Iterable[AiSession]) -> str:
         return '<p class="empty">No AI sessions captured this period.<br>Start Claude Code, Cursor, or Gemini CLI in this directory.</p>'
     return (
         "<table><thead><tr><th>Time</th><th>Tool</th><th>Project</th><th>Model</th>"
-        "<th>Dur</th><th>Tokens</th><th>Cost</th><th>Health</th></tr></thead><tbody>"
+        "<th>Dur</th><th>In / Out</th><th>Cost</th><th>Health</th></tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>"
     )
@@ -537,7 +537,7 @@ def _unattributed_table(sessions: Iterable[AiSession]) -> str:
         return '<p class="empty">No unattributed sessions. Everything is invoice-ready.</p>'
     return (
         "<table><thead><tr><th>Time</th><th>Tool</th><th>Model</th>"
-        "<th>Tokens</th><th>Cost</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+        "<th>In / Out</th><th>Cost</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
     )
 
 
