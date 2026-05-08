@@ -74,7 +74,10 @@ halyard
 halyard tui
 
 # AI sessions are captured automatically by hooks
-# Install hooks once per tool:
+# Guided setup installs supported hooks and checks readiness:
+halyard setup
+
+# Or install hooks manually:
 halyard install-hook          # Claude Code
 halyard install-cursor-hook   # Cursor
 halyard install-gemini-hook   # Gemini CLI

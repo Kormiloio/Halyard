@@ -34,6 +34,20 @@ halyard hub set /path/to/halyard-project
 
 ## Hooks Missing
 
+For guided setup, run:
+
+```bash
+halyard setup
+```
+
+For non-interactive setup of all supported hooks, run:
+
+```bash
+halyard setup --all --yes
+```
+
+You can also install hooks manually for the tools you use:
+
 Install hooks for the tools you use:
 
 ```bash
@@ -92,4 +106,3 @@ halyard doctor --json
 
 Share the JSON output in a bug report. It should contain setup metadata only,
 not prompts, transcripts, or source code.
-

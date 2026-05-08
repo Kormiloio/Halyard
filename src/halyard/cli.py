@@ -161,6 +161,76 @@ def doctor_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command(name="setup")
+def setup_cmd(
+    all_tools: bool = typer.Option(False, "--all", help="Install all supported hooks."),
+    claude: bool = typer.Option(False, "--claude", help="Install Claude Code hooks."),
+    cursor: bool = typer.Option(False, "--cursor", help="Install Cursor hooks."),
+    gemini: bool = typer.Option(False, "--gemini", help="Install Gemini CLI hooks."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Run non-interactively."),
+    global_claude: bool = typer.Option(
+        False,
+        "--global-claude",
+        help="Install Claude Code hooks into ~/.claude/settings.json.",
+    ),
+) -> None:
+    """Guided first-run setup for Halyard capture."""
+    from halyard.doctor import build_doctor_report, render_text
+    from halyard.setup import next_step_text, readiness, resolve_selection, tool_label
+
+    state = readiness()
+    console.print("[bold cyan]Halyard Setup[/]")
+    if state.project_dir is not None:
+        console.print(f"Project: [bold]{state.project_dir}[/]")
+    else:
+        console.print("[yellow]Project:[/] none found")
+    if state.hub_dir is not None:
+        console.print(f"Hub: [bold]{state.hub_dir}[/]")
+    else:
+        console.print("[yellow]Hub:[/] not configured")
+    if not state.has_destination:
+        console.print(
+            "[bold yellow]Capture has no destination yet.[/] "
+            "Run [bold]halyard init[/] or [bold]halyard init --hub[/]."
+        )
+
+    selection = resolve_selection(
+        all_tools=all_tools,
+        claude=claude,
+        cursor=cursor,
+        gemini=gemini,
+        yes=yes,
+    )
+
+    tools = list(selection.tools)
+    if not tools and not yes:
+        for candidate in ("claude", "cursor", "gemini"):
+            install = typer.confirm(
+                f"Install {tool_label(candidate)} hooks?",
+                default=candidate == "claude",
+            )
+            if install:
+                tools.append(candidate)
+
+    if not tools:
+        console.print("[yellow]No hooks selected.[/]")
+    else:
+        console.print("Installing: " + ", ".join(tool_label(tool) for tool in tools))
+        for selected in tools:
+            if selected == "claude":
+                install_hook(global_=global_claude)
+            elif selected == "cursor":
+                install_cursor_hook()
+            elif selected == "gemini":
+                install_gemini_hook()
+
+    report = build_doctor_report()
+    console.print("")
+    console.print(render_text(report))
+    console.print("")
+    console.print(f"[bold green]{next_step_text()}[/]")
+
+
 @app.command(name="link-repo")
 def link_repo(
     project: str = typer.Argument(..., help="Project slug (client:project) to map this repo to."),
