@@ -16,6 +16,9 @@ Nobody knows what it's actually costing. Nobody can measure whether it's working
 
 The instruments don't exist yet. Halyard builds them.
 
+Read more about the product direction in
+[`AI Work Intelligence`](docs/AI-work-intelligence.md).
+
 ---
 
 ## Two audiences, one platform
