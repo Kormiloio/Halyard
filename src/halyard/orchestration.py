@@ -142,6 +142,10 @@ def scaffold_project(target_dir: Path, hub: bool = False) -> None:
         "  3. Run [bold]halyard install-hook[/] — auto-capture AI sessions from Claude Code."
     )
     console.print("\nTrack time: halyard start/stop   |   View AI spend: halyard report")
+    console.print(
+        "\n[dim]Tip: commit halyard.toml and clients.toml to git — rate and config changes "
+        "are then fully auditable when reviewing past invoices.[/]"
+    )
 
 
 def interactive_assign_unattributed(

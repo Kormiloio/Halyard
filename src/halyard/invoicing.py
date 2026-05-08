@@ -24,6 +24,7 @@ class ClientRecord:
     hourly_rate: float
     email: str = ""
     address: str = ""
+    rate_history: tuple[tuple[date, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -143,7 +144,11 @@ def generate_invoice(
         _, account_project = account.split(":", 1)
         project = projects.get(account_project)
         description = project.name if project else account_project
-        rate = rate_override or (project.hourly_rate if project else None) or client.hourly_rate
+        rate = (
+            rate_override
+            or (project.hourly_rate if project else None)
+            or _effective_rate(client, period_start)
+        )
         hours = round(minutes / 60, 2)
         line_items.append(
             InvoiceLineItem(
@@ -334,6 +339,18 @@ def _read_toml(path: Path) -> dict[str, Any]:
     return tomllib.loads(path.read_text())
 
 
+def _effective_rate(client: ClientRecord, as_of: date) -> float:
+    """Return the hourly rate in effect on the given date.
+
+    Picks the most recent rate_history entry with effective <= as_of.
+    Falls back to hourly_rate when no history exists or all entries are future-dated.
+    """
+    applicable = [(d, r) for d, r in client.rate_history if d <= as_of]
+    if not applicable:
+        return client.hourly_rate
+    return max(applicable, key=lambda x: x[0])[1]
+
+
 def _read_clients(project_dir: Path) -> dict[str, ClientRecord]:
     data = _read_toml(project_dir / "clients.toml")
     result: dict[str, ClientRecord] = {}
@@ -343,12 +360,23 @@ def _read_clients(project_dir: Path) -> dict[str, ClientRecord]:
         slug = str(raw.get("slug") or "")
         if not slug:
             continue
+        history: list[tuple[date, float]] = []
+        for entry in raw.get("rate_history", []):
+            if not isinstance(entry, dict):
+                continue
+            try:
+                eff = date.fromisoformat(str(entry["effective"]))
+                history.append((eff, float(entry["rate"])))
+            except (KeyError, ValueError, TypeError):
+                continue
+        history.sort(key=lambda x: x[0])
         result[slug] = ClientRecord(
             slug=slug,
             name=str(raw.get("name") or slug),
             hourly_rate=float(raw.get("hourly_rate") or 0),
             email=str(raw.get("email") or ""),
             address=str(raw.get("address") or ""),
+            rate_history=tuple(history),
         )
     return result
 

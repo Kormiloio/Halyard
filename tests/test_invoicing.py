@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 import halyard.log_config as log_config
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
 from halyard.cli import app
+from halyard.invoicing import ClientRecord, _effective_rate
 from halyard.log_agent import run_log_query
 
 runner = CliRunner()
@@ -557,3 +558,61 @@ def test_render_ai_evidence_appendix_golden(tmp_path: Path) -> None:
     assert "Direct API" in appendix
     assert "$5.5000" in appendix
     assert "**Total AI cost**" in appendix
+
+
+# ---------------------------------------------------------------------------
+# Rate history tests
+# ---------------------------------------------------------------------------
+
+
+def test_effective_rate_no_history_returns_default() -> None:
+    client = ClientRecord(slug="acme", name="Acme", hourly_rate=150.0)
+    assert _effective_rate(client, date(2026, 1, 15)) == 150.0
+
+
+def test_effective_rate_picks_most_recent_before_date() -> None:
+    client = ClientRecord(
+        slug="acme",
+        name="Acme",
+        hourly_rate=175.0,
+        rate_history=(
+            (date(2025, 1, 1), 120.0),
+            (date(2026, 1, 1), 150.0),
+            (date(2026, 6, 1), 175.0),
+        ),
+    )
+    assert _effective_rate(client, date(2026, 3, 1)) == 150.0
+
+
+def test_effective_rate_all_future_falls_back_to_default() -> None:
+    client = ClientRecord(
+        slug="acme",
+        name="Acme",
+        hourly_rate=100.0,
+        rate_history=((date(2027, 1, 1), 200.0),),
+    )
+    assert _effective_rate(client, date(2026, 1, 1)) == 100.0
+
+
+def test_effective_rate_exact_effective_date_is_inclusive() -> None:
+    client = ClientRecord(
+        slug="acme",
+        name="Acme",
+        hourly_rate=100.0,
+        rate_history=((date(2026, 3, 1), 175.0),),
+    )
+    assert _effective_rate(client, date(2026, 3, 1)) == 175.0
+
+
+def test_read_clients_parses_rate_history(tmp_path: Path) -> None:
+    from halyard.invoicing import _read_clients
+
+    (tmp_path / "clients.toml").write_text(
+        '[[client]]\nslug = "acme"\nname = "Acme"\nhourly_rate = 175.0\n\n'
+        '[[client.rate_history]]\nrate = 150.0\neffective = "2026-01-01"\n\n'
+        '[[client.rate_history]]\nrate = 175.0\neffective = "2026-06-01"\n'
+    )
+    clients = _read_clients(tmp_path)
+    assert len(clients["acme"].rate_history) == 2
+    assert clients["acme"].rate_history[0] == (date(2026, 1, 1), 150.0)
+    assert clients["acme"].rate_history[1] == (date(2026, 6, 1), 175.0)
