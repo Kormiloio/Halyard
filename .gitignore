@@ -26,6 +26,9 @@ env/
 *.swp
 .DS_Store
 
+# Local private strategy notes
+strategy/
+
 # Halyard runtime
 .halyard-cache/
 .halyard/active

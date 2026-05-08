@@ -281,3 +281,87 @@ def test_find_project_dir_walks_up(tmp_path: Path) -> None:
 
 def test_find_project_dir_returns_none_when_absent(tmp_path: Path) -> None:
     assert find_project_dir(tmp_path) is None
+
+
+# ---------------------------------------------------------------------------
+# Rich session telemetry (v2.6)
+# ---------------------------------------------------------------------------
+
+
+def _base_session(**kwargs) -> AiSession:  # type: ignore[no-untyped-def]
+    return AiSession(
+        start=datetime(2026, 5, 8, 10, 0, 0),
+        end=datetime(2026, 5, 8, 10, 30, 0),
+        tool="gemini-cli",
+        model="gemini-2.0-flash",
+        input_tokens=500,
+        output_tokens=200,
+        cost_usd=0.0012,
+        **kwargs,
+    )
+
+
+def test_rich_fields_round_trip() -> None:
+    session = _base_session(
+        session_id="abc123def456",
+        tool_calls=42,
+        tool_errors=3,
+        wall_seconds=1800,
+        agent_active_seconds=900,
+        code_added=150,
+        code_removed=40,
+        model_breakdown="gemini-2.0-flash:8|gemini-2.0-pro:2",
+    )
+    line = session.to_log_line()
+    parsed = AiSession.from_log_line(line)
+    assert parsed is not None
+    assert parsed.session_id == "abc123def456"
+    assert parsed.tool_calls == 42
+    assert parsed.tool_errors == 3
+    assert parsed.wall_seconds == 1800
+    assert parsed.agent_active_seconds == 900
+    assert parsed.code_added == 150
+    assert parsed.code_removed == 40
+    assert parsed.model_breakdown == "gemini-2.0-flash:8|gemini-2.0-pro:2"
+
+
+def test_rich_fields_absent_on_old_log_line() -> None:
+    line = "s 2026-05-08T10:00:00 2026-05-08T10:30:00 gemini-cli gemini-2.0-flash 500 200 0.0012"
+    parsed = AiSession.from_log_line(line)
+    assert parsed is not None
+    assert parsed.tool_calls is None
+    assert parsed.tool_errors is None
+    assert parsed.wall_seconds is None
+    assert parsed.session_id is None
+    assert parsed.model_breakdown is None
+
+
+def test_rich_fields_omitted_when_none() -> None:
+    session = _base_session()
+    line = session.to_log_line()
+    assert "tool_calls" not in line
+    assert "tool_errors" not in line
+    assert "wall_seconds" not in line
+    assert "session_id" not in line
+    assert "model_breakdown" not in line
+
+
+def test_malformed_rich_field_ignored() -> None:
+    line = "s 2026-05-08T10:00:00 2026-05-08T10:30:00 gemini-cli gemini-2.0-flash 500 200 0.0012 tool_calls=notanint"
+    parsed = AiSession.from_log_line(line)
+    assert parsed is not None
+    assert parsed.tool_calls is None
+
+
+def test_unknown_rich_field_ignored() -> None:
+    line = "s 2026-05-08T10:00:00 2026-05-08T10:30:00 gemini-cli gemini-2.0-flash 500 200 0.0012 future_field=somevalue"
+    parsed = AiSession.from_log_line(line)
+    assert parsed is not None  # must not crash
+
+
+def test_tool_errors_zero_written_when_calls_known() -> None:
+    # tool_errors=0 is meaningful: "5 calls, 0 errors" vs "unknown"
+    session = _base_session(tool_calls=5, tool_errors=0)
+    line = session.to_log_line()
+    assert "tool_calls=5" in line
+    assert "tool_errors=0" in line

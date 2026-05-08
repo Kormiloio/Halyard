@@ -4,7 +4,7 @@
 - [x] Write proposal.md
 - [x] Write design.md
 - [x] Write specs/agent-loop.md
-- [ ] Write design.md (SDK structured output approach, tool dispatch)
+- [x] Write design.md (SDK structured output approach, tool dispatch)
 
 ## `src/halyard/log_agent.py` — SDK Integration
 - [x] Add `anthropic` import and initialization.

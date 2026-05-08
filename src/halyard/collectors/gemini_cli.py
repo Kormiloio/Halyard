@@ -35,7 +35,11 @@ from halyard.ai_log import (
     find_project_dir,
     write_unattributed_session,
 )
-from halyard.collectors.gemini_history import find_session_file, parse_session_file
+from halyard.collectors.gemini_history import (
+    GeminiModelStats,
+    find_session_file,
+    parse_session_file,
+)
 from halyard.git_context import current_branch, infer_project
 from halyard.hub import find_hub
 from halyard.pricing import calculate_cost
@@ -131,6 +135,15 @@ def handle_agent_stop() -> int:
         if history_path:
             history_summary = parse_session_file(history_path)
 
+    rich_session_id: str | None = session_id or None
+    rich_tool_calls: int | None = None
+    rich_tool_errors: int | None = None
+    rich_wall_seconds: int | None = None
+    rich_model_breakdown: str | None = None
+    rich_code_added: int | None = None
+    rich_code_removed: int | None = None
+    rich_resume_command: str | None = None
+
     if history_summary:
         model = history_summary.dominant_model or "gemini-unknown"
         net_input = history_summary.total_input
@@ -138,12 +151,17 @@ def handle_agent_stop() -> int:
         cache_tokens = history_summary.total_cache
         cost = history_summary.cost_usd
         tokens_available = net_input > 0 or output_tokens > 0
-        extra_tags: list[str] = []
+        tags = base_tags
+        # Rich telemetry — use proper fields, not tags
         if history_summary.total_tool_calls:
-            extra_tags.append(f"tools:{history_summary.total_tool_calls}")
+            rich_tool_calls = history_summary.total_tool_calls
         if history_summary.total_tool_errors:
-            extra_tags.append(f"tool_errors:{history_summary.total_tool_errors}")
-        tags = base_tags + extra_tags
+            rich_tool_errors = history_summary.total_tool_errors
+        rich_wall_seconds = max(0, int((now - start).total_seconds()))
+        rich_model_breakdown = _format_model_breakdown(history_summary.model_stats) or None
+        rich_code_added = history_summary.code_added
+        rich_code_removed = history_summary.code_removed
+        rich_resume_command = history_summary.resume_command
     else:
         # Fall back to accumulated hook state
         model = (state or {}).get("model") or payload.get("model") or "gemini-unknown"
@@ -154,6 +172,7 @@ def handle_agent_stop() -> int:
         cost = calculate_cost(model, net_input, output_tokens, cache_read=cache_tokens)
         tokens_available = prompt_tokens > 0 or output_tokens > 0
         tags = base_tags
+        rich_wall_seconds = max(0, int((now - start).total_seconds()))
 
     session = AiSession(
         start=start,
@@ -169,6 +188,14 @@ def handle_agent_stop() -> int:
         billing="api",
         source="hook",
         tags=tags,
+        session_id=rich_session_id,
+        tool_calls=rich_tool_calls,
+        tool_errors=rich_tool_errors,
+        wall_seconds=rich_wall_seconds,
+        model_breakdown=rich_model_breakdown,
+        code_added=rich_code_added,
+        code_removed=rich_code_removed,
+        resume_command=rich_resume_command,
     )
 
     if can_append_project_log and project_dir is not None:
@@ -218,6 +245,12 @@ def _reset_state(payload: dict) -> None:  # type: ignore[type-arg]
     state["output_tokens"] = 0
     state["cache_tokens"] = 0
     _GC_SESSION_FILE.write_text(json.dumps(state))
+
+
+def _format_model_breakdown(model_stats: list[GeminiModelStats]) -> str:
+    """Compact model breakdown: 'gemini-2.0-flash:3|gemini-2.0-pro:1'."""
+    parts = [f"{s.model}:{s.requests}" for s in model_stats if s.requests > 0]
+    return "|".join(parts)
 
 
 def _read_active_project() -> str | None:

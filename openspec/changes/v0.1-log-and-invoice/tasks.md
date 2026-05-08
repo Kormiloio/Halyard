@@ -28,23 +28,23 @@ designed.
 ## `src/halyard/log_agent.py` (new module)
 
 ### LogQueryResponse types
-- [ ] Define `SessionRow` dataclass (start, end, tool, model, cost_usd, project, tags)
-- [ ] Define `ProjectSummary` dataclass (project, cost_usd, input_tokens, output_tokens, session_count)
-- [ ] Define `ModelSummary` dataclass (model, cost_usd, input_tokens, output_tokens, session_count)
+- [x] Define `SessionRow` dataclass (start, end, tool, model, cost_usd, project, tags)
+- [x] Define `ProjectSummary` dataclass (project, cost_usd, input_tokens, output_tokens, session_count)
+- [x] Define `ModelSummary` dataclass (model, cost_usd, input_tokens, output_tokens, session_count)
 - [x] Define local `LogQueryResponse` dataclass (answer, data_source, period, cost_usd_total, session_count, projects, models)
 - [x] Define provider selection (`local`, `claude`) without coupling captured tools to one AI vendor
 
 ### Agent tools
-- [ ] Implement `read_sessions(project?, start?, end?, tool?, limit?)` — filtered log read
-- [ ] Implement `summarize_by_project(start?, end?)` — aggregated per-project totals
-- [ ] Implement `summarize_by_model(start?, end?)` — aggregated per-model totals
-- [ ] Implement `cost_by_branch(branch, start?, end?)` — sessions by branch tag
-- [ ] Implement `read_timeclock(start?, end?)` — time entries from time.timeclock
+- [x] Implement `read_sessions(project?, start?, end?, tool?, limit?)` — filtered log read
+- [x] Implement `summarize_by_project(start?, end?)` — aggregated per-project totals
+- [x] Implement `summarize_by_model(start?, end?)` — aggregated per-model totals
+- [x] Implement `cost_by_branch(branch, start?, end?)` — sessions by branch tag
+- [x] Implement `read_timeclock(start?, end?)` — time entries from time.timeclock
 
 ### Agent runner
 - [x] Implement deterministic local provider over shared report functions
 - [x] Implement deterministic intent parsing for tool, period, project, model, and branch
-- [ ] Implement `run_log_query(query, log_path, model, period) -> LogQueryResponse`
+- [x] Implement `run_log_query(query, log_path, model, period) -> LogQueryResponse`
   - Build system context (project config, budget state, pricing table age)
   - Define tool schemas for Claude SDK tool use
   - Single-turn tool-use loop (dispatch tools, collect results, final response)
@@ -74,7 +74,7 @@ designed.
   - `--period` option (today / week / month / all, default month)
   - Auto-detect project dir; error clearly if missing
   - Render deterministic local summary or emit JSON
-- [ ] Upgrade `halyard log` to the full SDK-backed agent
+- [x] Upgrade `halyard log` to the full SDK-backed agent
   - `--model` option (default `claude-haiku-4-5`)
   - `--log` option
   - hub fallback / `data_source` field
@@ -90,11 +90,11 @@ designed.
   - Call `generate_invoice()`, handle all error cases with clear messages
 
 ## Tests (`tests/test_log_agent.py`)
-- [ ] `test_run_log_query_summarize_by_project` — mock SDK, verify tool dispatch and response
-- [ ] `test_run_log_query_no_sessions` — empty log returns informative answer
+- [x] `test_run_log_query_summarize_by_project` — mock SDK, verify tool dispatch and response
+- [x] `test_run_log_query_no_sessions` — empty log returns informative answer
 - [ ] `test_run_log_query_uses_hub_fallback` — when no project dir, uses hub log
-- [ ] `test_run_log_query_no_api_key` — raises `LogAgentError` with clear message
-- [ ] `test_run_log_query_json_output` — `LogQueryResponse` serializes to valid JSON
+- [x] `test_run_log_query_no_api_key` — raises `LogAgentError` with clear message
+- [x] `test_run_log_query_json_output` — `LogQueryResponse` serializes to valid JSON
 
 ## Tests (`tests/test_invoicing.py`)
 - [x] `test_generate_invoice_basic` — rendered markdown output

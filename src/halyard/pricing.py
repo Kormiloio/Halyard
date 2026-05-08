@@ -77,7 +77,7 @@ def _load_local_pricing() -> dict[str, tuple[float, float]]:
     try:
         data = tomllib.loads(_LOCAL_PRICING_FILE.read_text())
         return _parse_models_table(data)
-    except Exception:
+    except (tomllib.TOMLDecodeError, ValueError):
         return {}
 
 
@@ -111,7 +111,7 @@ def _get_multipliers(data: dict[str, object], model: str) -> tuple[float, float]
         read_mult = float(entry.get("cache_read_multiplier", _CACHE_READ_MULTIPLIER))
         write_mult = float(entry.get("cache_write_multiplier", _CACHE_WRITE_MULTIPLIER))
         return read_mult, write_mult
-    except Exception:
+    except (AssertionError, TypeError, ValueError):
         return _CACHE_READ_MULTIPLIER, _CACHE_WRITE_MULTIPLIER
 
 
@@ -121,7 +121,7 @@ def _load_local_toml_raw() -> dict[str, object] | None:
     try:
         result: dict[str, object] = tomllib.loads(_LOCAL_PRICING_FILE.read_text())
         return result
-    except Exception:
+    except tomllib.TOMLDecodeError:
         return None
 
 
@@ -196,7 +196,7 @@ def update_pricing(timeout: int = 5) -> tuple[int, int]:
         with os.fdopen(fd, "w") as f:
             f.write(content)
         os.replace(tmp_path, _LOCAL_PRICING_FILE)
-    except Exception:
+    except OSError:
         with suppress(OSError):
             os.unlink(tmp_path)
         raise

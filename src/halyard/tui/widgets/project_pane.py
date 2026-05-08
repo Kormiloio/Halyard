@@ -39,20 +39,54 @@ class ProjectPane(Static):
             "Models",
         ]
         lines.extend(_model_lines(sessions))
+        lines.extend(["", "Work Health"])
+        lines.extend(_health_lines(sessions))
         lines.extend(["", "Recent Sessions"])
         for session in sessions[:12]:
             tokens = session.input_tokens + session.output_tokens
+            err = f" ⚠{session.tool_errors}e" if session.tool_errors else ""
             lines.append(
                 f"{tool_icon(session.tool)} "
                 f"{truncate(session.model, 18):18} "
                 f"{duration_str(session.end - session.start):>7} "
                 f"{tokens:>8} tok "
                 f"{cost_str(session.cost_usd):>9}"
+                f"{err}"
             )
+        # Most recent resume command, if any
+        resume = next(
+            (s.resume_command for s in sessions if s.resume_command),
+            None,
+        )
+        if resume:
+            lines.append(f"\nResume: {resume}")
         lines.append("")
         lines.append("Escape returns to feed")
         self.last_rendered_text = "\n".join(lines)
         self.update(self.last_rendered_text)
+
+
+def _health_lines(sessions: list[AiSession]) -> list[str]:
+    """Aggregate work-health signals across sessions. Signals, not scores."""
+    rich = [s for s in sessions if s.tool_calls is not None]
+    if not rich:
+        return ["  No tool telemetry captured yet."]
+    total_calls = sum(s.tool_calls or 0 for s in rich)
+    total_errors = sum(s.tool_errors or 0 for s in rich)
+    error_rate = (total_errors / total_calls * 100) if total_calls else 0.0
+    wall_list = [s.wall_seconds for s in rich if s.wall_seconds is not None]
+    avg_wall = sum(wall_list) / len(wall_list) if wall_list else None
+    lines = [
+        f"  Tool calls:  {total_calls}  |  Errors: {total_errors}  ({error_rate:.0f}%)",
+    ]
+    if avg_wall is not None:
+        lines.append(f"  Avg wall time: {int(avg_wall)}s across {len(wall_list)} sessions")
+    # Code delta — aggregate across sessions that have it
+    added = sum(s.code_added for s in sessions if s.code_added is not None)
+    removed = sum(s.code_removed for s in sessions if s.code_removed is not None)
+    if added or removed:
+        lines.append(f"  Code delta:  +{added} / -{removed} lines")
+    return lines
 
 
 def _model_lines(sessions: list[AiSession]) -> list[str]:

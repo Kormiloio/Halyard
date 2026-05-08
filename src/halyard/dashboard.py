@@ -8,17 +8,22 @@ import html
 import socket
 import webbrowser
 from collections.abc import Iterable
+from datetime import datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from halyard.ai_log import AiSession
+from halyard.ai_plans import read_ai_plans
+from halyard.budget import BudgetStatus, budget_status
+from halyard.ledger import LedgerSummary, build_ledger
 from halyard.reports import (
     CostBucket,
     DashboardState,
     TimeBucket,
     build_dashboard_state,
     format_minutes,
+    parse_timeclock,
 )
 
 
@@ -94,6 +99,19 @@ def _render_state(state: DashboardState) -> str:
         else "Start one with halyard start"
     )
     health_level = _overall_health(state)
+
+    # Budget data
+    budgets = budget_status()
+
+    # Ledger / trust data
+    plans = read_ai_plans(state.project_dir)
+    tc_entries = parse_timeclock(state.project_dir / "time.timeclock")
+    now = state.generated_at
+    ledger = (
+        build_ledger(report.sessions, plans, tc_entries, year=now.year, month=now.month)
+        if plans
+        else None
+    )
 
     return f"""<!doctype html>
 <html lang="en">
@@ -175,17 +193,17 @@ def _render_state(state: DashboardState) -> str:
         {_bucket_table(report.by_project, "Project")}
       </article>
 
-      <article class="panel span-3">
+      <article class="panel span-4">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Mix</p>
             <h2>Models</h2>
           </div>
         </div>
-        {_bucket_table(report.by_model, "Model")}
+        {_model_table(report.by_model)}
       </article>
 
-      <article class="panel span-3">
+      <article class="panel span-4">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Capture</p>
@@ -193,6 +211,27 @@ def _render_state(state: DashboardState) -> str:
           </div>
         </div>
         {_bucket_table(report.by_tool, "Tool")}
+      </article>
+
+      <article class="panel span-4">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Spend Limits</p>
+            <h2>Budget</h2>
+          </div>
+        </div>
+        {_budget_panel(budgets)}
+      </article>
+
+      <article class="panel span-12">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Cost Allocation</p>
+            <h2>Costs</h2>
+          </div>
+          <span class="pill">{_e(report.period_label)}</span>
+        </div>
+        {_costs_panel(ledger, report.by_project)}
       </article>
     </section>
 
@@ -226,20 +265,70 @@ def _metric(label: str, value: str, detail: str, tone: str) -> str:
 def _sessions_table(sessions: Iterable[AiSession]) -> str:
     rows = []
     for session in list(sessions)[-8:][::-1]:
+        icon = _tool_icon(session.tool)
+        dur = _duration_str(session.end - session.start)
+        health = _health_badge(session)
         rows.append(
             "<tr>"
             f"<td>{_e(session.end.strftime('%H:%M'))}</td>"
+            f"<td><span class='tool-icon tool-{_e(icon)}'>{_e(icon)}</span></td>"
             f"<td>{_e(session.project or '(unattributed)')}</td>"
             f"<td>{_e(session.model)}</td>"
-            f"<td>{session.input_tokens:,} / {session.output_tokens:,}</td>"
-            f"<td>${session.cost_usd:.4f}</td>"
+            f"<td class='num'>{_e(dur)}</td>"
+            f"<td class='num'>{session.input_tokens:,} / {session.output_tokens:,}</td>"
+            f"<td class='num'>${session.cost_usd:.4f}</td>"
+            f"<td class='num'>{health}</td>"
             "</tr>"
         )
     if not rows:
         return '<p class="empty">No AI sessions captured for this period.</p>'
     return (
-        "<table><thead><tr><th>Time</th><th>Project</th><th>Model</th>"
-        "<th>Tokens</th><th>Cost</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+        "<table><thead><tr><th>Time</th><th>Tool</th><th>Project</th><th>Model</th>"
+        "<th>Dur</th><th>Tokens</th><th>Cost</th><th>Health</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
+def _health_badge(session: AiSession) -> str:
+    parts: list[str] = []
+    if session.tool_calls is not None:
+        calls = session.tool_calls
+        errors = session.tool_errors or 0
+        if errors == 0:
+            parts.append(f"<span class='trust-captured'>{calls}c 0e</span>")
+        else:
+            rate = errors / calls if calls else 1.0
+            css = "trust-allocated" if rate < 0.25 else "trust-unallocated"
+            parts.append(f"<span class='{css}'>{calls}c {errors}e</span>")
+    if session.code_added is not None or session.code_removed is not None:
+        added = session.code_added or 0
+        removed = session.code_removed or 0
+        parts.append(f"<span class='dim'>+{added}/-{removed}</span>")
+    return " ".join(parts) if parts else "<span class='dim'>—</span>"
+
+
+def _model_table(buckets: Iterable[CostBucket]) -> str:
+    bucket_list = list(buckets)
+    if not bucket_list:
+        return '<p class="empty">No model data yet.</p>'
+    total_cost = sum(b.cost_usd for b in bucket_list) or 1.0
+    rows = []
+    for bucket in bucket_list:
+        pct = int((bucket.cost_usd / total_cost) * 100)
+        rows.append(
+            "<tr>"
+            f"<td>{_e(bucket.label)}</td>"
+            f"<td class='num'>{bucket.sessions}</td>"
+            f"<td class='num'>${bucket.cost_usd:.2f}</td>"
+            f"<td><div class='bar-cell'>"
+            f"<div class='bar-wrap'><div class='bar' style='width:{pct}%'></div></div>"
+            f"<span>{pct}%</span></div></td>"
+            "</tr>"
+        )
+    return (
+        "<table><thead><tr><th>Model</th><th>Sessions</th><th>Cost</th><th>Share</th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
     )
 
 
@@ -249,8 +338,8 @@ def _bucket_table(buckets: Iterable[CostBucket], label: str) -> str:
         rows.append(
             "<tr>"
             f"<td>{_e(bucket.label)}</td>"
-            f"<td>{bucket.sessions}</td>"
-            f"<td>${bucket.cost_usd:.2f}</td>"
+            f"<td class='num'>{bucket.sessions}</td>"
+            f"<td class='num'>${bucket.cost_usd:.2f}</td>"
             "</tr>"
         )
     if not rows:
@@ -258,6 +347,93 @@ def _bucket_table(buckets: Iterable[CostBucket], label: str) -> str:
     return (
         f"<table><thead><tr><th>{_e(label)}</th><th>Sessions</th><th>Cost</th>"
         "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+    )
+
+
+def _budget_panel(statuses: list[BudgetStatus]) -> str:
+    if not statuses:
+        return '<p class="empty">No budgets configured.<br>Run <code>halyard set-budget</code> to add limits.</p>'
+    items = []
+    for s in statuses:
+        month_cls = _budget_class(s.month_spend, s.month_limit)
+        day_cls = _budget_class(s.today_spend, s.today_limit)
+        bar_pct = _budget_pct(s.month_spend, s.month_limit)
+        items.append(
+            f"<div class='budget-item'>"
+            f"<div class='budget-item-head'>"
+            f"<span class='budget-slug'>{_e(s.slug)}</span>"
+            f"<span class='badge badge-{_e(month_cls)}'>{_e(month_cls)}</span>"
+            f"</div>"
+            f"<div class='bar-wrap'><div class='bar bar-{_e(month_cls)}' style='width:{bar_pct}%'></div></div>"
+            f"<div class='budget-nums'>"
+            f"<span>Today <strong class='spend-{_e(day_cls)}'>{_fmt_limit(s.today_spend, s.today_limit)}</strong></span>"
+            f"<span>Month <strong class='spend-{_e(month_cls)}'>{_fmt_limit(s.month_spend, s.month_limit)}</strong></span>"
+            f"</div>"
+            f"</div>"
+        )
+    return "<div class='budget-list'>" + "".join(items) + "</div>"
+
+
+def _costs_panel(ledger: LedgerSummary | None, by_project: list[CostBucket]) -> str:
+    if ledger is None:
+        # No plans: show simple per-project totals, note that trust needs plans
+        rows = []
+        for bucket in by_project:
+            rows.append(
+                "<tr>"
+                f"<td>{_e(bucket.label)}</td>"
+                f"<td class='num'>{bucket.sessions}</td>"
+                f"<td class='num'>${bucket.cost_usd:.4f}</td>"
+                "<td>—</td>"
+                f"<td class='num'>${bucket.cost_usd:.4f}</td>"
+                f"<td><span class='trust trust-captured'>captured</span></td>"
+                "</tr>"
+            )
+        if not rows:
+            table = '<p class="empty">No sessions this period.</p>'
+        else:
+            table = (
+                "<table><thead><tr><th>Project</th><th>Sessions</th><th>Direct API</th>"
+                "<th>Allocated</th><th>Total</th><th>Trust</th></tr></thead><tbody>"
+                + "".join(rows)
+                + "</tbody></table>"
+            )
+        note = '<p class="costs-note">Add <code>ai-plans.toml</code> to see seat/credits allocation and full trust labels.</p>'
+        return table + note
+
+    # With plans: show full ledger breakdown
+    rows = []
+    for entry in ledger.entries:
+        trust_cls = entry.trust.replace("_", "-")
+        inferred_marker = ' <span class="inferred-dot" title="Project inferred from timeclock">~</span>' if entry.has_inferred_attribution else ""
+        rows.append(
+            "<tr>"
+            f"<td>{_e(entry.project)}{inferred_marker}</td>"
+            f"<td class='num'>{entry.sessions}</td>"
+            f"<td class='num'>${entry.direct_usd:.4f}</td>"
+            f"<td class='num'>${entry.allocated_usd:.4f}</td>"
+            f"<td class='num'><strong>${entry.total_usd:.4f}</strong></td>"
+            f"<td><span class='trust trust-{_e(trust_cls)}'>{_e(entry.trust)}</span></td>"
+            "</tr>"
+        )
+    if not rows:
+        return '<p class="empty">No sessions this period.</p>'
+
+    footer = (
+        f"<tfoot><tr>"
+        f"<td><strong>Total</strong></td><td></td>"
+        f"<td class='num'><strong>${ledger.total_direct_usd:.4f}</strong></td>"
+        f"<td class='num'><strong>${ledger.total_allocated_usd:.4f}</strong></td>"
+        f"<td class='num'><strong>${ledger.total_usd:.4f}</strong></td>"
+        f"<td></td></tr></tfoot>"
+    )
+    return (
+        "<table><thead><tr><th>Project</th><th>Sessions</th><th>Direct API</th>"
+        "<th>Allocated</th><th>Total</th><th>Trust</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody>"
+        + footer
+        + "</table>"
     )
 
 
@@ -269,8 +445,8 @@ def _unattributed_table(sessions: Iterable[AiSession]) -> str:
             f"<td>{_e(session.end.strftime('%Y-%m-%d %H:%M'))}</td>"
             f"<td>{_e(session.tool)}</td>"
             f"<td>{_e(session.model)}</td>"
-            f"<td>{session.input_tokens:,} / {session.output_tokens:,}</td>"
-            f"<td>${session.cost_usd:.4f}</td>"
+            f"<td class='num'>{session.input_tokens:,} / {session.output_tokens:,}</td>"
+            f"<td class='num'>${session.cost_usd:.4f}</td>"
             "</tr>"
         )
     if not rows:
@@ -285,7 +461,7 @@ def _time_table(buckets: Iterable[TimeBucket]) -> str:
     rows = []
     for bucket in buckets:
         rows.append(
-            f"<tr><td>{_e(bucket.label)}</td><td>{_e(format_minutes(bucket.minutes))}</td></tr>"
+            f"<tr><td>{_e(bucket.label)}</td><td class='num'>{_e(format_minutes(bucket.minutes))}</td></tr>"
         )
     if not rows:
         return '<p class="empty">No human time recorded this month.</p>'
@@ -309,6 +485,55 @@ def _latest_label(session: AiSession | None) -> str:
     return _e(f"{session.tool} {session.model} at {session.end.strftime('%H:%M')}")
 
 
+def _tool_icon(tool: str) -> str:
+    t = tool.lower()
+    if "claude" in t:
+        return "C"
+    if "cursor" in t:
+        return "X"
+    if "gemini" in t:
+        return "G"
+    if "codex" in t:
+        return "O"
+    return "A"
+
+
+def _duration_str(delta: timedelta) -> str:
+    seconds = max(0, int(delta.total_seconds()))
+    minutes, secs = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h{minutes:02d}m"
+    if minutes:
+        return f"{minutes}m"
+    return f"{secs}s"
+
+
+def _budget_class(spend: float, limit: float | None) -> str:
+    if limit is None or limit <= 0:
+        return "ok"
+    ratio = spend / limit
+    if ratio > 1.0:
+        return "over"
+    if ratio >= 0.8:
+        return "high"
+    if ratio >= 0.5:
+        return "warn"
+    return "ok"
+
+
+def _budget_pct(spend: float, limit: float | None) -> int:
+    if limit is None or limit <= 0:
+        return 0
+    return min(100, int((spend / limit) * 100))
+
+
+def _fmt_limit(spend: float, limit: float | None) -> str:
+    if limit is None:
+        return f"${spend:.2f} / —"
+    return f"${spend:.2f} / ${limit:.2f}"
+
+
 def _e(value: object) -> str:
     return html.escape(str(value))
 
@@ -326,6 +551,7 @@ _CSS = """
   --green: #70e18f;
   --amber: #f3bf5b;
   --red: #ff6f6f;
+  --purple: #b09fe8;
 }
 * { box-sizing: border-box; }
 body {
@@ -373,6 +599,7 @@ h2 { font-size: 17px; }
 .span-12 { grid-column: span 12; }
 .span-6 { grid-column: span 6; }
 .span-5 { grid-column: span 5; }
+.span-4 { grid-column: span 4; }
 .span-3 { grid-column: span 3; }
 .panel-head { min-height: 42px; display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .attention-on { border-color: rgba(243, 191, 91, .62); }
@@ -380,7 +607,9 @@ h2 { font-size: 17px; }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 th, td { border-bottom: 1px solid rgba(37, 64, 74, .72); padding: 10px 8px; text-align: left; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 th { color: var(--muted); font-size: 11px; text-transform: uppercase; }
-.empty { min-height: 150px; display: grid; place-items: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; margin: 0; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tfoot td { border-bottom: none; border-top: 1px solid var(--line); }
+.empty { min-height: 150px; display: grid; place-items: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; margin: 0; text-align: center; line-height: 1.6; }
 .health-list { display: grid; gap: 10px; }
 .health-row { display: grid; grid-template-columns: 14px 1fr; align-items: center; gap: 10px; min-height: 42px; padding: 10px; border: 1px solid rgba(37,64,74,.7); border-radius: 8px; background: var(--panel-2); }
 .health-row strong, .health-row small { display: block; }
@@ -391,9 +620,56 @@ th { color: var(--muted); font-size: 11px; text-transform: uppercase; }
 .dot-error { background: var(--red); box-shadow: 0 0 18px rgba(255, 111, 111, .5); }
 .dot-neutral { background: var(--muted); }
 footer { padding: 18px 2px 0; font-size: 12px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 3px; }
+
+/* Tool icons */
+.tool-icon { display: inline-block; width: 18px; height: 18px; border-radius: 4px; font-size: 11px; font-weight: 800; text-align: center; line-height: 18px; }
+.tool-C { background: rgba(69, 214, 208, .15); color: var(--cyan); }
+.tool-X { background: rgba(112, 225, 143, .12); color: var(--green); }
+.tool-G { background: rgba(243, 191, 91, .12); color: var(--amber); }
+.tool-O, .tool-A { background: rgba(255,255,255,.08); color: var(--muted); }
+
+/* Progress bars */
+.bar-wrap { width: 100%; background: var(--line); border-radius: 99px; height: 4px; overflow: hidden; }
+.bar { height: 100%; border-radius: 99px; background: var(--cyan); transition: width .3s; }
+.bar-ok { background: var(--green); }
+.bar-warn { background: var(--amber); }
+.bar-high { background: var(--amber); opacity: .85; }
+.bar-over { background: var(--red); }
+.bar-cell { display: flex; align-items: center; gap: 8px; }
+.bar-cell .bar-wrap { flex: 1; min-width: 40px; }
+.bar-cell span { font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 30px; text-align: right; }
+
+/* Budget panel */
+.budget-list { display: grid; gap: 8px; }
+.budget-item { padding: 10px 12px; border: 1px solid rgba(37,64,74,.7); border-radius: 8px; background: var(--panel-2); }
+.budget-item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.budget-slug { font-size: 13px; font-weight: 600; }
+.budget-nums { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 8px; }
+.badge { border-radius: 99px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+.badge-ok { background: rgba(112, 225, 143, .15); color: var(--green); }
+.badge-warn { background: rgba(243, 191, 91, .15); color: var(--amber); }
+.badge-high { background: rgba(243, 191, 91, .25); color: var(--amber); }
+.badge-over { background: rgba(255, 111, 111, .15); color: var(--red); }
+.spend-ok strong, .spend-ok { color: inherit; }
+.spend-warn strong, .spend-warn { color: var(--amber); }
+.spend-high strong, .spend-high { color: var(--amber); }
+.spend-over strong, .spend-over { color: var(--red); }
+
+/* Trust labels */
+.trust { display: inline-block; border-radius: 99px; padding: 2px 9px; font-size: 11px; font-weight: 700; }
+.trust-captured { background: rgba(112, 225, 143, .15); color: var(--green); }
+.trust-calculated { background: rgba(69, 214, 208, .15); color: var(--cyan); }
+.trust-allocated { background: rgba(243, 191, 91, .15); color: var(--amber); }
+.trust-inferred { background: rgba(255,255,255,.08); color: var(--muted); }
+.trust-mixed { background: rgba(176, 159, 232, .2); color: var(--purple); }
+.trust-unallocated { background: rgba(255,255,255,.06); color: var(--muted); }
+.inferred-dot { color: var(--muted); font-size: 11px; cursor: help; }
+.costs-note { font-size: 12px; color: var(--muted); margin-top: 12px; }
+
 @media (max-width: 1100px) {
   body { min-width: 760px; }
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .span-7, .span-6, .span-5, .span-3 { grid-column: span 12; }
+  .span-7, .span-6, .span-5, .span-4, .span-3 { grid-column: span 12; }
 }
 """

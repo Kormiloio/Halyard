@@ -35,6 +35,16 @@ class AiSession:
     source: str | None = None
     tags: list[str] = field(default_factory=list)
     note: str | None = None
+    # Rich session telemetry (v2.6 — optional, all surfaces backward-compatible)
+    session_id: str | None = None
+    tool_calls: int | None = None
+    tool_errors: int | None = None
+    wall_seconds: int | None = None
+    agent_active_seconds: int | None = None
+    code_added: int | None = None
+    code_removed: int | None = None
+    model_breakdown: str | None = None  # compact: "model-a:3|model-b:1"
+    resume_command: str | None = None
 
     @classmethod
     def from_log_line(cls, line: str) -> AiSession | None:
@@ -83,7 +93,28 @@ class AiSession:
         if self.tags:
             kvs.append(f"tags={','.join(self.tags)}")
         if self.note:
-            kvs.append(f"note={self.note.replace(' ', '_')}")
+            note_safe = self.note.replace("\n", " ").replace("\r", "").replace("\t", " ").replace(" ", "_")
+            kvs.append(f"note={note_safe}")
+        if self.session_id:
+            safe_sid = self.session_id.replace(" ", "")
+            kvs.append(f"session_id={safe_sid}")
+        if self.tool_calls is not None:
+            kvs.append(f"tool_calls={self.tool_calls}")
+        if self.tool_errors is not None:
+            kvs.append(f"tool_errors={self.tool_errors}")
+        if self.wall_seconds is not None:
+            kvs.append(f"wall_seconds={self.wall_seconds}")
+        if self.agent_active_seconds is not None:
+            kvs.append(f"agent_active_seconds={self.agent_active_seconds}")
+        if self.code_added is not None:
+            kvs.append(f"code_added={self.code_added}")
+        if self.code_removed is not None:
+            kvs.append(f"code_removed={self.code_removed}")
+        if self.model_breakdown:
+            kvs.append(f"model_breakdown={self.model_breakdown}")
+        if self.resume_command:
+            safe_cmd = self.resume_command.replace(" ", "_").replace("\n", "").replace("\r", "")
+            kvs.append(f"resume_command={safe_cmd}")
         return " ".join(parts + kvs)
 
 
@@ -225,6 +256,30 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
                 session.tags = v.split(",")
             case "note":
                 session.note = v.replace("_", " ")
+            case "session_id":
+                session.session_id = v
+            case "tool_calls":
+                with suppress(ValueError):
+                    session.tool_calls = int(v)
+            case "tool_errors":
+                with suppress(ValueError):
+                    session.tool_errors = int(v)
+            case "wall_seconds":
+                with suppress(ValueError):
+                    session.wall_seconds = int(v)
+            case "agent_active_seconds":
+                with suppress(ValueError):
+                    session.agent_active_seconds = int(v)
+            case "code_added":
+                with suppress(ValueError):
+                    session.code_added = int(v)
+            case "code_removed":
+                with suppress(ValueError):
+                    session.code_removed = int(v)
+            case "model_breakdown":
+                session.model_breakdown = v
+            case "resume_command":
+                session.resume_command = v.replace("_", " ")
 
     return session, None
 

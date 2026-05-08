@@ -67,13 +67,20 @@ console = Console()
 
 @app.callback(invoke_without_command=True)
 def default(ctx: typer.Context) -> None:
-    """Drop into the interactive Claude REPL when invoked with no subcommand."""
+    """Drop into the interactive REPL when invoked with no subcommand."""
     if ctx.invoked_subcommand is None:
-        console.print(
-            "[bold cyan]Halyard[/] — interactive REPL not yet implemented "
-            "(see openspec/changes/v0-time-and-invoice/tasks.md task 5.4)."
-        )
-        raise typer.Exit(code=1)
+        from halyard.ai_log import find_project_dir
+        from halyard.repl import run_repl
+
+        project_dir = find_project_dir()
+        if project_dir is None:
+            console.print(
+                "[bold red]Error:[/] No Halyard project found. "
+                "Run [bold]halyard init[/] to create one."
+            )
+            raise typer.Exit(code=1)
+
+        run_repl(project_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -188,10 +195,11 @@ def log(
     openai (OPENAI_API_KEY or --base-url for local servers like Ollama).
     """
     from halyard.ai_log import find_project_dir
+    from halyard.hub import find_hub
     from halyard.log_agent import LogAgent, LogAgentError, LogQueryFilters, run_log_query
     from halyard.log_config import load_log_config
 
-    project_dir = find_project_dir()
+    project_dir = find_project_dir() or find_hub()
     if project_dir is None:
         console.print(
             "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
@@ -700,6 +708,120 @@ def sample_session(
     )
 
 
+@app.command(name="seed-demo")
+def seed_demo(
+    yes: bool = typer.Option(False, "--yes", help="Confirm appending to an existing log."),
+) -> None:
+    """Seed ai-sessions.log with realistic demo data for dashboard previews."""
+    import random
+    from datetime import datetime, timedelta
+
+    from halyard.ai_log import AiSession, append_session, find_project_dir, parse_sessions
+
+    project_dir = find_project_dir()
+    if project_dir is None:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
+        raise typer.Exit(code=1)
+
+    existing = parse_sessions(project_dir)
+    if existing and not yes:
+        console.print(
+            f"[yellow]Log already has {len(existing)} session(s).[/] "
+            "Pass [bold]--yes[/] to append demo data anyway."
+        )
+        raise typer.Exit(code=1)
+
+    now = datetime.now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    rng = random.Random(42)  # deterministic seed for reproducible demos
+
+    tool_models = {
+        "claude-code": "claude-sonnet-4-6",
+        "gemini-cli": "gemini-2.0-flash",
+        "cursor": "gpt-4o",
+    }
+
+    # fmt: off
+    # (project, tool, cost, in_tok, out_tok, mins, calls, errs, added, removed, day)
+    sessions_spec = [
+        ("acme:auth",          "claude-code", 0.45, 18000, 3200, 25, 32,   3,  88, 12,  0),
+        ("acme:auth",          "claude-code", 0.82, 31000, 5400, 40, 58,   2, 215, 40,  1),
+        ("acme:auth",          "gemini-cli",  0.28, 12000, 1800, 18, 20,   1,  44,  8,  1),
+        ("acme:auth",          "claude-code", 1.24, 48000, 7200, 60, 91,  24,  31, 10,  2),
+        ("acme:auth",          "claude-code", 1.10, 41000, 6100, 55, 78,  21,  28,  9,  2),
+        ("acme:auth",          "cursor",      0.19,  8000, 1200, 12, None, None, 52,  5,  3),
+        ("acme:api",           "claude-code", 0.63, 24000, 4100, 32, 44,   2, 180, 22,  4),
+        ("acme:api",           "claude-code", 0.91, 35000, 5800, 45, 62,   5, 243, 38,  5),
+        ("acme:api",           "gemini-cli",  0.35, 15000, 2200, 22, 28,   0,  95, 14,  5),
+        ("acme:api",           "cursor",      0.12,  5000,  800,  8, None, None, 30,  3,  6),
+        ("acme:api",           "claude-code", 0.74, 28000, 4500, 36, 51,   3, 197, 29,  7),
+        ("globex:ml-pipeline", "gemini-cli",  0.55, 22000, 3500, 28, 38,   2, 120, 18,  8),
+        ("globex:ml-pipeline", "gemini-cli",  0.48, 19000, 3000, 24, 31,   1,  88, 11,  8),
+        ("globex:ml-pipeline", "claude-code", 0.93, 36000, 5900, 47, 65,   4, 228, 35,  9),
+        ("globex:ml-pipeline", "cursor",      0.22,  9000, 1400, 14, None, None, 61,  7, 10),
+        ("globex:ml-pipeline", "gemini-cli",  0.67, 26000, 4200, 33, 47,   3, 152, 24, 11),
+        ("globex:data-infra",  "claude-code", 0.38, 15000, 2500, 19, 26,   1,  75,  9, 12),
+        ("globex:data-infra",  "gemini-cli",  0.29, 12500, 1900, 18, 21,   0,  58,  7, 12),
+        ("globex:data-infra",  "claude-code", 0.71, 27000, 4300, 35, 49,   2, 188, 28, 13),
+        ("globex:data-infra",  "cursor",      0.15,  6500,  950, 10, None, None, 40,  4, 14),
+        ("globex:data-infra",  "claude-code", 1.05, 40000, 6000, 52, 73,   8,   0,  0, 15),
+        ("acme:auth",          "claude-code", 0.33, 13000, 2000, 20, 22,   1,  55,  8, 16),
+        ("acme:auth",          "claude-code", 0.41, 17000, 2700, 26, 30,   2,  72, 10, 16),
+        ("acme:auth",          "claude-code", 0.38, 15500, 2400, 23, 27,   3,  61,  9, 16),
+        (None,                 "claude-code", 1.35, 52000, 7800, 65, 88,   5, None, None, 17),
+        (None,                 "gemini-cli",  0.88, 34000, 5200, 43, 57,   3, None, None, 18),
+        (None,                 "cursor",      0.14,  6000,  900,  9, None, None, None, None, 19),
+        ("acme:api",           "claude-code", 0.56, 22000, 3600, 28, 39,   2, 163, 21, 20),
+        ("acme:api",           "gemini-cli",  0.44, 18000, 2800, 22, 33,   1, 108, 15, 21),
+        ("globex:ml-pipeline", "claude-code", 0.79, 30000, 4800, 38, 53,   3, 205, 31, 22),
+    ]
+    # fmt: on
+
+    added: list[AiSession] = []
+    for row in sessions_spec:
+        proj, tool, cost, inp, out, mins, tcalls, terrs, cadd, crem, day_off = row
+        base_hour = rng.randint(8, 17)
+        base_min = rng.randint(0, 45)
+        start = month_start + timedelta(days=day_off, hours=base_hour, minutes=base_min)
+        end = start + timedelta(minutes=mins)
+        tags: list[str] = []
+        if proj in ("acme:auth", "acme:api"):
+            tags.append("branch:main")
+        session = AiSession(
+            start=start,
+            end=end,
+            tool=tool,
+            model=tool_models[tool],
+            input_tokens=inp,
+            output_tokens=out,
+            cost_usd=cost,
+            project=proj,
+            tokens_available=True,
+            billing="api",
+            source="demo",
+            tags=tags,
+            tool_calls=tcalls,
+            tool_errors=terrs,
+            code_added=cadd,
+            code_removed=crem,
+        )
+        append_session(project_dir, session)
+        added.append(session)
+
+    projects_written = sorted({s.project or "(unattributed)" for s in added})
+    console.print(f"[bold green]Seeded[/] {len(added)} demo sessions:")
+    for p in projects_written:
+        count = sum(1 for s in added if (s.project or "(unattributed)") == p)
+        console.print(f"  {p}  {count} sessions")
+    console.print(
+        "\nRun [bold]halyard health[/], [bold]halyard dashboard[/], "
+        "or [bold]halyard schedule[/] to explore."
+    )
+
+
 @app.command(name="assign-unattributed")
 def assign_unattributed(
     project: str | None = typer.Option(
@@ -1127,6 +1249,274 @@ def report(
         )
 
     console.print("─" * 48 + "\n")
+
+
+@app.command()
+def health(
+    period: str = typer.Option("month", "--period", help="today | week | month | all"),
+    project: str | None = typer.Option(None, "--project", help="Filter to a project slug."),
+    format_: str = typer.Option("text", "--format", help="text | json"),
+) -> None:
+    """Show AI work health signals for the current period."""
+    import json as _json
+    from datetime import datetime, timedelta
+
+    from halyard.ai_log import find_project_dir, parse_sessions
+    from halyard.hub import find_hub
+    from halyard.work_health import build_health_report, render_json, render_text
+
+    project_dir = find_project_dir() or find_hub()
+    if project_dir is None:
+        console.print("No Halyard project found.")
+        raise typer.Exit(code=1)
+
+    sessions = parse_sessions(project_dir)
+
+    # Period filter
+    now = datetime.now()
+    p = period.lower()
+    if p == "today":
+        sessions = [s for s in sessions if s.start.date() == now.date()]
+    elif p == "week":
+        week_start = now - timedelta(days=now.weekday())
+        sessions = [s for s in sessions if s.start.date() >= week_start.date()]
+    elif p == "month":
+        sessions = [
+            s for s in sessions if s.start.year == now.year and s.start.month == now.month
+        ]
+    elif p != "all":
+        console.print("[bold red]Error:[/] --period must be one of: today, week, month, all")
+        raise typer.Exit(code=1)
+
+    # Project filter
+    if project:
+        sessions = [s for s in sessions if s.project == project]
+
+    report = build_health_report(sessions, period=p)
+
+    if format_ == "json":
+        sys.stdout.write(_json.dumps(render_json(report), indent=2) + "\n")
+    else:
+        console.print(render_text(report))
+
+
+@app.command(name="org")
+def org_summary_cmd(
+    period: str = typer.Option("month", "--period", help="today | week | month | all"),
+    format_: str = typer.Option("text", "--format", help="text | json"),
+) -> None:
+    """Show AI usage rolled up by team and project using org.toml identity."""
+    from datetime import datetime, timedelta
+
+    from halyard.ai_log import find_project_dir, parse_sessions
+    from halyard.cost_centers import read_cost_center_config
+    from halyard.hub import find_hub
+    from halyard.org import read_org_config
+    from halyard.org_rollups import build_org_summary, render_org_text
+
+    project_dir = find_project_dir() or find_hub()
+    if project_dir is None:
+        console.print("No Halyard project found.")
+        raise typer.Exit(code=1)
+
+    org = read_org_config(project_dir)
+    if org is None:
+        console.print(
+            f"[bold red]Error:[/] No org.toml found in [bold]{project_dir}[/].\n"
+            "Create org.toml to define your org identity and team mappings."
+        )
+        raise typer.Exit(code=1)
+
+    cost_centers = read_cost_center_config(project_dir)
+    sessions = parse_sessions(project_dir)
+
+    now = datetime.now()
+    p = period.lower()
+    if p == "today":
+        sessions = [s for s in sessions if s.start.date() == now.date()]
+    elif p == "week":
+        week_start = now - timedelta(days=now.weekday())
+        sessions = [s for s in sessions if s.start.date() >= week_start.date()]
+    elif p == "month":
+        sessions = [
+            s for s in sessions if s.start.year == now.year and s.start.month == now.month
+        ]
+    elif p != "all":
+        console.print("[bold red]Error:[/] --period must be: today, week, month, all")
+        raise typer.Exit(code=1)
+
+    summary = build_org_summary(sessions, org, cost_centers, period=p)
+
+    if format_ == "json":
+        import json as _json
+
+        sys.stdout.write(
+            _json.dumps(
+                {
+                    "org": summary.org_name,
+                    "period": summary.period,
+                    "total_sessions": summary.total_sessions,
+                    "total_cost": summary.total_cost,
+                    "active_users": summary.active_users,
+                    "trust": summary.trust,
+                    "teams": [
+                        {
+                            "team_id": t.team_id,
+                            "team_name": t.team_name,
+                            "sessions": t.sessions,
+                            "total_cost": t.total_cost,
+                            "active_users": t.active_users,
+                            "trust": t.trust,
+                            "unattributed_count": t.unattributed_count,
+                        }
+                        for t in summary.teams
+                    ],
+                    "governance_flags": [
+                        {
+                            "category": f.category,
+                            "team_id": f.team_id,
+                            "user": f.user,
+                            "detail": f.detail,
+                        }
+                        for f in summary.governance_flags
+                    ],
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+    else:
+        console.print(render_org_text(summary))
+
+
+@app.command(name="export")
+def export_cmd(
+    period: str = typer.Option("month", "--period", help="YYYY-MM | today | week | month | all"),
+    format_: str = typer.Option("csv", "--format", help="csv"),
+    output: str | None = typer.Option(None, "--output", help="Output file path."),
+    stdout: bool = typer.Option(False, "--stdout", help="Write to stdout."),
+) -> None:
+    """Export cost allocation data as CSV (finance/BI format)."""
+    from datetime import datetime, timedelta
+    from pathlib import Path as _Path
+
+    from halyard.ai_log import find_project_dir, parse_sessions
+    from halyard.cost_centers import read_cost_center_config
+    from halyard.hub import find_hub
+    from halyard.org import read_org_config
+    from halyard.org_rollups import build_org_summary, render_finance_csv
+
+    project_dir = find_project_dir() or find_hub()
+    if project_dir is None:
+        console.print("No Halyard project found.")
+        raise typer.Exit(code=1)
+
+    org = read_org_config(project_dir)
+    if org is None:
+        console.print(
+            "[bold red]Error:[/] No org.toml found. "
+            "Create org.toml to enable org-level exports."
+        )
+        raise typer.Exit(code=1)
+
+    cost_centers = read_cost_center_config(project_dir)
+    sessions = parse_sessions(project_dir)
+
+    now = datetime.now()
+    # Accept YYYY-MM as period
+    p = period.lower()
+    if len(period) == 7 and period[4] == "-":
+        try:
+            target = datetime.strptime(period, "%Y-%m")
+            sessions = [
+                s for s in sessions
+                if s.start.year == target.year and s.start.month == target.month
+            ]
+            p = period
+        except ValueError:
+            pass
+    elif p == "today":
+        sessions = [s for s in sessions if s.start.date() == now.date()]
+    elif p == "week":
+        week_start = now - timedelta(days=now.weekday())
+        sessions = [s for s in sessions if s.start.date() >= week_start.date()]
+    elif p == "month":
+        sessions = [
+            s for s in sessions if s.start.year == now.year and s.start.month == now.month
+        ]
+
+    summary = build_org_summary(sessions, org, cost_centers, period=p)
+    csv_content = render_finance_csv(summary.finance_rows)
+
+    if stdout:
+        sys.stdout.write(csv_content)
+        return
+
+    if output:
+        dest = _Path(output)
+    else:
+        period_slug = p.replace("-", "")
+        dest = project_dir / "exports" / f"{period_slug}-{org.org.id}.csv"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(csv_content, encoding="utf-8")
+    console.print(
+        f"[bold green]Exported[/] {len(summary.finance_rows)} rows → [bold]{dest}[/]"
+    )
+
+
+
+@app.command()
+def schedule(
+    period: str = typer.Option("month", "--period", help="today | week | month | all"),
+    project: str | None = typer.Option(None, "--project", help="Filter to a project slug."),
+    output: str | None = typer.Option(None, "--output", help="Output file path."),
+    stdout: bool = typer.Option(False, "--stdout", help="Write ICS to stdout instead of a file."),
+) -> None:
+    """Export AI sessions as a .ics calendar file."""
+    from datetime import datetime, timedelta
+    from pathlib import Path as _Path
+
+    from halyard.ai_log import find_project_dir, parse_sessions
+    from halyard.hub import find_hub
+    from halyard.schedule import build_calendar
+
+    project_dir = find_project_dir() or find_hub()
+    if project_dir is None:
+        console.print("No Halyard project found.")
+        raise typer.Exit(code=1)
+
+    sessions = parse_sessions(project_dir)
+
+    now = datetime.now()
+    p = period.lower()
+    if p == "today":
+        sessions = [s for s in sessions if s.start.date() == now.date()]
+    elif p == "week":
+        week_start = now - timedelta(days=now.weekday())
+        sessions = [s for s in sessions if s.start.date() >= week_start.date()]
+    elif p == "month":
+        sessions = [
+            s for s in sessions if s.start.year == now.year and s.start.month == now.month
+        ]
+    elif p != "all":
+        console.print("[bold red]Error:[/] --period must be one of: today, week, month, all")
+        raise typer.Exit(code=1)
+
+    if project:
+        sessions = [s for s in sessions if s.project == project]
+
+    ics = build_calendar(sessions)
+
+    if stdout:
+        sys.stdout.write(ics)
+        return
+
+    dest = _Path(output) if output else project_dir / "ai-schedule.ics"
+    dest.write_text(ics, encoding="utf-8")
+    noun = "session" if len(sessions) == 1 else "sessions"
+    console.print(
+        f"[bold green]Exported[/] {len(sessions)} {noun} → [bold]{dest}[/]"
+    )
 
 
 @app.command()

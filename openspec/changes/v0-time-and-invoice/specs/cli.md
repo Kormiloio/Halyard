@@ -76,15 +76,41 @@ The CLI MUST generate invoices from time entries for a client and date range.
   the prior calendar month
 - AND applies hourly rates from `clients.toml` (with project-level overrides
   from `projects.toml` taking precedence)
-- AND generates `invoices/2026-04-acme-001.md` and the corresponding `.pdf`
+- AND generates `invoices/2026-04-001-acme.md`
 - AND increments the invoice counter in `halyard.toml`
-- AND opens the PDF using the platform-default viewer
+
+### Scenario: PDF generation and auto-open
+
+- WHEN the user runs `halyard invoice acme --period 2026-05 --pdf`
+- THEN the CLI generates the markdown invoice
+- AND calls `typst compile` to produce the corresponding `.pdf`
+- AND opens the PDF using the platform-default viewer (`open` on macOS,
+  `xdg-open` on Linux, `os.startfile` on Windows)
+- IF `typst` is not installed THEN the CLI prints a warning and exits 0
+  without failing the invoice write
 
 ### Scenario: no time logged
 
-- WHEN there are zero entries in the requested range for the requested client
+- WHEN there are zero closed entries in the requested range for the requested client
 - THEN the CLI exits with code 1 and a clear message
 - AND no files are written
+
+### Scenario: unknown client
+
+- WHEN the client slug does not appear in `clients.toml`
+- THEN the CLI exits with code 1 with message "Client 'X' not found in clients.toml"
+
+### Scenario: open (unclosed) time entries
+
+- WHEN there are open (clock-in without clock-out) entries for the client in the period
+- THEN the invoice is still generated from closed entries
+- AND the CLI prints a warning listing the open entry start times
+
+### Scenario: invoice already exists
+
+- WHEN an invoice file already exists for the period and client
+- AND `--force` is not passed
+- THEN the CLI exits with code 1 with message "Invoice already exists: ... Use --force to overwrite"
 
 ### Scenario: explicit date range
 
@@ -93,24 +119,50 @@ The CLI MUST generate invoices from time entries for a client and date range.
 
 ## Requirement: halyard (bare command, REPL mode)
 
-The CLI MUST drop into an interactive Claude session when invoked with no
-subcommand.
+The CLI MUST drop into an interactive natural-language query loop when invoked
+with no subcommand. The REPL answers questions about captured AI work metadata
+— sessions, cost, models, projects — using the local log agent by default.
 
-### Scenario: conversational logging
+### Scenario: query about AI spend
 
-- WHEN the user runs `halyard`
-- AND types "I just finished 2 hours on Globex"
-- THEN the agent proposes the timeclock entry, the user confirms,
-  the file is appended, and the agent waits for the next message
+- WHEN the user runs `halyard` inside a Halyard project directory
+- AND types "how much did I spend on Claude Code this month?"
+- THEN the REPL routes the query to `run_log_query()` with agent=local
+- AND prints the answer followed by per-project and per-model breakdowns
+  where relevant
+- AND waits for the next message
 
-### Scenario: query
+### Scenario: no project found
 
-- WHEN the user types "how many hours have I billed ACME this quarter"
-- THEN the agent runs the equivalent `hledger -f time.timeclock` query
-- AND returns a table or short prose summary
-- AND no files are modified
+- WHEN the user runs `halyard` outside any Halyard project directory
+  and no hub is configured
+- THEN the CLI exits with code 1 and prints "No Halyard project found.
+  Run halyard init to create one."
+
+### Scenario: provider switching
+
+- WHEN the user types `/agent claude` in the REPL
+- THEN subsequent queries use the Claude agent (requires ANTHROPIC_API_KEY)
+- WHEN the user types `/agent local`
+- THEN the REPL reverts to the local agent
+
+### Scenario: time window
+
+- WHEN the user types `/period today`
+- THEN subsequent queries are scoped to the current calendar day
 
 ### Scenario: graceful exit
 
-- WHEN the user types `/quit` or sends EOF (Ctrl-D)
+- WHEN the user types `/quit` or `/q` or sends EOF (Ctrl-D)
 - THEN the REPL exits cleanly with code 0
+- AND readline history is persisted to `~/.halyard/repl_history`
+
+### Slash commands
+
+| Command | Behavior |
+|---------|----------|
+| `/agent local\|claude\|openai` | Switch query provider |
+| `/model <name>` | Set model for cloud providers |
+| `/period today\|week\|month\|all` | Change time window |
+| `/help` or `/?` | Print help |
+| `/quit` or `/q` or Ctrl-D | Exit |

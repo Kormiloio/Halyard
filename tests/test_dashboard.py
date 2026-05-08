@@ -64,6 +64,56 @@ def test_render_dashboard_shows_human_time(tmp_path: Path) -> None:
     assert "acme:auth" in html
 
 
+def test_render_dashboard_health_column_with_tool_telemetry(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 8, 10, 0),
+            end=datetime(2026, 5, 8, 10, 30),
+            tool="gemini-cli",
+            model="gemini-2.0-flash",
+            input_tokens=500,
+            output_tokens=200,
+            cost_usd=0.0012,
+            project="acme:auth",
+            tool_calls=20,
+            tool_errors=3,
+            code_added=45,
+            code_removed=12,
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "Health" in html
+    assert "20c" in html
+    assert "3e" in html
+    assert "+45/-12" in html
+
+
+def test_render_dashboard_health_column_no_telemetry(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 8, 10, 0),
+            end=datetime(2026, 5, 8, 10, 30),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=500,
+            output_tokens=200,
+            cost_usd=0.005,
+            project="acme:auth",
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "Health" in html
+    assert "—" in html
+
+
 def test_render_dashboard_marks_unattributed_sessions(tmp_path: Path) -> None:
     _init_project(tmp_path)
     append_session(

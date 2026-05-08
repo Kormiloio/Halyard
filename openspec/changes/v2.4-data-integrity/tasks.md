@@ -29,7 +29,7 @@ fallback when the global unattributed log is empty.
 ### `read_sessions()` migration
 - [x] Replace ad-hoc line parsing with `AiSession.from_log_line()` call
 - [x] On None return: write to quarantine log, skip line, continue reading
-- [ ] Remove all ad-hoc parsing logic from `read_sessions()`
+- [x] Remove all ad-hoc parsing logic from `read_sessions()`
 
 ### `append_session()` migration
 - [x] Replace ad-hoc f-string serialization with `session.to_log_line()`

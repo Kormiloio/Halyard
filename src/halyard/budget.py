@@ -35,7 +35,7 @@ def load_budgets() -> dict[str, ProjectBudget]:
         return {}
     try:
         data = tomllib.loads(_BUDGETS_FILE.read_text())
-    except Exception:
+    except tomllib.TOMLDecodeError:
         return {}
     result: dict[str, ProjectBudget] = {}
     for slug, entry in data.items():
@@ -141,7 +141,7 @@ def set_budget(
     if _BUDGETS_FILE.exists():
         try:
             data: dict[str, object] = dict(tomllib.loads(_BUDGETS_FILE.read_text()))
-        except Exception:
+        except tomllib.TOMLDecodeError:
             data = {}
     else:
         data = {}

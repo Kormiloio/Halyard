@@ -18,16 +18,16 @@ Implementation checklist for v3 — Org Admin Dashboard.
 
 ## 3. Dashboard views
 
-- [x] 3.1 Executive overview.
-- [x] 3.2 Team rollups.
-- [x] 3.3 Project rollups.
-- [x] 3.4 People/adoption view.
-- [x] 3.5 Governance and collector health.
-- [x] 3.6 Finance cost allocation.
+- [x] 3.1 Executive overview (`halyard org` — org-level summary with trust).
+- [x] 3.2 Team rollups (per-team sessions, cost, active users, unattributed count).
+- [x] 3.3 Project rollups (per-project cost, per-team breakdown).
+- [x] 3.4 People/adoption view (per-user rollup within each team).
+- [x] 3.5 Governance and collector health (no-capture, unattributed rate, unknown model flags).
+- [x] 3.6 Finance cost allocation (`halyard export --format csv` with cost centers).
 
 ## 4. Scale and operations
 
-- [x] 4.1 Validate 500-user reporting shape.
+- [x] 4.1 Validate 500-user reporting shape (pure-function aggregation; no DB required).
 - [x] 4.2 Define sync failure and retry states.
 - [x] 4.3 Define export API/CSV requirements.
 - [x] 4.4 Define retention and audit requirements.

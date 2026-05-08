@@ -7,6 +7,7 @@ tool call stats, and accurate multi-model cost for a completed session.
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -44,6 +45,9 @@ class GeminiSessionSummary:
     total_tool_calls: int = 0
     total_tool_errors: int = 0
     cost_usd: float = 0.0
+    code_added: int | None = None
+    code_removed: int | None = None
+    resume_command: str | None = None
 
     def _derive(self) -> None:
         if not self.model_stats:
@@ -126,6 +130,23 @@ def parse_session_file(path: Path) -> GeminiSessionSummary | None:
             model_stats=list(stats_by_model.values()),
         )
         summary._derive()
+
+        # Code delta — session-level field, graceful fallback if absent
+        code_stats = data.get("codeStats") or data.get("codeChanges") or {}
+        if isinstance(code_stats, dict):
+            with suppress(Exception):
+                added = code_stats.get("added") or code_stats.get("linesAdded")
+                if added is not None:
+                    summary.code_added = int(added)
+            with suppress(Exception):
+                removed = code_stats.get("removed") or code_stats.get("linesRemoved")
+                if removed is not None:
+                    summary.code_removed = int(removed)
+
+        # Resume command — session_id only; safe to record
+        if session_id:
+            summary.resume_command = f"gemini --resume {session_id}"
+
         return summary
 
     except Exception:

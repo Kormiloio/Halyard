@@ -430,6 +430,92 @@ def test_ai_evidence_appendix_dry_run(tmp_path: Path, monkeypatch: object) -> No
     assert "Direct API" in result.output
 
 
+# ---------------------------------------------------------------------------
+# Edge-case tests (task 4.5)
+# ---------------------------------------------------------------------------
+
+
+def test_generate_invoice_unknown_client(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+
+    result = runner.invoke(app, ["invoice", "unknown-client", "--period", "2026-05"])
+
+    assert result.exit_code == 1
+    assert "not found in clients.toml" in result.output
+
+
+def test_generate_invoice_no_time_entries(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+    (tmp_path / "time.timeclock").write_text("; empty\n")
+
+    result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05"])
+
+    assert result.exit_code == 1
+    assert "No closed time entries found" in result.output
+
+
+def test_generate_invoice_open_entries_warning(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+    # Append an open entry (no matching clock-out) inside the billing period
+    with (tmp_path / "time.timeclock").open("a") as f:
+        f.write("i 2026-05-07 09:00:00 acme:auth\n")
+
+    result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05"])
+
+    assert result.exit_code == 0, result.output
+    assert "open time entries" in result.output
+
+
+def test_generate_invoice_existing_file_no_force(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+    runner.invoke(app, ["invoice", "acme", "--period", "2026-05"])
+
+    result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05"])
+
+    assert result.exit_code == 1
+    assert "already exists" in result.output
+
+
+def test_generate_invoice_existing_file_force(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+    runner.invoke(app, ["invoice", "acme", "--period", "2026-05"])
+
+    result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05", "--force"])
+
+    assert result.exit_code == 0, result.output
+    invoice_path = tmp_path / "invoices" / "2026-05-001-acme.md"
+    assert invoice_path.exists()
+
+
+def test_generate_invoice_ai_cost_line_item(tmp_path: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+    (tmp_path / "halyard.toml").write_text(
+        """
+[business]
+name = "Test Consulting"
+currency = "USD"
+default_due_days = 30
+
+[invoicing]
+counter = 0
+include_ai_cost_in_invoice = true
+"""
+    )
+    append_session(tmp_path, _ai_session(cost=5.00))
+
+    result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05"])
+
+    assert result.exit_code == 0, result.output
+    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
+    assert "AI usage cost" in rendered
+
+
 def test_render_ai_evidence_appendix_golden(tmp_path: Path) -> None:
     """Golden assertions: verify the full appendix structure with known inputs."""
     from halyard.invoicing import render_ai_evidence_appendix

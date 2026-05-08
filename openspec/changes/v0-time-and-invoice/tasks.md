@@ -8,7 +8,7 @@ task, update both the code and tick the box here.
 
 - [x] 1.1 Initialize Python package, pyproject.toml, ruff config
 - [x] 1.2 Set up Typer CLI entry point with stub commands
-- [ ] 1.3 Add CI: GitHub Actions running ruff + mypy + pytest on pushes/PRs
+- [x] 1.3 Add CI: GitHub Actions running ruff + mypy + pytest on pushes/PRs
 - [ ] 1.4 Reserve `halyard` on PyPI (publish a 0.0.1 placeholder)
 - [ ] 1.5 Reserve a domain (halyard.dev or similar)
 
@@ -26,7 +26,7 @@ task, update both the code and tick the box here.
 
 - [x] 3.1 Implement `halyard start <slug>` and `halyard stop`, including the
        `~/.halyard/active` state file
-- [ ] 3.2 Implement `halyard log <text>`: send to Claude, render the
+- [x] 3.2 Implement `halyard log <text>`: send to Claude, render the
        proposal, prompt for approval, append on confirm
 - [x] 3.3 dateparser integration for "this morning", "yesterday", "last
        Tuesday", etc., with a fixed reference timezone (the user's local)
@@ -42,16 +42,16 @@ task, update both the code and tick the box here.
 - [x] 4.3 typst PDF rendering pipeline (subprocess; verify install on first
        run with a friendly error if missing)
 - [x] 4.4 Invoice number sequencing in `halyard.toml` per the spec scenarios
-- [ ] 4.5 Open the PDF after generation using the platform-default viewer
+- [x] 4.5 Open the PDF after generation using the platform-default viewer
 
 ## 5. Agent loop
 
-- [ ] 5.1 Anthropic SDK integration + tool definitions (read_text,
+- [x] 5.1 Anthropic SDK integration + tool definitions (read_text,
        list_clients, list_projects, run_hledger, append_timeclock,
        render_invoice, upsert_client, upsert_project)
-- [ ] 5.2 First version of `prompts/system.md`
-- [ ] 5.3 Approval prompt UX (Rich-based diff renderer, y/N/edit flow)
-- [ ] 5.4 Implement `halyard` (no args) REPL mode — readline history,
+- [x] 5.2 First version of `prompts/system.md`
+- [x] 5.3 Approval prompt UX (Rich-based diff renderer, y/N/edit flow)
+- [x] 5.4 Implement `halyard` (no args) REPL mode — readline history,
        slash commands (`/quit`, `/help`, `/model`)
 
 ## 6. Demo + launch

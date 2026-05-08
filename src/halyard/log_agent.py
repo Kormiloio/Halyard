@@ -522,11 +522,16 @@ def run_local_log_query(
         max(0, int((end - start).total_seconds() // 60)) for start, end, _ in time_entries
     )
 
+    tool_summary = ""
+    if report_data.total_tool_calls:
+        err_note = f", {report_data.total_tool_errors} error(s)" if report_data.total_tool_errors else ""
+        tool_summary = f" {report_data.total_tool_calls} tool call(s){err_note}."
+
     return LogQueryResponse(
         answer=(
             f"{effective_period.title()} captured {len(sessions)} AI session(s), "
             f"${report_data.total_cost:.2f} AI cost, and "
-            f"{format_minutes(human_minutes)} human time."
+            f"{format_minutes(human_minutes)} human time.{tool_summary}"
         ),
         query=query,
         agent="local",

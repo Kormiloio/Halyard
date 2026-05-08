@@ -312,7 +312,21 @@ def render_pdf(invoice_path: Path) -> str | None:
     if shutil.which("typst") is None:
         return "typst not found — PDF skipped. Install typst to enable PDF output."
     subprocess.run(["typst", "compile", str(invoice_path)], check=True)
+    _open_file(invoice_path.with_suffix(".pdf"))
     return None
+
+
+def _open_file(path: Path) -> None:
+    import sys as _sys
+
+    if _sys.platform == "darwin":
+        subprocess.run(["open", str(path)], check=False)
+    elif _sys.platform == "win32":
+        import os as _os
+
+        _os.startfile(str(path))  # type: ignore[attr-defined]
+    else:
+        subprocess.run(["xdg-open", str(path)], check=False)
 
 
 def _read_toml(path: Path) -> dict[str, Any]:

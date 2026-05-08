@@ -4,7 +4,7 @@
 
 **AI Work Intelligence Infrastructure.** Time, tokens, models, and cost — captured where the work happens, owned by you, readable by anyone.
 
-**Status:** alpha. v0–v2 and v4 TUI shipped and in daily use.
+**Status:** alpha. v0–v2, v4 TUI, and interactive REPL shipped and in daily use.
 
 ---
 
@@ -42,6 +42,8 @@ Halyard has three layers:
 
 **Glass Cockpit** — A local dashboard for watching capture happen in real time. Run `halyard dashboard` inside any Halyard project.
 
+**Rich Session Telemetry** — Where tools expose it, Halyard captures operational metadata beyond cost: tool call counts, error rates, wall time vs. active agent time, code delta, and per-model breakdowns. Gemini CLI sessions include full multi-model breakdowns from the history file. These signals surface in the TUI and Glass Cockpit as work-health indicators — not productivity scores, but honest signals of session shape.
+
 ---
 
 ## Quickstart
@@ -61,6 +63,12 @@ halyard log "what did I spend this month?"
 halyard log "what did Cursor cost this week?"
 halyard report
 halyard dashboard
+
+# Interactive REPL — natural-language queries over your work data
+halyard
+
+# Terminal dashboard
+halyard tui
 
 # AI sessions are captured automatically by hooks
 # Install hooks once per tool:
@@ -169,7 +177,7 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 | [`v1-ai-intelligence`](./openspec/changes/archive/2026-05-07-v1-ai-intelligence/) | AI session schema + Claude Code collector + local reports |
 | [`v1.5-multi-tool-collectors`](./openspec/changes/archive/2026-05-07-v1.5-multi-tool-collectors/) | Cursor, Gemini CLI, and Codex collectors |
 | [`v2-ai-work-ledger`](./openspec/changes/v2-ai-work-ledger/) | Cost allocation for seat/credit plans, trust-labeled reports, `confirm-attribution`, invoice evidence appendix |
-| [`v2-local-activity-dashboard`](./openspec/changes/v2-local-activity-dashboard/) | Glass Cockpit local dashboard |
+| [`v2-local-activity-dashboard`](./openspec/changes/v2-local-activity-dashboard/) | Glass Cockpit local browser dashboard (`halyard dashboard`) |
 | [`v2.1-dynamic-pricing`](./openspec/changes/archive/2026-05-07-v2.1-dynamic-pricing/) | `halyard update-pricing` — live pricing table sync |
 | [`v2.2-budget-limits`](./openspec/changes/archive/2026-05-07-v2.2-budget-limits/) | Per-project daily/monthly budget alerts |
 | [`v2.3-gemini-history`](./openspec/changes/archive/2026-05-07-v2.3-gemini-history/) | Gemini history file enrichment + `halyard import-gemini` |

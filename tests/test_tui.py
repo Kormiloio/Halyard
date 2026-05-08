@@ -527,3 +527,64 @@ def test_store_clears_sessions_on_log_deletion(tmp_path: Path) -> None:
 
     assert store.sessions == []
     assert store._offset == 0
+
+
+# ---------------------------------------------------------------------------
+# ProjectPane work-health section (v2.6)
+# ---------------------------------------------------------------------------
+
+
+def test_project_pane_health_shows_tool_stats() -> None:
+    from halyard.ai_log import AiSession
+    from halyard.tui.widgets.project_pane import ProjectPane
+
+    sessions = [
+        AiSession(
+            start=datetime(2026, 5, 8, 10, 0),
+            end=datetime(2026, 5, 8, 10, 30),
+            tool="gemini-cli",
+            model="gemini-2.0-flash",
+            input_tokens=500,
+            output_tokens=200,
+            cost_usd=0.0012,
+            project="acme:auth",
+            tool_calls=15,
+            tool_errors=2,
+            wall_seconds=1800,
+            code_added=30,
+            code_removed=8,
+            resume_command="gemini --resume abc123",
+        )
+    ]
+    pane = ProjectPane()
+    pane.render_project("acme:auth", sessions)
+
+    text = pane.last_rendered_text
+    assert "Work Health" in text
+    assert "15" in text
+    assert "2" in text
+    assert "+30" in text
+    assert "-8" in text
+    assert "gemini --resume abc123" in text
+
+
+def test_project_pane_health_no_telemetry() -> None:
+    from halyard.ai_log import AiSession
+    from halyard.tui.widgets.project_pane import ProjectPane
+
+    sessions = [
+        AiSession(
+            start=datetime(2026, 5, 8, 10, 0),
+            end=datetime(2026, 5, 8, 10, 30),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=500,
+            output_tokens=200,
+            cost_usd=0.005,
+            project="acme:auth",
+        )
+    ]
+    pane = ProjectPane()
+    pane.render_project("acme:auth", sessions)
+
+    assert "No tool telemetry captured yet" in pane.last_rendered_text

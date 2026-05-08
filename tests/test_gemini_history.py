@@ -249,3 +249,50 @@ def test_project_dir_for_slug_absent(tmp_path: Path) -> None:
     with patch.object(gh_mod, "_GEMINI_HISTORY", tmp_path):
         result = project_dir_for_slug("nonexistent")
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Rich session telemetry enrichment (v2.6)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_session_file_rich_telemetry(tmp_path: Path) -> None:
+    data = _make_session(
+        session_id="rich-session-abc123",
+        messages=[_gemini_msg(tool_calls=[{"status": "success"}, {"status": "error"}])],
+    )
+    data["codeStats"] = {"added": 45, "removed": 12}
+    path = tmp_path / "session.json"
+    path.write_text(json.dumps(data))
+
+    summary = parse_session_file(path)
+
+    assert summary is not None
+    assert summary.total_tool_calls == 2
+    assert summary.total_tool_errors == 1
+    assert summary.code_added == 45
+    assert summary.code_removed == 12
+    assert summary.resume_command == "gemini --resume rich-session-abc123"
+
+
+def test_parse_session_file_no_code_stats(tmp_path: Path) -> None:
+    data = _make_session(messages=[_gemini_msg()])
+    path = tmp_path / "session.json"
+    path.write_text(json.dumps(data))
+
+    summary = parse_session_file(path)
+
+    assert summary is not None
+    assert summary.code_added is None
+    assert summary.code_removed is None
+
+
+def test_parse_session_file_resume_command_from_session_id(tmp_path: Path) -> None:
+    data = _make_session(session_id="my-session-xyz", messages=[_gemini_msg()])
+    path = tmp_path / "session.json"
+    path.write_text(json.dumps(data))
+
+    summary = parse_session_file(path)
+
+    assert summary is not None
+    assert summary.resume_command == "gemini --resume my-session-xyz"
