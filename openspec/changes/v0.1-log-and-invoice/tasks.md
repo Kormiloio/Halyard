@@ -4,7 +4,7 @@
 - [x] Write proposal.md
 - [x] Write specs/log-command.md
 - [x] Write specs/invoice-command.md
-- [ ] Write design.md (SDK structured output approach, tool dispatch, template rendering)
+- [x] Write design.md (SDK structured output approach, tool dispatch, template rendering)
 
 ## Implementation note — 2026-05-07
 

@@ -3,7 +3,7 @@
 ## Spec & design
 - [x] Write proposal.md
 - [x] Write specs/data-integrity.md
-- [ ] Write design.md (serialization format, quarantine log, unattributed flow)
+- [x] Write design.md (serialization format, quarantine log, unattributed flow)
 
 ## Implementation note — 2026-05-07
 
