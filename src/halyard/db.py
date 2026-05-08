@@ -123,9 +123,7 @@ def last_sync() -> dict[str, object] | None:
         return None
     conn = get_db()
     try:
-        row = conn.execute(
-            "SELECT * FROM sync_log ORDER BY id DESC LIMIT 1"
-        ).fetchone()
+        row = conn.execute("SELECT * FROM sync_log ORDER BY id DESC LIMIT 1").fetchone()
         return dict(row) if row else None
     finally:
         conn.close()

@@ -108,9 +108,7 @@ def _auto_install_detected_hooks() -> None:
             not_found.append(label)
 
     if found:
-        console.print(
-            f"\n[bold green]Auto-installed hooks:[/] {', '.join(found)}"
-        )
+        console.print(f"\n[bold green]Auto-installed hooks:[/] {', '.join(found)}")
     if not_found:
         console.print(
             f"[dim]Not found on PATH:[/] {', '.join(not_found)} "
@@ -587,9 +585,7 @@ def backfill(
 
     parts = []
     if ambiguous and not confirm:
-        parts.append(
-            f"{len(ambiguous)} ambiguous (run [bold]--confirm[/] to resolve)"
-        )
+        parts.append(f"{len(ambiguous)} ambiguous (run [bold]--confirm[/] to resolve)")
     if skipped_no_window:
         parts.append(f"{skipped_no_window} with no timeclock window")
     if parts:
@@ -800,9 +796,7 @@ def _do_install_hook_claude(global_: bool = False) -> None:
     if added:
         console.print(f"[bold green]Claude Code hooks installed[/] in [bold]{settings_path}[/]")
     else:
-        console.print(
-            f"[yellow]Claude Code hooks already present[/] in [bold]{settings_path}[/]"
-        )
+        console.print(f"[yellow]Claude Code hooks already present[/] in [bold]{settings_path}[/]")
 
 
 @app.command(name="install-hook-claude")
@@ -864,9 +858,7 @@ def _do_install_hook_gemini() -> None:
     if added:
         console.print(f"[bold green]Gemini CLI hooks installed[/] in [bold]{settings_path}[/]")
     else:
-        console.print(
-            f"[yellow]Gemini CLI hooks already present[/] in [bold]{settings_path}[/]"
-        )
+        console.print(f"[yellow]Gemini CLI hooks already present[/] in [bold]{settings_path}[/]")
 
 
 @app.command(name="install-hook-gemini")
@@ -910,9 +902,7 @@ def _do_install_hook_cursor() -> None:
     if added:
         console.print(f"[bold green]Cursor hooks installed[/] in [bold]{settings_path}[/]")
     else:
-        console.print(
-            f"[yellow]Cursor hooks already present[/] in [bold]{settings_path}[/]"
-        )
+        console.print(f"[yellow]Cursor hooks already present[/] in [bold]{settings_path}[/]")
 
 
 @app.command(name="install-hook-cursor")
@@ -1909,9 +1899,7 @@ def service_status_cmd() -> None:
 # Config history and rate audit (v2.15)
 # ---------------------------------------------------------------------------
 
-config_app = typer.Typer(
-    name="config", help="Rate history and invoice audit commands."
-)
+config_app = typer.Typer(name="config", help="Rate history and invoice audit commands.")
 app.add_typer(config_app)
 
 
@@ -1970,9 +1958,7 @@ def config_history(
         )
 
     console.print(table)
-    console.print(
-        "\n[dim]Tip: commit clients.toml to git for a full, auditable rate history.[/]"
-    )
+    console.print("\n[dim]Tip: commit clients.toml to git for a full, auditable rate history.[/]")
 
 
 @config_app.command(name="audit")

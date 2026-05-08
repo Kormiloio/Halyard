@@ -234,9 +234,7 @@ def test_config_audit_cli_clean(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "Audit clean" in result.output
 
 
-def test_config_audit_cli_mismatch_exits_1(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_config_audit_cli_mismatch_exits_1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _setup_project(tmp_path)
     (tmp_path / "invoices" / "2026-03-001-acme.md").write_text(_INVOICE_MD_WRONG_RATE)

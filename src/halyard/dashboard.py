@@ -30,7 +30,9 @@ from halyard.reports import (
 DASHBOARD_PORT = 7432
 
 
-def run_dashboard(project_dir: Path, *, port: int = DASHBOARD_PORT, open_browser: bool = False) -> str:
+def run_dashboard(
+    project_dir: Path, *, port: int = DASHBOARD_PORT, open_browser: bool = False
+) -> str:
     """Start the dashboard server and block until interrupted."""
     host = "127.0.0.1"
     server = ThreadingHTTPServer((host, _resolve_port(port)), _handler_for(project_dir))

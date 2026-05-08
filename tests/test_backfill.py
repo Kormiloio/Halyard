@@ -217,9 +217,7 @@ def test_backfill_attributes_unambiguous(tmp_path: Path, monkeypatch: pytest.Mon
     assert log.count("project=acme:auth") == 2
 
 
-def test_backfill_skips_ambiguous_sessions(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_backfill_skips_ambiguous_sessions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
 

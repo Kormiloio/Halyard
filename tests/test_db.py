@@ -54,9 +54,7 @@ def test_get_db_creates_tables(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     conn = get_db()
     tables = {
         row[0]
-        for row in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     }
     conn.close()
     assert {"sessions", "timeclock", "sync_log"} <= tables
@@ -176,16 +174,12 @@ def test_sync_all_idempotent_timeclock(tmp_path: Path, monkeypatch: pytest.Monke
 # ---------------------------------------------------------------------------
 
 
-def test_last_sync_none_before_any_sync(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_last_sync_none_before_any_sync(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("halyard.db._DB_PATH", tmp_path / "cache.db")
     assert last_sync() is None
 
 
-def test_last_sync_returns_row_after_sync(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_last_sync_returns_row_after_sync(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("halyard.db._DB_PATH", tmp_path / "cache.db")
     _setup_project(tmp_path, [_SESSION_LINE_A])
@@ -227,9 +221,7 @@ def test_db_sync_cli_basic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     assert "2" in result.output  # 2 sessions added
 
 
-def test_db_sync_cli_status_no_cache(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_db_sync_cli_status_no_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("halyard.db._DB_PATH", tmp_path / "cache.db")
 
@@ -239,9 +231,7 @@ def test_db_sync_cli_status_no_cache(
     assert "never" in result.output.lower() or "no sync" in result.output.lower()
 
 
-def test_db_sync_cli_status_after_sync(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_db_sync_cli_status_after_sync(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("halyard.db._DB_PATH", tmp_path / "cache.db")
     _setup_project(tmp_path, [_SESSION_LINE_A])
