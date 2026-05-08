@@ -467,6 +467,134 @@ def stop() -> None:
     elapsed = format_minutes(_elapsed_minutes(active.started or ts, datetime.now()))
     console.print(f"[bold green]Stopped[/] [bold]{slug}[/]. Elapsed: {elapsed}.")
 
+    if active.started and timeclock:
+        from halyard.ai_log import backfill_window
+
+        try:
+            start_dt = datetime.strptime(active.started, "%Y-%m-%d %H:%M:%S")
+            end_dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+            count = backfill_window(timeclock.parent, start_dt, end_dt, slug)
+            if count:
+                noun = "session" if count == 1 else "sessions"
+                console.print(f"  Attributed {count} AI {noun} to [bold]{slug}[/].")
+        except Exception:
+            pass
+
+
+@app.command()
+def backfill(
+    project: str = typer.Option("", "--project", help="Restrict to one project slug."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Report without writing."),
+    confirm: bool = typer.Option(
+        False, "--confirm", help="Prompt interactively for ambiguous sessions."
+    ),
+) -> None:
+    """Attribute unattributed AI sessions using timeclock windows."""
+    from halyard.ai_log import (
+        AI_LOG_FILENAME,
+        AiSession,
+        _is_assignable_session_line,
+        _parse_line,
+        confirm_session_attributions,
+        find_project_dir,
+    )
+    from halyard.reports import parse_timeclock
+
+    project_dir = find_project_dir()
+    if project_dir is None:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
+        raise typer.Exit(code=1)
+
+    log_path = project_dir / AI_LOG_FILENAME
+    if not log_path.exists():
+        console.print("[yellow]No ai-sessions.log found.[/]")
+        return
+
+    windows = parse_timeclock(project_dir / "time.timeclock")
+    if not windows:
+        console.print(
+            "[yellow]No timeclock data found.[/] Run [bold]halyard start[/] to begin tracking time."
+        )
+        return
+
+    if project:
+        slug = project.replace("/", ":", 1)
+        windows = [(s, e, a) for s, e, a in windows if a == slug]
+        if not windows:
+            console.print(f"[yellow]No timeclock windows found for [bold]{slug}[/].[/]")
+            return
+
+    raw_lines = log_path.read_text().splitlines()
+    unambiguous: list[tuple[str, str]] = []
+    ambiguous: list[tuple[str, AiSession, list[str]]] = []
+    skipped_no_window = 0
+
+    for raw_line in raw_lines:
+        line = raw_line.rstrip()
+        if not _is_assignable_session_line(line):
+            continue
+        session = _parse_line(line)
+        if session is None:
+            continue
+
+        matched_projects = list({a for s, e, a in windows if s <= session.start < e})
+
+        if len(matched_projects) == 0:
+            skipped_no_window += 1
+        elif len(matched_projects) == 1:
+            unambiguous.append((line, matched_projects[0]))
+        else:
+            ambiguous.append((line, session, matched_projects))
+
+    if confirm and ambiguous:
+        for raw_line, session, candidates in ambiguous:
+            dur = max(1, int((session.end - session.start).total_seconds() // 60))
+            console.print(
+                f"\n  {session.start:%Y-%m-%d %H:%M} → {session.end:%H:%M}  ({dur}m)\n"
+                f"  {session.tool} / {session.model}  ${session.cost_usd:.4f}\n"
+                f"  Candidates: [bold]{', '.join(candidates)}[/]"
+            )
+            choice = typer.prompt("  Project slug (or Enter to skip)", default="").strip()
+            if choice:
+                unambiguous.append((raw_line, choice.replace("/", ":", 1)))
+
+    if not unambiguous:
+        console.print("[yellow]No sessions to attribute.[/]")
+        if skipped_no_window:
+            console.print(f"  {skipped_no_window} session(s) have no matching timeclock window.")
+        if ambiguous:
+            console.print(
+                f"  {len(ambiguous)} session(s) are ambiguous"
+                " — run with [bold]--confirm[/] to resolve."
+            )
+        return
+
+    if dry_run:
+        console.print(f"\n[bold]{len(unambiguous)} session(s) would be attributed:[/]\n")
+        for raw_line, proj in unambiguous:
+            session = _parse_line(raw_line)
+            if session:
+                console.print(
+                    f"  {session.start:%Y-%m-%d %H:%M}  {session.tool}/{session.model}"
+                    f"  → [bold cyan]{proj}[/]"
+                )
+    else:
+        count = confirm_session_attributions(project_dir, unambiguous)
+        noun = "session" if count == 1 else "sessions"
+        console.print(f"[bold green]Attributed[/] {count} {noun}.")
+
+    parts = []
+    if ambiguous and not confirm:
+        parts.append(
+            f"{len(ambiguous)} ambiguous (run [bold]--confirm[/] to resolve)"
+        )
+    if skipped_no_window:
+        parts.append(f"{skipped_no_window} with no timeclock window")
+    if parts:
+        console.print("  Skipped: " + ", ".join(parts) + ".")
+
 
 @app.command()
 def status() -> None:

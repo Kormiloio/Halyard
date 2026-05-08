@@ -317,6 +317,45 @@ def confirm_session_attributions(
     return changed
 
 
+def backfill_window(
+    project_dir: Path,
+    start: datetime,
+    end: datetime,
+    project: str,
+    *,
+    dry_run: bool = False,
+) -> int:
+    """Attribute unattributed sessions in [start, end) to project.
+
+    Sanctioned attribution correction — only project= metadata is added,
+    no captured data is discarded. Returns the number of sessions attributed
+    (or that would be, in dry_run mode).
+    """
+    log_path = project_dir / AI_LOG_FILENAME
+    if not log_path.exists():
+        return 0
+
+    changed = 0
+    new_lines = []
+    for raw_line in log_path.read_text().splitlines():
+        line = raw_line.rstrip()
+        if _is_assignable_session_line(line):
+            session = _parse_line(line)
+            if session is not None and start <= session.start < end:
+                if not dry_run:
+                    new_lines.append(f"{line} project={project}")
+                else:
+                    new_lines.append(raw_line)
+                changed += 1
+                continue
+        new_lines.append(raw_line)
+
+    if changed and not dry_run:
+        log_path.write_text("\n".join(new_lines) + "\n")
+
+    return changed
+
+
 def _is_assignable_session_line(line: str) -> bool:
     stripped = line.strip()
     return stripped.startswith("s ") and " project=" not in stripped
