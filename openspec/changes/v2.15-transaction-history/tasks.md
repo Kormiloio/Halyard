@@ -12,28 +12,27 @@ Implementation checklist for v2.15 — Transaction History and Config Versioning
 
 ## 2. `halyard config history` command
 
-- [ ] 2.1 Add `config` Typer subapp (or top-level `config-history` command).
-- [ ] 2.2 Implement git-log path (parse rate diffs from `git log --patch`).
-- [ ] 2.3 Implement TOML-only path (read `rate_history` entries directly).
-- [ ] 2.4 Format output as a rich table.
-- [ ] 2.5 Add `--client` filter.
+- [x] 2.1 Add `config` Typer subapp.
+- [x] 2.2 Implement git-log path (parse rate diffs from `git log --patch`).
+- [x] 2.3 Implement TOML-only path (read `rate_history` entries directly).
+- [x] 2.4 Format output as a rich table.
+- [x] 2.5 Add `--client` filter.
 
 ## 3. `halyard config audit` command
 
-- [ ] 3.1 Implement `halyard config audit`.
-- [ ] 3.2 Parse invoice YAML frontmatter for period and rate data.
-- [ ] 3.3 Compare invoice rates against `_effective_rate` for each invoice.
-- [ ] 3.4 Print mismatch table and exit 1 if any found.
-- [ ] 3.5 Add `--client` and `--period` filters.
+- [x] 3.1 Implement `halyard config audit`.
+- [x] 3.2 Parse invoice YAML frontmatter for period and rate data; parse rates from markdown table.
+- [x] 3.3 Compare invoice rates against `_effective_rate` for each invoice.
+- [x] 3.4 Print mismatch table and exit 1 if any found.
+- [x] 3.5 Add `--client` and `--period` filters.
 
 ## 4. Git reminder
 
-- [ ] 4.1 Print git commit reminder in `halyard init` output (already done).
-- [ ] 4.2 Optionally print reminder when no git repo detected and
-      `_effective_rate` is used for the first time.
+- [x] 4.1 Print git commit reminder in `halyard init` output (already done).
+- [x] 4.2 `config history` prints reminder tip when no git repo detected.
 
 ## 5. Tests
 
-- [ ] 5.1 Test `config audit` with matching rates (exit 0).
-- [ ] 5.2 Test `config audit` with a rate mismatch (exit 1, table output).
-- [ ] 5.3 Test `config history` TOML path.
+- [x] 5.1 Test `config audit` with matching rates (exit 0).
+- [x] 5.2 Test `config audit` with a rate mismatch (exit 1, table output).
+- [x] 5.3 Test `config history` TOML path.

@@ -117,7 +117,8 @@ def test_backfill_window_boundary_end_exclusive(tmp_path: Path) -> None:
 
 
 def test_backfill_window_no_log_file(tmp_path: Path) -> None:
-    count = backfill_window(tmp_path, datetime(2026, 5, 8, 10, 0), datetime(2026, 5, 8, 12, 0), "acme:auth")
+    t0, t1 = datetime(2026, 5, 8, 10, 0), datetime(2026, 5, 8, 12, 0)
+    count = backfill_window(tmp_path, t0, t1, "acme:auth")
     assert count == 0
 
 
