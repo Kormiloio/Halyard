@@ -8,7 +8,7 @@ import html
 import socket
 import webbrowser
 from collections.abc import Iterable
-from datetime import datetime, timedelta
+from datetime import timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path

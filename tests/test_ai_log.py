@@ -347,14 +347,20 @@ def test_rich_fields_omitted_when_none() -> None:
 
 
 def test_malformed_rich_field_ignored() -> None:
-    line = "s 2026-05-08T10:00:00 2026-05-08T10:30:00 gemini-cli gemini-2.0-flash 500 200 0.0012 tool_calls=notanint"
+    line = (
+        "s 2026-05-08T10:00:00 2026-05-08T10:30:00 gemini-cli gemini-2.0-flash"
+        " 500 200 0.0012 tool_calls=notanint"
+    )
     parsed = AiSession.from_log_line(line)
     assert parsed is not None
     assert parsed.tool_calls is None
 
 
 def test_unknown_rich_field_ignored() -> None:
-    line = "s 2026-05-08T10:00:00 2026-05-08T10:30:00 gemini-cli gemini-2.0-flash 500 200 0.0012 future_field=somevalue"
+    line = (
+        "s 2026-05-08T10:00:00 2026-05-08T10:30:00 gemini-cli gemini-2.0-flash"
+        " 500 200 0.0012 future_field=somevalue"
+    )
     parsed = AiSession.from_log_line(line)
     assert parsed is not None  # must not crash
 

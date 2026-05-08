@@ -524,7 +524,9 @@ def run_local_log_query(
 
     tool_summary = ""
     if report_data.total_tool_calls:
-        err_note = f", {report_data.total_tool_errors} error(s)" if report_data.total_tool_errors else ""
+        err_note = (
+            f", {report_data.total_tool_errors} error(s)" if report_data.total_tool_errors else ""
+        )
         tool_summary = f" {report_data.total_tool_calls} tool call(s){err_note}."
 
     return LogQueryResponse(

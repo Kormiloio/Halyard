@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from typer.testing import CliRunner
 
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
@@ -82,7 +81,7 @@ def test_note_with_newline_does_not_corrupt_log(tmp_path: Path) -> None:
     append_session(tmp_path, session)
 
     log_text = (tmp_path / AI_LOG_FILENAME).read_text()
-    data_lines = [l for l in log_text.splitlines() if l.startswith("s ")]
+    data_lines = [ln for ln in log_text.splitlines() if ln.startswith("s ")]
     assert len(data_lines) == 1, "newline in note must not produce extra log lines"
     assert "line_one_line_two" in data_lines[0]
 

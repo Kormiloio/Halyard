@@ -93,7 +93,9 @@ class AiSession:
         if self.tags:
             kvs.append(f"tags={','.join(self.tags)}")
         if self.note:
-            note_safe = self.note.replace("\n", " ").replace("\r", "").replace("\t", " ").replace(" ", "_")
+            note_safe = (
+                self.note.replace("\n", " ").replace("\r", "").replace("\t", " ").replace(" ", "_")
+            )
             kvs.append(f"note={note_safe}")
         if self.session_id:
             safe_sid = self.session_id.replace(" ", "")

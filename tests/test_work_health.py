@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Any
 from unittest.mock import patch
 
-import pytest
 from typer.testing import CliRunner
 
 from halyard.ai_log import AiSession
@@ -20,7 +19,6 @@ from halyard.work_health import (
     detect_unattributed_high_cost,
     detect_wall_vs_active,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
