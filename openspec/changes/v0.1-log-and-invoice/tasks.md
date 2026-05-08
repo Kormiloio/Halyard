@@ -50,7 +50,7 @@ designed.
   - Single-turn tool-use loop (dispatch tools, collect results, final response)
   - Parse structured response into `LogQueryResponse`
   - Raise `LogAgentError` on SDK error or timeout
-- [ ] Detect hub vs project log source; set `data_source` field accordingly
+- [x] Detect hub vs project log source; set `data_source` field accordingly
 
 ## `src/halyard/invoicing.py` (new module)
 - [x] Implement `generate_invoice(client_slug, project_slug?, period, project_dir, force, dry_run) -> InvoiceResult`
@@ -92,19 +92,19 @@ designed.
 ## Tests (`tests/test_log_agent.py`)
 - [x] `test_run_log_query_summarize_by_project` — mock SDK, verify tool dispatch and response
 - [x] `test_run_log_query_no_sessions` — empty log returns informative answer
-- [ ] `test_run_log_query_uses_hub_fallback` — when no project dir, uses hub log
+- [x] `test_run_log_query_uses_hub_fallback` — when no project dir, uses hub log
 - [x] `test_run_log_query_no_api_key` — raises `LogAgentError` with clear message
 - [x] `test_run_log_query_json_output` — `LogQueryResponse` serializes to valid JSON
 
 ## Tests (`tests/test_invoicing.py`)
 - [x] `test_generate_invoice_basic` — rendered markdown output
 - [x] `test_generate_invoice_dry_run` — returns rendered text, counter not incremented
-- [ ] `test_generate_invoice_unknown_client` — raises error for missing client slug
-- [ ] `test_generate_invoice_no_time_entries` — raises error with clear message
-- [ ] `test_generate_invoice_open_entries_warning` — warning printed, invoice still generated
-- [ ] `test_generate_invoice_existing_file_no_force` — exits with error
-- [ ] `test_generate_invoice_existing_file_force` — overwrites without incrementing counter
-- [ ] `test_generate_invoice_ai_cost_line_item` — AI cost appears when flag set
+- [x] `test_generate_invoice_unknown_client` — raises error for missing client slug
+- [x] `test_generate_invoice_no_time_entries` — raises error with clear message
+- [x] `test_generate_invoice_open_entries_warning` — warning printed, invoice still generated
+- [x] `test_generate_invoice_existing_file_no_force` — exits with error
+- [x] `test_generate_invoice_existing_file_force` — overwrites without incrementing counter
+- [x] `test_generate_invoice_ai_cost_line_item` — AI cost appears when flag set
 - [x] `test_log_json_returns_local_summary` — local log summary emits valid JSON
 
 ## Quality

@@ -140,7 +140,7 @@ def _tools_for_openai() -> list[dict[str, Any]]:
 def run_log_query(
     query: str,
     *,
-    project_dir: Path,
+    project_dir: Path | None = None,
     agent: LogAgent | None = None,
     period: str = "month",
     model: str | None = None,
@@ -148,7 +148,21 @@ def run_log_query(
     filters: LogQueryFilters | None = None,
     now: datetime | None = None,
 ) -> LogQueryResponse:
-    """Dispatch a query to the selected provider."""
+    """Dispatch a query to the selected provider.
+
+    When *project_dir* is None the hub directory is used as a fallback.
+    """
+    from dataclasses import replace
+
+    is_hub = False
+    if project_dir is None:
+        from halyard.hub import find_hub
+
+        project_dir = find_hub()
+        if project_dir is None:
+            raise LogAgentError("No Halyard project or hub found. Run 'halyard init' first.")
+        is_hub = True
+
     cfg = None
     if agent is None:
         from halyard.log_config import load_log_config
@@ -157,31 +171,36 @@ def run_log_query(
         agent = cfg.default_agent
 
     if agent == "local":
-        return run_local_log_query(
+        response = run_local_log_query(
             query, project_dir=project_dir, period=period, filters=filters, now=now
         )
-    if agent == "claude":
+    elif agent == "claude":
         from halyard.log_config import load_log_config
 
         cfg = cfg or load_log_config()
-        return run_claude_log_query(
+        response = run_claude_log_query(
             query,
             project_dir=project_dir,
             model=model or cfg.claude_model,
             now=now,
         )
-    if agent == "openai":
+    elif agent == "openai":
         from halyard.log_config import load_log_config
 
         cfg = cfg or load_log_config()
-        return run_openai_log_query(
+        response = run_openai_log_query(
             query,
             project_dir=project_dir,
             model=model or cfg.openai_model,
             base_url=base_url or cfg.openai_base_url,
             now=now,
         )
-    raise LogAgentError(f"Unknown log agent: {agent}")
+    else:
+        raise LogAgentError(f"Unknown log agent: {agent}")
+
+    if is_hub:
+        return replace(response, data_source=f"hub:{project_dir}")
+    return response
 
 
 def run_claude_log_query(

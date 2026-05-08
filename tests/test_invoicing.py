@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 import halyard.log_config as log_config
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
 from halyard.cli import app
+from halyard.log_agent import run_log_query
 
 runner = CliRunner()
 
@@ -108,6 +109,17 @@ def test_log_json_returns_local_summary(tmp_path: Path, monkeypatch: object) -> 
     assert payload["session_count"] == 1
     assert payload["cost_usd_total"] == 1.25
     assert payload["agent"] == "local"
+
+
+def test_run_log_query_uses_hub_fallback(tmp_path: Path, monkeypatch: object) -> None:
+    hub_dir = tmp_path / "hub"
+    hub_dir.mkdir()
+    (hub_dir / AI_LOG_FILENAME).write_text(HEADER)
+    monkeypatch.setattr("halyard.hub.find_hub", lambda: hub_dir)  # type: ignore[attr-defined]
+
+    response = run_log_query("what did I spend?", project_dir=None, agent="local")
+
+    assert response.data_source == f"hub:{hub_dir}"
 
 
 def test_log_agent_claude_requires_api_key(tmp_path: Path, monkeypatch: object) -> None:
