@@ -280,30 +280,24 @@ dependencies = [
     { name = "jinja2" },
     { name = "pydantic" },
     { name = "rich" },
+    { name = "textual" },
     { name = "tomli-w" },
     { name = "typer" },
+    { name = "watchfiles" },
 ]
 
 [package.optional-dependencies]
 all = [
     { name = "openai" },
-    { name = "textual" },
-    { name = "watchfiles" },
 ]
 dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
-    { name = "textual" },
-    { name = "watchfiles" },
 ]
 openai = [
     { name = "openai" },
-]
-tui = [
-    { name = "textual" },
-    { name = "watchfiles" },
 ]
 
 [package.metadata]
@@ -319,17 +313,12 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "rich", specifier = ">=13.7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
-    { name = "textual", marker = "extra == 'all'", specifier = ">=0.60" },
-    { name = "textual", marker = "extra == 'dev'", specifier = ">=0.60" },
-    { name = "textual", marker = "extra == 'tui'", specifier = ">=0.60" },
-    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
+    { name = "textual", specifier = ">=0.60" },
     { name = "tomli-w", specifier = ">=1.0" },
     { name = "typer", specifier = ">=0.12" },
-    { name = "watchfiles", marker = "extra == 'all'", specifier = ">=0.21" },
-    { name = "watchfiles", marker = "extra == 'dev'", specifier = ">=0.21" },
-    { name = "watchfiles", marker = "extra == 'tui'", specifier = ">=0.21" },
+    { name = "watchfiles", specifier = ">=0.21" },
 ]
-provides-extras = ["dev", "openai", "tui", "all"]
+provides-extras = ["dev", "openai", "all"]
 
 [[package]]
 name = "httpcore"

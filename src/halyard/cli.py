@@ -84,6 +84,41 @@ def default(ctx: typer.Context) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Hook auto-detection
+# ---------------------------------------------------------------------------
+
+
+def _auto_install_detected_hooks() -> None:
+    """Detect installed AI tools on PATH and auto-install their Halyard hooks."""
+    found: list[str] = []
+    not_found: list[str] = []
+
+    for binary, label, installer in [
+        ("claude", "Claude Code", lambda: _do_install_hook_claude(global_=True)),
+        ("cursor", "Cursor", _do_install_hook_cursor),
+        ("gemini", "Gemini CLI", _do_install_hook_gemini),
+    ]:
+        if shutil.which(binary):
+            try:
+                installer()  # type: ignore[no-untyped-call]
+                found.append(label)
+            except OSError:
+                not_found.append(f"{label} (install failed — run halyard install-hook-{binary})")
+        else:
+            not_found.append(label)
+
+    if found:
+        console.print(
+            f"\n[bold green]Auto-installed hooks:[/] {', '.join(found)}"
+        )
+    if not_found:
+        console.print(
+            f"[dim]Not found on PATH:[/] {', '.join(not_found)} "
+            f"(install later with [bold]halyard install-hook-<tool>[/])"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Project setup
 # ---------------------------------------------------------------------------
 
@@ -98,6 +133,7 @@ def init(
     from halyard.orchestration import scaffold_project
 
     scaffold_project(Path.cwd(), hub=hub)
+    _auto_install_detected_hooks()
 
 
 @app.command()
@@ -601,15 +637,7 @@ def cursor_hook() -> None:
     raise typer.Exit(code=handle_stop_hook())
 
 
-@app.command(name="install-hook")
-def install_hook(
-    global_: bool = typer.Option(
-        False,
-        "--global",
-        help="Install into ~/.claude/settings.json instead of .claude/settings.json.",
-    ),
-) -> None:
-    """Install Claude Code hooks to auto-capture AI sessions."""
+def _do_install_hook_claude(global_: bool = False) -> None:
     if global_:
         settings_path = Path.home() / ".claude" / "settings.json"
     else:
@@ -629,7 +657,6 @@ def install_hook(
     exe = _halyard_exe()
 
     for event, entries in _CC_HOOKS.items():
-        # Substitute the resolved executable path into a deep copy of the config
         resolved = json.loads(json.dumps(entries).replace("halyard ", f"{exe} ", 1))
         current = hooks.setdefault(event, [])
         command = resolved[0]["hooks"][0]["command"]
@@ -643,18 +670,38 @@ def install_hook(
     settings_path.write_text(json.dumps(existing, indent=2) + "\n")
 
     if added:
-        console.print(f"[bold green]Hooks installed[/] in [bold]{settings_path}[/]")
-        for event in added:
-            console.print(f"  {event}")
+        console.print(f"[bold green]Claude Code hooks installed[/] in [bold]{settings_path}[/]")
     else:
         console.print(
-            f"[yellow]Hooks already present[/] in [bold]{settings_path}[/] — nothing changed."
+            f"[yellow]Claude Code hooks already present[/] in [bold]{settings_path}[/]"
         )
 
 
-@app.command(name="install-gemini-hook")
-def install_gemini_hook() -> None:
-    """Install Gemini CLI hooks to auto-capture AI sessions."""
+@app.command(name="install-hook-claude")
+def install_hook_claude(
+    global_: bool = typer.Option(
+        False,
+        "--global",
+        help="Install into ~/.claude/settings.json instead of .claude/settings.json.",
+    ),
+) -> None:
+    """Install Claude Code hooks to auto-capture AI sessions."""
+    _do_install_hook_claude(global_=global_)
+
+
+@app.command(name="install-hook", hidden=True)
+def install_hook(
+    global_: bool = typer.Option(
+        False,
+        "--global",
+        help="Install into ~/.claude/settings.json instead of .claude/settings.json.",
+    ),
+) -> None:
+    """Deprecated alias for install-hook-claude."""
+    _do_install_hook_claude(global_=global_)
+
+
+def _do_install_hook_gemini() -> None:
     settings_path = Path.home() / ".gemini" / "settings.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -687,18 +734,26 @@ def install_gemini_hook() -> None:
     settings_path.write_text(json.dumps(existing, indent=2) + "\n")
 
     if added:
-        console.print(f"[bold green]Hooks installed[/] in [bold]{settings_path}[/]")
-        for event in added:
-            console.print(f"  {event}")
+        console.print(f"[bold green]Gemini CLI hooks installed[/] in [bold]{settings_path}[/]")
     else:
         console.print(
-            f"[yellow]Hooks already present[/] in [bold]{settings_path}[/] — nothing changed."
+            f"[yellow]Gemini CLI hooks already present[/] in [bold]{settings_path}[/]"
         )
 
 
-@app.command(name="install-cursor-hook")
-def install_cursor_hook() -> None:
-    """Install Cursor hooks to auto-capture AI sessions."""
+@app.command(name="install-hook-gemini")
+def install_hook_gemini() -> None:
+    """Install Gemini CLI hooks to auto-capture AI sessions."""
+    _do_install_hook_gemini()
+
+
+@app.command(name="install-gemini-hook", hidden=True)
+def install_gemini_hook() -> None:
+    """Deprecated alias for install-hook-gemini."""
+    _do_install_hook_gemini()
+
+
+def _do_install_hook_cursor() -> None:
     settings_path = Path.home() / ".cursor" / "hooks.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -725,13 +780,23 @@ def install_cursor_hook() -> None:
     settings_path.write_text(json.dumps(existing, indent=2) + "\n")
 
     if added:
-        console.print(f"[bold green]Hooks installed[/] in [bold]{settings_path}[/]")
-        for event in added:
-            console.print(f"  {event}")
+        console.print(f"[bold green]Cursor hooks installed[/] in [bold]{settings_path}[/]")
     else:
         console.print(
-            f"[yellow]Hooks already present[/] in [bold]{settings_path}[/] — nothing changed."
+            f"[yellow]Cursor hooks already present[/] in [bold]{settings_path}[/]"
         )
+
+
+@app.command(name="install-hook-cursor")
+def install_hook_cursor() -> None:
+    """Install Cursor hooks to auto-capture AI sessions."""
+    _do_install_hook_cursor()
+
+
+@app.command(name="install-cursor-hook", hidden=True)
+def install_cursor_hook() -> None:
+    """Deprecated alias for install-hook-cursor."""
+    _do_install_hook_cursor()
 
 
 @app.command(name="record-session")
