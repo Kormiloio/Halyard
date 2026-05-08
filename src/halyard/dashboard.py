@@ -17,6 +17,7 @@ from halyard.ai_log import AiSession
 from halyard.ai_plans import read_ai_plans
 from halyard.budget import BudgetStatus, budget_status
 from halyard.ledger import LedgerSummary, build_ledger
+from halyard.org_rollups import aggregate_trust, session_trust
 from halyard.reports import (
     CostBucket,
     DashboardState,
@@ -231,7 +232,7 @@ def _render_state(state: DashboardState) -> str:
           </div>
           <span class="pill">{_e(report.period_label)}</span>
         </div>
-        {_costs_panel(ledger, report.by_project)}
+        {_costs_panel(ledger, report.by_project, report.sessions)}
       </article>
     </section>
 
@@ -374,11 +375,22 @@ def _budget_panel(statuses: list[BudgetStatus]) -> str:
     return "<div class='budget-list'>" + "".join(items) + "</div>"
 
 
-def _costs_panel(ledger: LedgerSummary | None, by_project: list[CostBucket]) -> str:
+def _costs_panel(
+    ledger: LedgerSummary | None,
+    by_project: list[CostBucket],
+    sessions: list[AiSession],
+) -> str:
     if ledger is None:
-        # No plans: show simple per-project totals, note that trust needs plans
+        # No plans: compute per-project trust from raw sessions
         rows = []
         for bucket in by_project:
+            proj_sessions = [s for s in sessions if (s.project or "(unattributed)") == bucket.label]
+            trust = (
+                aggregate_trust([session_trust(s) for s in proj_sessions])
+                if proj_sessions
+                else "missing"
+            )
+            trust_cls = trust.replace("_", "-")
             rows.append(
                 "<tr>"
                 f"<td>{_e(bucket.label)}</td>"
@@ -386,7 +398,7 @@ def _costs_panel(ledger: LedgerSummary | None, by_project: list[CostBucket]) -> 
                 f"<td class='num'>${bucket.cost_usd:.4f}</td>"
                 "<td>—</td>"
                 f"<td class='num'>${bucket.cost_usd:.4f}</td>"
-                f"<td><span class='trust trust-captured'>captured</span></td>"
+                f"<td><span class='trust trust-{_e(trust_cls)}'>{_e(trust)}</span></td>"
                 "</tr>"
             )
         if not rows:

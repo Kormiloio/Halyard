@@ -134,3 +134,97 @@ def test_render_dashboard_marks_unattributed_sessions(tmp_path: Path) -> None:
     assert "Needs Attention" in html
     assert "Unattributed Sessions" in html
     assert "codex-local" in html
+
+
+def test_costs_panel_api_sessions_show_captured(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 7, 10, 0),
+            end=datetime(2026, 5, 7, 10, 30),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=1000,
+            output_tokens=500,
+            cost_usd=0.02,
+            project="acme:auth",
+            billing="api",
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "trust-captured" in html
+    assert ">captured<" in html
+
+
+def test_costs_panel_credits_sessions_show_allocated(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 7, 10, 0),
+            end=datetime(2026, 5, 7, 10, 30),
+            tool="cursor",
+            model="claude-sonnet-4-6",
+            input_tokens=1000,
+            output_tokens=500,
+            cost_usd=0.0,
+            credits=20.0,
+            project="acme:auth",
+            billing="credits",
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "trust-allocated" in html
+    assert ">allocated<" in html
+
+
+def test_costs_panel_zero_cost_no_credits_shows_missing(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 7, 10, 0),
+            end=datetime(2026, 5, 7, 10, 30),
+            tool="cursor",
+            model="gpt-4o",
+            input_tokens=1000,
+            output_tokens=500,
+            cost_usd=0.0,
+            project="acme:auth",
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "trust-missing" in html
+    assert ">missing<" in html
+
+
+def test_costs_panel_mixed_sessions_show_mixed(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    for billing, cost, credits in [("api", 0.02, None), ("credits", 0.0, 10.0)]:
+        append_session(
+            tmp_path,
+            AiSession(
+                start=datetime(2026, 5, 7, 10, 0),
+                end=datetime(2026, 5, 7, 10, 30),
+                tool="claude-code",
+                model="claude-sonnet-4-6",
+                input_tokens=500,
+                output_tokens=200,
+                cost_usd=cost,
+                credits=credits,
+                project="acme:auth",
+                billing=billing,
+            ),
+        )
+
+    html = render_dashboard(tmp_path)
+
+    assert "trust-mixed" in html
+    assert ">mixed<" in html
