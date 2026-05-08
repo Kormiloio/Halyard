@@ -41,6 +41,13 @@ install commands.
 - THEN the underlying installer remains idempotent
 - AND no duplicate hook entry is written
 
+### Scenario: hook settings file is not writable
+
+- WHEN setup cannot write one tool's hook settings file
+- THEN setup prints a clear error for that tool
+- AND continues to the readiness summary instead of showing a Python traceback
+- AND exits with code 1 after the summary
+
 ### Scenario: explicit Claude global install
 
 - WHEN the user runs `halyard setup --claude --global-claude --yes`
@@ -57,4 +64,3 @@ Halyard SHOULD prompt users when no `--yes` flag is provided.
 - AND the user declines
 - THEN Cursor hooks are not installed
 - AND setup continues with other selected or accepted tools
-

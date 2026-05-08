@@ -212,23 +212,30 @@ def setup_cmd(
             if install:
                 tools.append(candidate)
 
+    install_errors: list[str] = []
     if not tools:
         console.print("[yellow]No hooks selected.[/]")
     else:
         console.print("Installing: " + ", ".join(tool_label(tool) for tool in tools))
         for selected in tools:
-            if selected == "claude":
-                install_hook(global_=global_claude)
-            elif selected == "cursor":
-                install_cursor_hook()
-            elif selected == "gemini":
-                install_gemini_hook()
+            try:
+                if selected == "claude":
+                    install_hook(global_=global_claude)
+                elif selected == "cursor":
+                    install_cursor_hook()
+                elif selected == "gemini":
+                    install_gemini_hook()
+            except OSError as exc:
+                install_errors.append(f"{tool_label(selected)}: {exc}")
+                console.print(f"[bold red]Could not install {tool_label(selected)} hooks:[/] {exc}")
 
     report = build_doctor_report()
     console.print("")
     console.print(render_text(report))
     console.print("")
     console.print(f"[bold green]{next_step_text()}[/]")
+    if install_errors:
+        raise typer.Exit(code=1)
 
 
 @app.command(name="link-repo")

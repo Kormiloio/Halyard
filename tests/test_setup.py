@@ -93,3 +93,19 @@ def test_setup_no_project_no_hub_guidance(monkeypatch, tmp_path: Path) -> None: 
     assert result.exit_code == 0
     assert "Capture has no destination" in result.stdout
     assert "halyard init" in result.stdout
+
+
+def test_setup_installer_failure_exits_1_after_summary(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.chdir(tmp_path)
+
+    def fail_install() -> None:
+        raise PermissionError("settings.json")
+
+    monkeypatch.setattr("halyard.cli.install_gemini_hook", fail_install)
+
+    result = CliRunner().invoke(app, ["setup", "--gemini", "--yes"])
+
+    assert result.exit_code == 1
+    assert "Could not install Gemini CLI hooks" in result.stdout
+    assert "Halyard Doctor" in result.stdout
+    assert "doctor --first-capture" in result.stdout

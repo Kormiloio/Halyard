@@ -24,6 +24,7 @@
 - [x] Add `--global-claude`.
 - [x] Reuse existing hook installers.
 - [x] Print `halyard doctor --first-capture` next step.
+- [x] Handle hook installer write failures without a traceback.
 
 ## Documentation
 
@@ -39,6 +40,7 @@
 - [x] Test `--yes` with no tool flags defaults to all tools.
 - [x] Test no project/no hub guidance.
 - [x] Test `--global-claude` forwards to Claude installer.
+- [x] Test hook installer failure exits 1 after readiness summary.
 
 ## Quality
 
