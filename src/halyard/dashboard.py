@@ -27,8 +27,10 @@ from halyard.reports import (
     parse_timeclock,
 )
 
+DASHBOARD_PORT = 7432
 
-def run_dashboard(project_dir: Path, *, port: int = 0, open_browser: bool = False) -> str:
+
+def run_dashboard(project_dir: Path, *, port: int = DASHBOARD_PORT, open_browser: bool = False) -> str:
     """Start the dashboard server and block until interrupted."""
     host = "127.0.0.1"
     server = ThreadingHTTPServer((host, _resolve_port(port)), _handler_for(project_dir))
@@ -62,6 +64,51 @@ def _handler_for(project_dir: Path) -> type[BaseHTTPRequestHandler]:
         def do_HEAD(self) -> None:
             self._send_dashboard(include_body=False)
 
+        def do_POST(self) -> None:
+            from urllib.parse import parse_qs
+
+            from halyard.reports import _HALYARD_ACTIVE, read_active_timer
+
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode(errors="replace") if length else ""
+            params = {k: v[0] for k, v in parse_qs(body).items()}
+
+            if self.path == "/api/start":
+                slug = params.get("project", "").strip()
+                if (
+                    slug
+                    and "/" in slug
+                    and not slug.startswith("/")
+                    and not slug.endswith("/")
+                    and not read_active_timer()
+                ):
+                    timeclock = project_dir / "time.timeclock"
+                    if timeclock.exists():
+                        from datetime import datetime
+
+                        account = slug.replace("/", ":", 1)
+                        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        with timeclock.open("a") as f:
+                            f.write(f"i {ts} {account}\n")
+                        _HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
+                        _HALYARD_ACTIVE.write_text(
+                            f"timeclock={timeclock}\nslug={account}\nstarted={ts}\n"
+                        )
+
+            elif self.path == "/api/stop":
+                active = read_active_timer()
+                if active and active.timeclock and active.timeclock.exists():
+                    from datetime import datetime
+
+                    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    with active.timeclock.open("a") as f:
+                        f.write(f"o {ts}\n")
+                    _HALYARD_ACTIVE.unlink(missing_ok=True)
+
+            self.send_response(HTTPStatus.FOUND)
+            self.send_header("Location", "/")
+            self.end_headers()
+
         def _send_dashboard(self, *, include_body: bool) -> None:
             if self.path not in {"/", "/index.html"}:
                 self.send_error(HTTPStatus.NOT_FOUND)
@@ -93,12 +140,6 @@ def _render_state(state: DashboardState) -> str:
     report = state.report
     human_time = state.human_time
     latest = state.latest_session
-    timer_label = state.active_timer.slug if state.active_timer else "No active timer"
-    timer_started = (
-        f"{state.active_timer.elapsed_label} elapsed"
-        if state.active_timer
-        else "Start one with halyard start"
-    )
     health_level = _overall_health(state)
 
     # Budget data
@@ -198,7 +239,7 @@ def _render_state(state: DashboardState) -> str:
     </header>
 
     <section class="metrics" aria-label="Today summary">
-      {_metric("Active Project", timer_label, timer_started, "focus")}
+      {_timer_metric(state.active_timer)}
       {_metric("Human Time", format_minutes(human_time.today_minutes), "today", "normal")}
       {_metric("AI Sessions", str(len(report.sessions)), report.period_label, "normal")}
       {_metric("AI Cost", f"${report.total_cost:.2f}", "captured API cost", "money")}
@@ -327,6 +368,38 @@ def _metric(label: str, value: str, detail: str, tone: str) -> str:
         <span>{_e(label)}</span>
         <strong>{_e(value)}</strong>
         <small>{_e(detail)}</small>
+      </article>
+    """
+
+
+def _timer_metric(active_timer: object) -> str:
+    from halyard.reports import ActiveTimer
+
+    timer = active_timer if isinstance(active_timer, ActiveTimer) else None
+    if timer:
+        controls = (
+            f'<form class="timer-form" method="post" action="/api/stop">'
+            f'<button class="btn btn-stop" type="submit">&#9632; Stop {_e(timer.slug)}</button>'
+            f"</form>"
+        )
+        value = _e(timer.slug)
+        detail = _e(f"{timer.elapsed_label} elapsed")
+    else:
+        controls = (
+            '<form class="timer-form" method="post" action="/api/start">'
+            '<input class="timer-input" name="project" placeholder="client/project" required>'
+            '<button class="btn btn-start" type="submit">&#9654; Start</button>'
+            "</form>"
+        )
+        value = "No active timer"
+        detail = ""
+
+    return f"""
+      <article class="metric metric-focus">
+        <span>Active Project</span>
+        <strong>{value}</strong>
+        <small>{detail}</small>
+        {controls}
       </article>
     """
 
@@ -760,6 +833,24 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .trust-unallocated { background: rgba(255,255,255,.06); color: var(--muted); }
 .inferred-dot { color: var(--muted); font-size: 11px; cursor: help; }
 .costs-note { font-size: 12px; color: var(--muted); margin-top: 12px; }
+
+/* Timer controls */
+.timer-form { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.timer-input {
+  flex: 1; min-width: 0;
+  background: rgba(255,255,255,.07); border: 1px solid var(--line); border-radius: 4px;
+  color: var(--text); font-size: 12px; padding: 5px 8px; outline: none;
+}
+.timer-input:focus { border-color: var(--cyan); }
+.btn {
+  border: none; border-radius: 4px; cursor: pointer;
+  font-size: 11px; font-weight: 700; padding: 5px 10px; letter-spacing: .04em;
+  white-space: nowrap;
+}
+.btn-start { background: rgba(112, 225, 143, .15); color: var(--green); }
+.btn-start:hover { background: rgba(112, 225, 143, .25); }
+.btn-stop { background: rgba(255, 111, 111, .12); color: var(--red); width: 100%; }
+.btn-stop:hover { background: rgba(255, 111, 111, .22); }
 
 @media (max-width: 1100px) {
   body { min-width: 760px; }
