@@ -11,7 +11,6 @@ from typer.testing import CliRunner
 from halyard.ai_log import AiSession
 from halyard.schedule import _session_uid, build_calendar, session_to_vevent
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from halyard.repl import run_repl
 
@@ -158,6 +156,7 @@ def test_repl_agent_error_continues_loop(tmp_path: Path) -> None:
 
 def test_halyard_no_args_enters_repl(tmp_path: Path) -> None:
     from typer.testing import CliRunner
+
     from halyard.cli import app
 
     (tmp_path / "halyard.toml").write_text("[business]\n")
@@ -176,6 +175,7 @@ def test_halyard_no_args_enters_repl(tmp_path: Path) -> None:
 
 def test_halyard_no_args_no_project_exits_nonzero(tmp_path: Path) -> None:
     from typer.testing import CliRunner
+
     from halyard.cli import app
 
     runner = CliRunner()
