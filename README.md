@@ -76,6 +76,10 @@ halyard install-hook          # Claude Code
 halyard install-cursor-hook   # Cursor
 halyard install-gemini-hook   # Gemini CLI
 
+# Diagnose setup and verify first capture
+halyard doctor
+halyard doctor --first-capture
+
 # Retroactive Gemini import
 halyard import-gemini
 
@@ -96,7 +100,8 @@ halyard invoice acme --period 2026-05 --include-ai-evidence
 halyard update-pricing
 ```
 
-See [`docs/demo.md`](docs/demo.md) for a full 60-second walkthrough.
+See [`docs/demo.md`](docs/demo.md) for a full 60-second walkthrough. If capture
+does not show up, start with [`docs/troubleshooting.md`](docs/troubleshooting.md).
 
 ---
 

@@ -134,6 +134,33 @@ def hub(
         )
 
 
+@app.command(name="doctor")
+def doctor_cmd(
+    json_: bool = typer.Option(False, "--json", help="Write machine-readable JSON."),
+    first_capture: bool = typer.Option(
+        False,
+        "--first-capture",
+        help="Verify that a recent AI session was captured somewhere.",
+    ),
+    tool: str = typer.Option("all", "--tool", help="claude | cursor | gemini | all"),
+) -> None:
+    """Diagnose Halyard setup, hooks, logs, and first-capture readiness."""
+    from halyard.doctor import build_doctor_report, has_errors, render_json, render_text
+
+    if tool not in {"claude", "cursor", "gemini", "all"}:
+        console.print("[bold red]Error:[/] --tool must be one of: claude, cursor, gemini, all")
+        raise typer.Exit(code=1)
+
+    report = build_doctor_report(tool=cast(Any, tool), first_capture=first_capture)
+    if json_:
+        sys.stdout.write(render_json(report))
+    else:
+        console.print(render_text(report))
+
+    if has_errors(report):
+        raise typer.Exit(code=1)
+
+
 @app.command(name="link-repo")
 def link_repo(
     project: str = typer.Argument(..., help="Project slug (client:project) to map this repo to."),

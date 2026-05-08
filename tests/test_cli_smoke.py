@@ -28,6 +28,7 @@ def test_v0_commands_registered() -> None:
         "stop",
         "invoice",
         "dashboard",
+        "doctor",
         "record-session",
         "sample-session",
         "assign-unattributed",
