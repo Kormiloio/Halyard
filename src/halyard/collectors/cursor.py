@@ -26,6 +26,7 @@ from halyard.ai_log import (
     AiSession,
     append_session,
     find_project_dir,
+    maybe_show_dashboard_hint,
     write_unattributed_session,
 )
 from halyard.git_context import current_branch, infer_project
@@ -107,6 +108,7 @@ def handle_stop_hook() -> int:
             f"[halyard] session saved to {path} — run 'halyard assign-unattributed' to review.",
             file=sys.stderr,
         )
+    maybe_show_dashboard_hint()
     return 0
 
 

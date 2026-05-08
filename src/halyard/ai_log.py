@@ -344,6 +344,21 @@ def unattributed_log_count() -> int:
     return sum(1 for line in path.read_text().splitlines() if line.strip().startswith("s "))
 
 
+def maybe_show_dashboard_hint() -> None:
+    """Print a one-time hint to open the dashboard after the first captured session."""
+    import sys
+
+    flag = Path.home() / ".halyard" / ".dashboard-hint-shown"
+    if flag.exists():
+        return
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.touch()
+    print(
+        "[halyard] First session captured! View it live: halyard dashboard --open",
+        file=sys.stderr,
+    )
+
+
 def _write_quarantine(original_line: str, error: str) -> Path:
     path = Path.home() / ".halyard" / "quarantine.log"
     path.parent.mkdir(parents=True, exist_ok=True)

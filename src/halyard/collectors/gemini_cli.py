@@ -33,6 +33,7 @@ from halyard.ai_log import (
     AiSession,
     append_session,
     find_project_dir,
+    maybe_show_dashboard_hint,
     write_unattributed_session,
 )
 from halyard.collectors.gemini_history import (
@@ -207,6 +208,7 @@ def handle_agent_stop() -> int:
             file=sys.stderr,
         )
     _reset_state(payload)
+    maybe_show_dashboard_hint()
     return 0
 
 

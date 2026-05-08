@@ -18,6 +18,7 @@ from halyard.ai_log import (
     AiSession,
     append_session,
     find_project_dir,
+    maybe_show_dashboard_hint,
     write_unattributed_session,
 )
 from halyard.git_context import current_branch, infer_project
@@ -26,7 +27,6 @@ from halyard.pricing import calculate_cost, model_is_known
 
 _CC_SESSION_FILE = Path.home() / ".halyard" / "cc-session"
 _HALYARD_ACTIVE = Path.home() / ".halyard" / "active"
-_DASHBOARD_HINT_FILE = Path.home() / ".halyard" / ".dashboard-hint-shown"
 
 
 def record_session_start() -> int:
@@ -110,19 +110,8 @@ def handle_stop_hook() -> int:
             file=sys.stderr,
         )
 
-    _maybe_show_dashboard_hint()
+    maybe_show_dashboard_hint()
     return 0
-
-
-def _maybe_show_dashboard_hint() -> None:
-    if _DASHBOARD_HINT_FILE.exists():
-        return
-    _DASHBOARD_HINT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _DASHBOARD_HINT_FILE.touch()
-    print(
-        "[halyard] First session captured! View it live: halyard dashboard --open",
-        file=sys.stderr,
-    )
 
 
 # ---------------------------------------------------------------------------
