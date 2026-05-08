@@ -92,6 +92,16 @@ def test_vevent_includes_code_delta_when_present() -> None:
     assert "Code delta: +88/-12" in vevent
 
 
+def test_vevent_escapes_reserved_text_characters() -> None:
+    s = _session(project="acme:auth;api,core\\edge", tags=["branch:feat,one"])
+    vevent = session_to_vevent(s)
+    unfolded = vevent.replace("\r\n ", "")
+    assert "SUMMARY:claude-code — acme:auth\\;api\\,core\\\\edge" in unfolded
+    assert "Tokens: 18\\,000 in / 3\\,200 out" in unfolded
+    assert "Tags: branch:feat\\,one" in unfolded
+    assert "\\nCost:" in unfolded
+
+
 def test_vevent_omits_optional_fields_when_absent() -> None:
     s = _session()
     vevent = session_to_vevent(s)

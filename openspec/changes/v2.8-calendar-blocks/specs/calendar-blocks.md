@@ -45,6 +45,10 @@ THEN both exports produce a VEVENT with the same UID
 ### WHEN a DESCRIPTION line exceeds 75 octets
 THEN the line is folded per RFC 5545 §3.1 (CRLF + SPACE continuation)
 
+### WHEN SUMMARY or DESCRIPTION text contains reserved iCalendar characters
+THEN text values escape backslash, comma, semicolon, and newline characters
+per RFC 5545 text escaping before line folding.
+
 ---
 
 ## Command: `halyard seed-demo`

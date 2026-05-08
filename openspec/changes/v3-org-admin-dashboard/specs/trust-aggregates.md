@@ -41,6 +41,15 @@ session data across users, teams, and time periods.
   when the aggregate is mixed
 - OR simply `$X.XX` when all components share the same trust label
 
+### Scenario: consistent cost arithmetic
+
+- WHEN org, team, project, people, and finance aggregates are built from the
+  same sessions
+- THEN each aggregate uses the same direct/allocated/total cost arithmetic
+- AND credit or seat sessions are not counted in some views but omitted from
+  others
+- AND the aggregate total equals direct cost plus allocated cost for every view
+
 ### Scenario: unknown cost sessions excluded from totals
 
 - WHEN sessions have `trust = missing` (no captured cost and no plan allocation)

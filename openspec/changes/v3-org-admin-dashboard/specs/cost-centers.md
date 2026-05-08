@@ -80,3 +80,11 @@ consumable by BI and accounting systems.
 - WHEN a cost center total contains both captured and allocated amounts
 - THEN the export marks the row trust as "mixed"
 - AND shows direct_usd and allocated_usd as separate columns
+
+### Scenario: credit usage without plan conversion
+
+- WHEN a session records credit usage but no plan allocation has converted
+  those credits to USD
+- THEN finance exports MUST NOT present raw credits as captured direct USD
+- AND the row trust reflects allocated or missing cost quality according to the
+  available allocation metadata

@@ -12,6 +12,7 @@ from halyard.org_rollups import (
     build_org_summary,
     render_finance_csv,
     render_org_text,
+    session_cost_parts,
     session_trust,
 )
 
@@ -210,6 +211,40 @@ def test_team_rollup_direct_vs_allocated() -> None:
     eng = next(tr for tr in summary.teams if tr.team_id == "eng")
     assert abs(eng.direct_usd - 0.30) < 1e-4
     assert abs(eng.allocated_usd - 0.20) < 1e-4
+
+
+def test_allocated_cost_consistent_across_org_project_team_user_and_finance() -> None:
+    sessions = [
+        _session(user="alice@example.com", project="proj-a", billing="api", cost_usd=0.30),
+        _session(
+            user="alice@example.com",
+            project="proj-a",
+            billing="credits",
+            cost_usd=0.0,
+            credits=0.20,
+        ),
+    ]
+    org = _org()
+    summary = build_org_summary(sessions, org, _cost_centers(), period="month")
+
+    eng = next(tr for tr in summary.teams if tr.team_id == "eng")
+    project = next(pr for pr in summary.projects if pr.project_id == "proj-a")
+    alice = next(ur for ur in eng.user_rollups if ur.user == "alice@example.com")
+    finance = next(row for row in summary.finance_rows if row.project_id == "proj-a")
+
+    assert summary.total_cost == 0.50
+    assert eng.total_cost == 0.50
+    assert project.total_cost == 0.50
+    assert project.per_team["eng"] == 0.50
+    assert alice.total_cost == 0.50
+    assert finance.direct_usd == 0.30
+    assert finance.allocated_usd == 0.20
+    assert finance.total_usd == 0.50
+
+
+def test_session_cost_parts_puts_non_api_cost_in_allocated_bucket() -> None:
+    s = _session(billing="seat", cost_usd=1.25, credits=None)
+    assert session_cost_parts(s) == (0.0, 1.25, 1.25)
 
 
 def test_team_rollup_user_rollups_populated() -> None:

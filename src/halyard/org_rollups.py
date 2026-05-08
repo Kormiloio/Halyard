@@ -44,6 +44,17 @@ def session_trust(s: AiSession) -> str:
     return "missing"
 
 
+def session_cost_parts(s: AiSession) -> tuple[float, float, float]:
+    """Return direct, allocated, and total USD-like cost components for org views."""
+    if s.billing == "api":
+        direct = s.cost_usd
+        allocated = 0.0
+    else:
+        direct = 0.0
+        allocated = s.cost_usd + (s.credits or 0.0)
+    return round(direct, 4), round(allocated, 4), round(direct + allocated, 4)
+
+
 def aggregate_trust(labels: list[str]) -> str:
     """Reduce a list of trust labels to a single aggregate label."""
     unique = set(labels)
@@ -177,13 +188,15 @@ def build_org_summary(
     project_rollups: list[ProjectRollup] = []
     for proj_id, by_team in sorted(project_map.items()):
         all_proj_sessions = [s for ss in by_team.values() for s in ss]
-        per_team = {tid: round(sum(s.cost_usd for s in ss), 4) for tid, ss in by_team.items()}
+        per_team = {
+            tid: round(sum(session_cost_parts(s)[2] for s in ss), 4) for tid, ss in by_team.items()
+        }
         trust = aggregate_trust([session_trust(s) for s in all_proj_sessions])
         project_rollups.append(
             ProjectRollup(
                 project_id=proj_id,
                 sessions=len(all_proj_sessions),
-                total_cost=round(sum(s.cost_usd for s in all_proj_sessions), 4),
+                total_cost=round(sum(session_cost_parts(s)[2] for s in all_proj_sessions), 4),
                 trust=trust,
                 per_team=per_team,
             )
@@ -198,7 +211,7 @@ def build_org_summary(
 
     # --- Org-level aggregates ---
     total_sessions = len(sessions)
-    total_cost = round(sum(s.cost_usd for s in sessions), 4)
+    total_cost = round(sum(session_cost_parts(s)[2] for s in sessions), 4)
     active_users = len({s.user for s in sessions if s.user})
     trust = aggregate_trust([session_trust(s) for s in sessions])
 
@@ -224,14 +237,14 @@ def _build_team_rollup(
     org: OrgConfig,
 ) -> TeamRollup:
     unattributed = sum(1 for s in t_sessions if not s.project)
-    direct = round(sum(s.cost_usd for s in t_sessions if s.billing != "credits"), 4)
-    allocated = round(sum((s.credits or 0.0) for s in t_sessions if s.billing == "credits"), 4)
+    direct = round(sum(session_cost_parts(s)[0] for s in t_sessions), 4)
+    allocated = round(sum(session_cost_parts(s)[1] for s in t_sessions), 4)
     trust = aggregate_trust([session_trust(s) for s in t_sessions]) if t_sessions else "missing"
     active_users_set = {s.user for s in t_sessions if s.user}
 
     per_project: dict[str, float] = defaultdict(float)
     for s in t_sessions:
-        per_project[s.project or _UNATTRIBUTED] += s.cost_usd
+        per_project[s.project or _UNATTRIBUTED] += session_cost_parts(s)[2]
 
     # User rollups within this team
     user_map: dict[str, list[AiSession]] = defaultdict(list)
@@ -272,7 +285,7 @@ def _build_user_rollup(email: str, u_sessions: list[AiSession], org: OrgConfig) 
         sessions=len(u_sessions),
         active_days=active_days,
         tools=dict(tools),
-        total_cost=round(sum(s.cost_usd for s in u_sessions), 4),
+        total_cost=round(sum(session_cost_parts(s)[2] for s in u_sessions), 4),
         trust=trust,
     )
 
@@ -349,8 +362,8 @@ def _build_finance_rows(
 
     rows: list[FinanceRow] = []
     for (proj, team_id, cc, tool), group in sorted(buckets.items()):
-        direct = round(sum(s.cost_usd for s in group if s.billing != "credits"), 4)
-        allocated = round(sum((s.credits or 0.0) for s in group if s.billing == "credits"), 4)
+        direct = round(sum(session_cost_parts(s)[0] for s in group), 4)
+        allocated = round(sum(session_cost_parts(s)[1] for s in group), 4)
         trust = aggregate_trust([session_trust(s) for s in group])
         rows.append(
             FinanceRow(

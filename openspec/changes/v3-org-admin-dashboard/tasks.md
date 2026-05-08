@@ -31,3 +31,9 @@ Implementation checklist for v3 — Org Admin Dashboard.
 - [x] 4.2 Define sync failure and retry states.
 - [x] 4.3 Define export API/CSV requirements.
 - [x] 4.4 Define retention and audit requirements.
+
+## 5. Review hardening
+
+- [x] 5.1 Use one direct/allocated/total cost helper across org, team, project, user, and finance rollups.
+- [x] 5.2 Add regression coverage for credits/allocated sessions appearing consistently in every org aggregate.
+- [x] 5.3 Ensure sync/help text names the implemented org initialization command.

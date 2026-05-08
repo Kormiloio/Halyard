@@ -12,6 +12,7 @@
 - [x] `session_to_vevent(s)` — VEVENT block with DTSTART, DTEND, SUMMARY, DESCRIPTION
 - [x] `build_calendar(sessions)` — full VCALENDAR string
 - [x] RFC 5545 §3.1 line folding for long content lines
+- [x] RFC 5545 text escaping for SUMMARY and DESCRIPTION values
 - [x] DESCRIPTION includes: model, cost, tokens, tool_calls, code_delta, tags
 
 ## `src/halyard/cli.py` — `halyard schedule` command
@@ -45,6 +46,7 @@
 - [x] `test_build_calendar_wraps_in_vcalendar`
 - [x] `test_build_calendar_empty_sessions`
 - [x] `test_build_calendar_uses_crlf`
+- [x] `test_vevent_escapes_reserved_text_characters`
 - [x] `test_schedule_cli_writes_file`
 - [x] `test_schedule_cli_stdout`
 - [x] `test_schedule_cli_exits_1_no_project`
@@ -53,6 +55,6 @@
 
 ## Quality
 
-- [x] Run full test suite — all passing (393 tests)
+- [x] Run full test suite — all passing (473 tests)
 - [x] Run ruff — no new errors
 - [x] Run mypy — no new errors

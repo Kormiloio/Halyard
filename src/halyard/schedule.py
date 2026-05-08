@@ -41,6 +41,16 @@ def _fold(line: str) -> str:
     return "\r\n ".join(result)
 
 
+def _escape_text(value: str) -> str:
+    """Escape an RFC 5545 TEXT value before folding."""
+    return (
+        value.replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+    )
+
+
 def session_to_vevent(s: AiSession) -> str:
     project_label = s.project or "unattributed"
     summary = f"{s.tool} — {project_label}"
@@ -59,15 +69,15 @@ def session_to_vevent(s: AiSession) -> str:
     if s.tags:
         desc_parts.append(f"Tags: {', '.join(s.tags)}")
 
-    description = "\\n".join(desc_parts)
+    description = "\n".join(desc_parts)
 
     lines = [
         "BEGIN:VEVENT",
         _fold(f"UID:{_session_uid(s)}"),
         f"DTSTART:{_fmt_dt(s.start)}",
         f"DTEND:{_fmt_dt(s.end)}",
-        _fold(f"SUMMARY:{summary}"),
-        _fold(f"DESCRIPTION:{description}"),
+        _fold(f"SUMMARY:{_escape_text(summary)}"),
+        _fold(f"DESCRIPTION:{_escape_text(description)}"),
         "END:VEVENT",
     ]
     return "\r\n".join(lines)

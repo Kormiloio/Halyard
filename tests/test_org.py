@@ -245,6 +245,15 @@ def test_normalize_allocated_trust():
     assert org_s.allocated_usd == pytest.approx(2.50)
 
 
+def test_normalize_non_api_cost_is_allocated_not_direct():
+    cfg = _org_config()
+    s = _session(cost=1.25, billing="seat", credits=None)
+    org_s = normalize_session(s.to_log_line(), s, cfg)
+    assert org_s.cost_usd == 0.0
+    assert org_s.allocated_usd == pytest.approx(1.25)
+    assert org_s.trust == "allocated"
+
+
 def test_normalize_missing_trust_for_seat_no_credits():
     cfg = _org_config()
     s = _session(cost=0.0, billing="seat", credits=None)

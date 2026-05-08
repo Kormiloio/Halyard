@@ -202,12 +202,13 @@ def normalize_session(
         attribution_state = "unattributed"
 
     # cost figures
+    direct = s.cost_usd if s.billing == "api" else 0.0
     allocated = 0.0
-    if s.billing != "api" and s.credits is not None:
-        allocated = s.credits
+    if s.billing != "api":
+        allocated = s.cost_usd + (s.credits or 0.0)
 
     # trust label (maps ledger "unallocated" → org "missing")
-    trust = _compute_org_trust(s.cost_usd, allocated, s.billing)
+    trust = _compute_org_trust(direct, allocated, s.billing)
 
     return OrgSession(
         org_id=org_config.org.id,
@@ -225,7 +226,7 @@ def normalize_session(
         output_tokens=s.output_tokens,
         cache_read_tokens=s.cache_read or 0,
         cache_write_tokens=s.cache_write or 0,
-        cost_usd=s.cost_usd,
+        cost_usd=direct,
         allocated_usd=allocated,
         trust=trust,
         tags=tuple(tags),

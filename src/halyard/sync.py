@@ -39,7 +39,7 @@ def sync_project(project_dir: Path, hub_dir: Path | None = None) -> SyncResult:
     org_config = read_org_config(effective_hub)
     if org_config is None:
         result.errors.append(
-            f"org.toml not found at {effective_hub} — run `halyard org init` to create it"
+            f"org.toml not found at {effective_hub} — run `halyard org-init` to create it"
         )
         return result
 
