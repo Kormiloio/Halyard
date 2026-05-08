@@ -677,6 +677,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .trust-captured { background: rgba(112, 225, 143, .15); color: var(--green); }
 .trust-calculated { background: rgba(69, 214, 208, .15); color: var(--cyan); }
 .trust-allocated { background: rgba(243, 191, 91, .15); color: var(--amber); }
+.trust-missing { background: rgba(255, 111, 111, .12); color: var(--red); }
 .trust-inferred { background: rgba(255,255,255,.08); color: var(--muted); }
 .trust-mixed { background: rgba(176, 159, 232, .2); color: var(--purple); }
 .trust-unallocated { background: rgba(255,255,255,.06); color: var(--muted); }

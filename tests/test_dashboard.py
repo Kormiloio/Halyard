@@ -228,3 +228,46 @@ def test_costs_panel_mixed_sessions_show_mixed(tmp_path: Path) -> None:
 
     assert "trust-mixed" in html
     assert ">mixed<" in html
+
+
+def test_costs_panel_no_plans_shows_note(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 7, 10, 0),
+            end=datetime(2026, 5, 7, 10, 30),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=500,
+            output_tokens=200,
+            cost_usd=0.01,
+            project="acme:auth",
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "ai-plans.toml" in html
+    assert "costs-note" in html
+
+
+def test_costs_panel_unattributed_project_label(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 7, 10, 0),
+            end=datetime(2026, 5, 7, 10, 30),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=500,
+            output_tokens=200,
+            cost_usd=0.01,
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "(unattributed)" in html
+    assert "trust-captured" in html
