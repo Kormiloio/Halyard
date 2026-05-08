@@ -10,7 +10,6 @@ from typer.testing import CliRunner
 
 from halyard.cli import app
 from halyard.config_history import (
-    AuditMismatch,
     RateChange,
     _parse_invoice_rates,
     audit_invoices,
