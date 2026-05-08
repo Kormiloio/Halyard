@@ -93,11 +93,7 @@ def test_note_with_newline_does_not_corrupt_log(tmp_path: Path) -> None:
 
 def test_report_ledger_direct_api_shows_captured_cost(tmp_path: Path) -> None:
     plans = (
-        "[[plan]]\n"
-        "slug = 'direct'\n"
-        "tool = 'claude-code'\n"
-        "billing = 'api'\n"
-        "allocation = 'direct'\n"
+        "[[plan]]\nslug = 'direct'\ntool = 'claude-code'\nbilling = 'api'\nallocation = 'direct'\n"
     )
     _init_project(tmp_path, plans)
     append_session(tmp_path, _session(project="acme:auth", cost=4.00, billing="api"))

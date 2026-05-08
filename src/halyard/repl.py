@@ -129,6 +129,7 @@ def run_repl(project_dir: Path, *, default_agent: str = "local") -> None:
 def _setup_readline() -> None:
     with suppress(ImportError, OSError):
         import readline
+
         _HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
         with suppress(FileNotFoundError):
             readline.read_history_file(_HISTORY_FILE)
@@ -139,4 +140,5 @@ def _setup_readline() -> None:
 def _write_history() -> None:
     with suppress(ImportError, OSError):
         import readline
+
         readline.write_history_file(_HISTORY_FILE)

@@ -278,8 +278,7 @@ def render_ai_evidence_appendix(
     ]
     if summary.total_direct_usd > 0:
         lines.append(
-            f"| Direct API | ${summary.total_direct_usd:.4f}"
-            " | captured from API responses |"
+            f"| Direct API | ${summary.total_direct_usd:.4f} | captured from API responses |"
         )
     if summary.total_allocated_usd > 0:
         lines.append(

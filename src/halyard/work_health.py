@@ -103,9 +103,7 @@ def detect_high_spend_low_delta(sessions: list[AiSession]) -> HealthSignal:
 
 
 def _day_key(s: AiSession) -> tuple[str, str, str]:
-    branch = next(
-        (t.removeprefix("branch:") for t in s.tags if t.startswith("branch:")), ""
-    )
+    branch = next((t.removeprefix("branch:") for t in s.tags if t.startswith("branch:")), "")
     return (s.project or "", branch, s.start.strftime("%Y-%m-%d"))
 
 
@@ -213,10 +211,7 @@ def _format_session_row(category: str, s: AiSession) -> str:
         wall = s.wall_seconds or 0
         active = s.agent_active_seconds or 0
         ratio = f"{active / wall * 100:.0f}%" if wall else "?"
-        return (
-            f"  {ts}  {s.tool}  {proj}"
-            f"  wall {wall}s  active {active}s  ({ratio})"
-        )
+        return f"  {ts}  {s.tool}  {proj}  wall {wall}s  active {active}s  ({ratio})"
 
     if category == "high_spend_low_delta":
         added = s.code_added or 0

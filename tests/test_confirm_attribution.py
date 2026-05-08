@@ -107,11 +107,7 @@ def test_confirm_writes_project_to_matching_line(tmp_path: Path) -> None:
     sess = _session(project=None)
     append_session(tmp_path, sess)
 
-    raw_line = next(
-        line.rstrip()
-        for line in log.read_text().splitlines()
-        if line.startswith("s ")
-    )
+    raw_line = next(line.rstrip() for line in log.read_text().splitlines() if line.startswith("s "))
 
     changed = confirm_session_attributions(tmp_path, [(raw_line, "acme:auth")])
 
@@ -190,9 +186,7 @@ def test_interactive_no_candidates_exits_clean(
     append_session(tmp_path, _session(project="acme:auth"))
 
     tc = tmp_path / "time.timeclock"
-    tc.write_text(
-        "i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 11:00:00\n"
-    )
+    tc.write_text("i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 11:00:00\n")
 
     interactive_confirm_attribution(tmp_path)
 
@@ -209,9 +203,7 @@ def test_interactive_confirms_session(tmp_path: Path, monkeypatch: pytest.Monkey
     append_session(tmp_path, sess)
 
     tc = tmp_path / "time.timeclock"
-    tc.write_text(
-        "i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 11:00:00\n"
-    )
+    tc.write_text("i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 11:00:00\n")
 
     monkeypatch.setattr("typer.prompt", lambda *_a, **_kw: "y")
 
@@ -230,9 +222,7 @@ def test_interactive_rejects_session(tmp_path: Path, monkeypatch: pytest.MonkeyP
     append_session(tmp_path, sess)
 
     tc = tmp_path / "time.timeclock"
-    tc.write_text(
-        "i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 11:00:00\n"
-    )
+    tc.write_text("i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 11:00:00\n")
 
     monkeypatch.setattr("typer.prompt", lambda *_a, **_kw: "n")
 

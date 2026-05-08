@@ -84,8 +84,7 @@ def _cost_centers(
             for slug, cc in (project_mappings or [])
         ),
         team_mappings=tuple(
-            TeamCostMapping(team_id=tid, cost_center=cc)
-            for tid, cc in (team_mappings or [])
+            TeamCostMapping(team_id=tid, cost_center=cc) for tid, cc in (team_mappings or [])
         ),
     )
 

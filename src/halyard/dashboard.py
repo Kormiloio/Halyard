@@ -405,7 +405,11 @@ def _costs_panel(ledger: LedgerSummary | None, by_project: list[CostBucket]) -> 
     rows = []
     for entry in ledger.entries:
         trust_cls = entry.trust.replace("_", "-")
-        inferred_marker = ' <span class="inferred-dot" title="Project inferred from timeclock">~</span>' if entry.has_inferred_attribution else ""
+        inferred_marker = (
+            ' <span class="inferred-dot" title="Project inferred from timeclock">~</span>'
+            if entry.has_inferred_attribution
+            else ""
+        )
         rows.append(
             "<tr>"
             f"<td>{_e(entry.project)}{inferred_marker}</td>"

@@ -1281,9 +1281,7 @@ def health(
         week_start = now - timedelta(days=now.weekday())
         sessions = [s for s in sessions if s.start.date() >= week_start.date()]
     elif p == "month":
-        sessions = [
-            s for s in sessions if s.start.year == now.year and s.start.month == now.month
-        ]
+        sessions = [s for s in sessions if s.start.year == now.year and s.start.month == now.month]
     elif p != "all":
         console.print("[bold red]Error:[/] --period must be one of: today, week, month, all")
         raise typer.Exit(code=1)
@@ -1338,9 +1336,7 @@ def org_summary_cmd(
         week_start = now - timedelta(days=now.weekday())
         sessions = [s for s in sessions if s.start.date() >= week_start.date()]
     elif p == "month":
-        sessions = [
-            s for s in sessions if s.start.year == now.year and s.start.month == now.month
-        ]
+        sessions = [s for s in sessions if s.start.year == now.year and s.start.month == now.month]
     elif p != "all":
         console.print("[bold red]Error:[/] --period must be: today, week, month, all")
         raise typer.Exit(code=1)
@@ -1414,8 +1410,7 @@ def export_cmd(
     org = read_org_config(project_dir)
     if org is None:
         console.print(
-            "[bold red]Error:[/] No org.toml found. "
-            "Create org.toml to enable org-level exports."
+            "[bold red]Error:[/] No org.toml found. Create org.toml to enable org-level exports."
         )
         raise typer.Exit(code=1)
 
@@ -1429,8 +1424,7 @@ def export_cmd(
         try:
             target = datetime.strptime(period, "%Y-%m")
             sessions = [
-                s for s in sessions
-                if s.start.year == target.year and s.start.month == target.month
+                s for s in sessions if s.start.year == target.year and s.start.month == target.month
             ]
             p = period
         except ValueError:
@@ -1441,9 +1435,7 @@ def export_cmd(
         week_start = now - timedelta(days=now.weekday())
         sessions = [s for s in sessions if s.start.date() >= week_start.date()]
     elif p == "month":
-        sessions = [
-            s for s in sessions if s.start.year == now.year and s.start.month == now.month
-        ]
+        sessions = [s for s in sessions if s.start.year == now.year and s.start.month == now.month]
 
     summary = build_org_summary(sessions, org, cost_centers, period=p)
     csv_content = render_finance_csv(summary.finance_rows)
@@ -1459,10 +1451,7 @@ def export_cmd(
         dest = project_dir / "exports" / f"{period_slug}-{org.org.id}.csv"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(csv_content, encoding="utf-8")
-    console.print(
-        f"[bold green]Exported[/] {len(summary.finance_rows)} rows → [bold]{dest}[/]"
-    )
-
+    console.print(f"[bold green]Exported[/] {len(summary.finance_rows)} rows → [bold]{dest}[/]")
 
 
 @app.command()
@@ -1495,9 +1484,7 @@ def schedule(
         week_start = now - timedelta(days=now.weekday())
         sessions = [s for s in sessions if s.start.date() >= week_start.date()]
     elif p == "month":
-        sessions = [
-            s for s in sessions if s.start.year == now.year and s.start.month == now.month
-        ]
+        sessions = [s for s in sessions if s.start.year == now.year and s.start.month == now.month]
     elif p != "all":
         console.print("[bold red]Error:[/] --period must be one of: today, week, month, all")
         raise typer.Exit(code=1)
@@ -1514,9 +1501,7 @@ def schedule(
     dest = _Path(output) if output else project_dir / "ai-schedule.ics"
     dest.write_text(ics, encoding="utf-8")
     noun = "session" if len(sessions) == 1 else "sessions"
-    console.print(
-        f"[bold green]Exported[/] {len(sessions)} {noun} → [bold]{dest}[/]"
-    )
+    console.print(f"[bold green]Exported[/] {len(sessions)} {noun} → [bold]{dest}[/]")
 
 
 @app.command()

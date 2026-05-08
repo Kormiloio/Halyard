@@ -324,9 +324,7 @@ def _ai_session(
     )
 
 
-def test_ai_evidence_appendix_not_included_by_default(
-    tmp_path: Path, monkeypatch: object
-) -> None:
+def test_ai_evidence_appendix_not_included_by_default(tmp_path: Path, monkeypatch: object) -> None:
     monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
     _init_project(tmp_path)
 
@@ -341,9 +339,7 @@ def test_ai_evidence_appendix_no_sessions(tmp_path: Path, monkeypatch: object) -
     monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
     _init_project(tmp_path)
 
-    result = runner.invoke(
-        app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"]
-    )
+    result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"])
 
     assert result.exit_code == 0, result.output
     rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
@@ -351,16 +347,12 @@ def test_ai_evidence_appendix_no_sessions(tmp_path: Path, monkeypatch: object) -
     assert "No AI sessions recorded for this period" in rendered
 
 
-def test_ai_evidence_appendix_with_direct_api_sessions(
-    tmp_path: Path, monkeypatch: object
-) -> None:
+def test_ai_evidence_appendix_with_direct_api_sessions(tmp_path: Path, monkeypatch: object) -> None:
     monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
     _init_project(tmp_path)
     append_session(tmp_path, _ai_session(cost=3.75))
 
-    result = runner.invoke(
-        app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"]
-    )
+    result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"])
 
     assert result.exit_code == 0, result.output
     rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
@@ -388,9 +380,7 @@ starts_on = "2026-01-01"
     )
     append_session(tmp_path, _ai_session(cost=0.0))
 
-    result = runner.invoke(
-        app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"]
-    )
+    result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"])
 
     assert result.exit_code == 0, result.output
     rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
@@ -406,9 +396,7 @@ def test_ai_evidence_appendix_no_trust_note_for_all_direct(
     _init_project(tmp_path)
     append_session(tmp_path, _ai_session(cost=1.00))
 
-    result = runner.invoke(
-        app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"]
-    )
+    result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"])
 
     assert result.exit_code == 0, result.output
     rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()

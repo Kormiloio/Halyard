@@ -22,6 +22,8 @@ def _display_name(org: OrgConfig, email: str) -> str:
 def _team_for_user(org: OrgConfig, email: str) -> str:
     _, team_id = org.resolve_user(email)
     return team_id
+
+
 _UNATTRIBUTED = "(unattributed)"
 _UNATTRIBUTED_THRESHOLD = 0.10  # 10% unattributed triggers governance flag
 
@@ -162,9 +164,7 @@ def build_org_summary(
     # Unassigned group (users not in org.toml)
     unassigned_sessions = team_sessions.get(_UNASSIGNED, [])
     if unassigned_sessions:
-        tr = _build_team_rollup(
-            _UNASSIGNED, _UNASSIGNED, None, unassigned_sessions, org
-        )
+        tr = _build_team_rollup(_UNASSIGNED, _UNASSIGNED, None, unassigned_sessions, org)
         team_rollups.append(tr)
 
     # --- Project rollups ---
@@ -177,10 +177,7 @@ def build_org_summary(
     project_rollups: list[ProjectRollup] = []
     for proj_id, by_team in sorted(project_map.items()):
         all_proj_sessions = [s for ss in by_team.values() for s in ss]
-        per_team = {
-            tid: round(sum(s.cost_usd for s in ss), 4)
-            for tid, ss in by_team.items()
-        }
+        per_team = {tid: round(sum(s.cost_usd for s in ss), 4) for tid, ss in by_team.items()}
         trust = aggregate_trust([session_trust(s) for s in all_proj_sessions])
         project_rollups.append(
             ProjectRollup(
@@ -197,9 +194,7 @@ def build_org_summary(
 
     # --- Finance rows ---
     billing_period = _billing_period_label(period)
-    finance_rows = _build_finance_rows(
-        sessions, org, cost_centers, billing_period
-    )
+    finance_rows = _build_finance_rows(sessions, org, cost_centers, billing_period)
 
     # --- Org-level aggregates ---
     total_sessions = len(sessions)
@@ -230,9 +225,7 @@ def _build_team_rollup(
 ) -> TeamRollup:
     unattributed = sum(1 for s in t_sessions if not s.project)
     direct = round(sum(s.cost_usd for s in t_sessions if s.billing != "credits"), 4)
-    allocated = round(
-        sum((s.credits or 0.0) for s in t_sessions if s.billing == "credits"), 4
-    )
+    allocated = round(sum((s.credits or 0.0) for s in t_sessions if s.billing == "credits"), 4)
     trust = aggregate_trust([session_trust(s) for s in t_sessions]) if t_sessions else "missing"
     active_users_set = {s.user for s in t_sessions if s.user}
 
@@ -247,8 +240,7 @@ def _build_team_rollup(
             user_map[s.user].append(s)
 
     user_rollups = [
-        _build_user_rollup(email, u_sessions, org)
-        for email, u_sessions in sorted(user_map.items())
+        _build_user_rollup(email, u_sessions, org) for email, u_sessions in sorted(user_map.items())
     ]
 
     return TeamRollup(
@@ -267,9 +259,7 @@ def _build_team_rollup(
     )
 
 
-def _build_user_rollup(
-    email: str, u_sessions: list[AiSession], org: OrgConfig
-) -> UserRollup:
+def _build_user_rollup(email: str, u_sessions: list[AiSession], org: OrgConfig) -> UserRollup:
     active_days = len({s.start.date() for s in u_sessions})
     tools: dict[str, int] = defaultdict(int)
     for s in u_sessions:
@@ -360,9 +350,7 @@ def _build_finance_rows(
     rows: list[FinanceRow] = []
     for (proj, team_id, cc, tool), group in sorted(buckets.items()):
         direct = round(sum(s.cost_usd for s in group if s.billing != "credits"), 4)
-        allocated = round(
-            sum((s.credits or 0.0) for s in group if s.billing == "credits"), 4
-        )
+        allocated = round(sum((s.credits or 0.0) for s in group if s.billing == "credits"), 4)
         trust = aggregate_trust([session_trust(s) for s in group])
         rows.append(
             FinanceRow(
@@ -436,9 +424,7 @@ def render_org_text(summary: OrgSummary) -> str:
     lines.append("─" * 28)
     for tr in sorted(summary.teams, key=lambda t: -t.total_cost):
         trust_note = f"  [{tr.trust}]" if tr.trust != "captured" else ""
-        unattr_note = (
-            f"  ⚠ {tr.unattributed_count} unattributed" if tr.unattributed_count else ""
-        )
+        unattr_note = f"  ⚠ {tr.unattributed_count} unattributed" if tr.unattributed_count else ""
         lines.append(
             f"  {tr.team_name:<22} {tr.sessions:>4} sessions  "
             f"${tr.total_cost:>7.2f}"
@@ -453,8 +439,7 @@ def render_org_text(summary: OrgSummary) -> str:
     for pr in sorted(summary.projects, key=lambda p: -p.total_cost):
         trust_note = f"  [{pr.trust}]" if pr.trust != "captured" else ""
         lines.append(
-            f"  {pr.project_id:<30} {pr.sessions:>4} sessions  "
-            f"${pr.total_cost:>7.2f}{trust_note}"
+            f"  {pr.project_id:<30} {pr.sessions:>4} sessions  ${pr.total_cost:>7.2f}{trust_note}"
         )
 
     lines.append("")
