@@ -353,7 +353,7 @@ def _cursor_hook_check() -> HealthCheck:
     if not path.exists():
         return HealthCheck(
             "Cursor hook", "neutral", "Not installed — run halyard install-cursor-hook"
-        )  # noqa: E501
+        )
     try:
         data = json.loads(path.read_text())
     except (json.JSONDecodeError, ValueError):
@@ -378,7 +378,7 @@ def _gemini_hook_check() -> HealthCheck:
     if not path.exists():
         return HealthCheck(
             "Gemini CLI hook", "neutral", "Not installed — run halyard install-gemini-hook"
-        )  # noqa: E501
+        )
     try:
         data = json.loads(path.read_text())
     except (json.JSONDecodeError, ValueError):
