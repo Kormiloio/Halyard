@@ -49,9 +49,7 @@ def _write_claude_hooks(root: Path) -> None:
                     "UserPromptSubmit": [
                         {"hooks": [{"type": "command", "command": "/bin/halyard cc-session"}]}
                     ],
-                    "Stop": [
-                        {"hooks": [{"type": "command", "command": "/bin/halyard cc-hook"}]}
-                    ],
+                    "Stop": [{"hooks": [{"type": "command", "command": "/bin/halyard cc-hook"}]}],
                 }
             }
         )
@@ -153,9 +151,7 @@ def test_doctor_tool_specific_missing_hook_errors(tmp_path: Path, monkeypatch) -
         assert any(check.id == check_id and check.status == "error" for check in report.checks)
 
 
-def test_doctor_unattributed_and_quarantine_warnings(
-    tmp_path: Path, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+def test_doctor_unattributed_and_quarantine_warnings(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     home = tmp_path / "home"
     project = _project(tmp_path / "project")
     state = home / ".halyard"
@@ -167,17 +163,14 @@ def test_doctor_unattributed_and_quarantine_warnings(
     report = build_doctor_report(start=project)
 
     assert any(
-        check.id == "state.unattributed" and check.status == "warning"
-        for check in report.checks
+        check.id == "state.unattributed" and check.status == "warning" for check in report.checks
     )
     assert any(
         check.id == "state.quarantine" and check.status == "warning" for check in report.checks
     )
 
 
-def test_doctor_first_capture_recent_project_session(
-    tmp_path: Path, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+def test_doctor_first_capture_recent_project_session(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     now = datetime(2026, 5, 8, 12, 0)
     home = tmp_path / "home"
     project = _project(tmp_path / "project")
@@ -191,9 +184,7 @@ def test_doctor_first_capture_recent_project_session(
     )
 
 
-def test_doctor_first_capture_unattributed_warning(
-    tmp_path: Path, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+def test_doctor_first_capture_unattributed_warning(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     now = datetime(2026, 5, 8, 12, 0)
     home = tmp_path / "home"
     project = _project(tmp_path / "project")
@@ -210,9 +201,7 @@ def test_doctor_first_capture_unattributed_warning(
     )
 
 
-def test_doctor_first_capture_missing_errors(
-    tmp_path: Path, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+def test_doctor_first_capture_missing_errors(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     now = datetime(2026, 5, 8, 12, 0)
     home = tmp_path / "home"
     project = _project(tmp_path / "project")
@@ -221,8 +210,7 @@ def test_doctor_first_capture_missing_errors(
     report = build_doctor_report(start=project, first_capture=True, now=now)
 
     assert any(
-        check.id == "first_capture.missing" and check.status == "error"
-        for check in report.checks
+        check.id == "first_capture.missing" and check.status == "error" for check in report.checks
     )
 
 

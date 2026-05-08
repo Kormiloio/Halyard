@@ -43,12 +43,7 @@ def _fold(line: str) -> str:
 
 def _escape_text(value: str) -> str:
     """Escape an RFC 5545 TEXT value before folding."""
-    return (
-        value.replace("\\", "\\\\")
-        .replace("\n", "\\n")
-        .replace(";", "\\;")
-        .replace(",", "\\,")
-    )
+    return value.replace("\\", "\\\\").replace("\n", "\\n").replace(";", "\\;").replace(",", "\\,")
 
 
 def session_to_vevent(s: AiSession) -> str:
