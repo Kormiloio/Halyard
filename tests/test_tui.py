@@ -143,7 +143,7 @@ def test_usage_pane_shows_summary(tmp_path: Path) -> None:
         app_instance = HalyardApp(store=store)
         async with app_instance.run_test() as pilot:
             pane = pilot.app.query_one(UsagePane)
-            assert "Usage Overview" in pane.last_rendered_text
+            assert "Voyage Stats" in pane.last_rendered_text
             assert "claude-sonnet-4-6" in pane.last_rendered_text
 
     asyncio.run(run())

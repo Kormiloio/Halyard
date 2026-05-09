@@ -28,12 +28,12 @@ class SessionFeed(Static):
             return
 
         now = datetime.now()
-        lines = ["Session Feed", ""]
+        lines = ["⚓  Ship's Log", ""]
         for index, session in enumerate(sessions[:50]):
             tokens = session.input_tokens + session.output_tokens
             project = session.project or "(unattributed)"
             is_new = (now - session.end).total_seconds() < _NEW_ARRIVAL_SECONDS
-            marker = ">" if index == selected_index else ("+" if is_new else " ")
+            marker = "▶" if index == selected_index else ("+" if is_new else " ")
             err_badge = f" ⚠{session.tool_errors}e" if session.tool_errors else ""
             line = (
                 f"{marker} {tool_icon(session.tool)} "

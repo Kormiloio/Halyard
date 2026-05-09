@@ -186,18 +186,18 @@ class HalyardApp(App[None]):
 
     def _status_text(self) -> str:
         if self.log_missing:
-            return f"  HALYARD  Waiting for log file: {self.store.log_path}"
+            return f"⚓ HALYARD  Waiting for log file: {self.store.log_path}"
         scope = "hub"
         if self.project_scope == "project":
             scope = f"project: {self.project_slug or 'unknown'}"
-        parts = ["HALYARD", f"[{scope}]", f"[{self.time_window}]"]
+        parts = ["⚓ HALYARD", f"[{scope}]", f"[{self.time_window}]"]
         if self.branch_filter:
             parts.append(f"[branch: {self.branch_filter}]")
         if self.detail_project:
             parts.append(f"[detail: {self.detail_project}]")
         if self.header_note:
             parts.append(self.header_note)
-        return "  ".join(parts)
+        return "  ·  ".join(parts)
 
     def _clamp_selection(self, sessions: list[AiSession]) -> None:
         if not sessions:

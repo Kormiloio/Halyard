@@ -306,9 +306,18 @@ def _render_state(state: DashboardState) -> str:
 <body>
   <main class="shell">
     <header class="topbar">
-      <div>
-        <p class="eyebrow">Halyard Glass Cockpit</p>
-        <h1>{_e(state.project_dir.name)}</h1>
+      <div class="brand">
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24" role="img" aria-label="Halyard">
+            <circle cx="12" cy="5" r="3"/>
+            <path d="M12 8v14"/>
+            <path d="M5 12H2a10 10 0 0 0 20 0h-3"/>
+          </svg>
+        </div>
+        <div>
+          <p class="eyebrow">Halyard Glass Cockpit</p>
+          <h1>{_e(state.project_dir.name)}</h1>
+        </div>
       </div>
       <div class="status status-{health_level}">{_e(health_level.title())}</div>
     </header>
@@ -1005,6 +1014,9 @@ body {
 }
 .shell { width: min(1440px, calc(100vw - 48px)); margin: 0 auto; padding: 28px 0; }
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; }
+.brand { display: inline-flex; align-items: center; gap: 14px; }
+.brand-mark { display: grid; place-items: center; width: 44px; height: 44px; }
+.brand-mark svg { width: 38px; height: 38px; fill: none; stroke: var(--cyan); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 8px rgba(69,214,208,.45)); }
 .eyebrow { margin: 0 0 6px; color: var(--cyan); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 h1, h2 { margin: 0; letter-spacing: 0; }
 h1 { font-size: 28px; }

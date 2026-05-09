@@ -21,14 +21,14 @@ class UsagePane(Static):
         summary = usage.summary
 
         if not sessions:
-            self.last_rendered_text = "Usage Overview\n\nNo sessions in view."
+            self.last_rendered_text = "〜 Voyage Stats\n\nNo sessions in view."
             self.update(self.last_rendered_text)
             return
 
         peak = "--" if summary.peak_hour is None else f"{_hour_label(summary.peak_hour)}"
         favorite = summary.favorite_model or "--"
         lines = [
-            "Usage Overview",
+            "〜 Voyage Stats",
             "",
             f"Sessions {summary.sessions:>5}   Tokens {compact_number(summary.total_tokens):>7}",
             (
@@ -42,7 +42,7 @@ class UsagePane(Static):
             lines.append(f"Open attribution: {summary.unattributed_sessions}")
         if summary.token_data_missing_sessions:
             lines.append(f"Missing token data: {summary.token_data_missing_sessions}")
-        lines.extend(["", "Activity"])
+        lines.extend(["", "Swells  (30d)"])
         lines.append(_activity_line(usage.daily[-30:]))
         lines.extend(["", "Top Models"])
         for bucket in usage.by_model[:4]:
@@ -64,13 +64,13 @@ def _activity_line(days: list[DailyUsageBucket]) -> str:
         if missing and tokens == 0:
             chars.append("?")
         elif tokens >= 100_000 or sessions >= 10:
-            chars.append("@")
+            chars.append("▓")  # heavy seas
         elif tokens >= 20_000 or sessions >= 4:
-            chars.append("#")
+            chars.append("▒")  # moderate
         elif tokens > 0 or sessions > 0:
-            chars.append("+")
+            chars.append("░")  # light chop
         else:
-            chars.append(".")
+            chars.append("·")  # doldrums
     return "".join(chars)
 
 
