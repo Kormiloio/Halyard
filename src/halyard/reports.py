@@ -422,8 +422,12 @@ def _settings_has_halyard_hooks(path: Path) -> bool:
         for hook in entry.get("hooks", [])
         if isinstance(hook, dict)
     ]
-    # Normalize full binary paths → bare command (e.g. "/path/to/halyard cc-hook" → "halyard cc-hook")
-    normalized = {" ".join([Path(parts[0]).name] + parts[1:]) for c in commands if c and (parts := c.split())}
+    # Normalize "/path/to/halyard cc-hook" → "halyard cc-hook"
+    normalized = {
+        " ".join([Path(parts[0]).name, *parts[1:]])
+        for c in commands
+        if c and (parts := c.split())
+    }
     return "halyard cc-session" in normalized and "halyard cc-hook" in normalized
 
 

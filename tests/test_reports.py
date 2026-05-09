@@ -103,6 +103,7 @@ def test_health_checks_detect_hook_with_full_binary_path(tmp_path: Path) -> None
     home = tmp_path / "home"
     settings_dir = home / ".claude"
     settings_dir.mkdir(parents=True)
+    uv_bin = "/Users/camaj/.local/share/uv/tools/halyard/bin"
     (settings_dir / "settings.json").write_text(
         json.dumps(
             {
@@ -112,7 +113,7 @@ def test_health_checks_detect_hook_with_full_binary_path(tmp_path: Path) -> None
                             "hooks": [
                                 {
                                     "type": "command",
-                                    "command": "/Users/camaj/.local/share/uv/tools/halyard/bin/halyard cc-session",
+                                    "command": f"{uv_bin}/halyard cc-session",
                                 }
                             ]
                         }
@@ -122,7 +123,7 @@ def test_health_checks_detect_hook_with_full_binary_path(tmp_path: Path) -> None
                             "hooks": [
                                 {
                                     "type": "command",
-                                    "command": "/Users/camaj/.local/share/uv/tools/halyard/bin/halyard cc-hook",
+                                    "command": f"{uv_bin}/halyard cc-hook",
                                 }
                             ]
                         }
