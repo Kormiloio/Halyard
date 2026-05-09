@@ -302,9 +302,9 @@ def build_health_checks(
     ]
 
     if active_timer:
-        checks.append(HealthCheck("Active timer", "healthy", active_timer.slug))
+        checks.append(HealthCheck("Active timer", "healthy", f"making way · {active_timer.slug}"))
     else:
-        checks.append(HealthCheck("Active timer", "neutral", "No active timer"))
+        checks.append(HealthCheck("Active timer", "neutral", "⚓  at anchor"))
 
     report = report or build_ai_report(project_dir)
     if report.unattributed_count:
@@ -312,11 +312,11 @@ def build_health_checks(
             HealthCheck(
                 "Attribution",
                 "warning",
-                f"{report.unattributed_count} session(s) need a project",
+                f"· · · — — — · · ·  {report.unattributed_count} session(s) adrift",
             )
         )
     else:
-        checks.append(HealthCheck("Attribution", "healthy", "All captured sessions attributed"))
+        checks.append(HealthCheck("Attribution", "healthy", "Q · manifest clean"))
 
     return checks
 
@@ -347,14 +347,14 @@ def _hook_check(project_dir: Path) -> HealthCheck:
     ]:
         if _settings_has_halyard_hooks(path):
             return HealthCheck("Claude Code hook", "healthy", f"Installed in {path}")
-    return HealthCheck("Claude Code hook", "warning", "Run halyard install-hook")
+    return HealthCheck("Claude Code hook", "warning", "Y · run halyard install-hook")
 
 
 def _cursor_hook_check() -> HealthCheck:
     path = Path.home() / ".cursor" / "hooks.json"
     if not path.exists():
         return HealthCheck(
-            "Cursor hook", "neutral", "Not installed — run halyard install-cursor-hook"
+            "Cursor hook", "neutral", "N · not installed — run halyard install-cursor-hook"
         )
     try:
         data = json.loads(path.read_text())
@@ -372,14 +372,14 @@ def _cursor_hook_check() -> HealthCheck:
         "halyard cursor-hook" in c for c in commands
     ):
         return HealthCheck("Cursor hook", "healthy", f"Installed in {path}")
-    return HealthCheck("Cursor hook", "warning", "Incomplete — run halyard install-cursor-hook")
+    return HealthCheck("Cursor hook", "warning", "Y · run halyard install-cursor-hook")
 
 
 def _gemini_hook_check() -> HealthCheck:
     path = Path.home() / ".gemini" / "settings.json"
     if not path.exists():
         return HealthCheck(
-            "Gemini CLI hook", "neutral", "Not installed — run halyard install-gemini-hook"
+            "Gemini CLI hook", "neutral", "N · not installed — run halyard install-gemini-hook"
         )
     try:
         data = json.loads(path.read_text())
@@ -398,7 +398,7 @@ def _gemini_hook_check() -> HealthCheck:
     required = {"halyard gc-session", "halyard gc-model", "halyard gc-hook"}
     if all(any(r in c for c in commands) for r in required):
         return HealthCheck("Gemini CLI hook", "healthy", f"Installed in {path}")
-    return HealthCheck("Gemini CLI hook", "warning", "Incomplete — run halyard install-gemini-hook")
+    return HealthCheck("Gemini CLI hook", "warning", "Y · run halyard install-gemini-hook")
 
 
 def _settings_has_halyard_hooks(path: Path) -> bool:

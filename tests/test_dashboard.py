@@ -133,8 +133,8 @@ def test_render_dashboard_marks_unattributed_sessions(tmp_path: Path) -> None:
 
     html = render_dashboard(tmp_path)
 
-    assert "Needs Attention" in html
-    assert "Unattributed Sessions" in html
+    assert "· · · — — — · · ·" in html
+    assert "Sessions Adrift" in html
     assert "codex-local" in html
 
 
@@ -281,7 +281,7 @@ def test_panel_status_pills_no_sessions(tmp_path: Path) -> None:
     html = render_dashboard(tmp_path)
 
     assert "no captures yet" in html
-    assert "all attributed" in html
+    assert "manifest clean" in html
     assert "no data" in html  # projects pill
 
 
@@ -326,8 +326,8 @@ def test_panel_status_unattributed_warning(tmp_path: Path) -> None:
     html = render_dashboard(tmp_path)
 
     assert "pill-warning" in html
-    assert "1 open" in html
-    assert "all unattributed" in html  # projects pill
+    assert "1 adrift" in html
+    assert "all adrift" in html  # projects pill
 
 
 def test_panel_status_costs_trust_pill_warning(tmp_path: Path) -> None:

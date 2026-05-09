@@ -234,9 +234,9 @@ def _render_state(state: DashboardState) -> str:
 
     unattr_count = report.unattributed_count
     unattr_pill = (
-        _panel_status_pill(f"{unattr_count} open", "warning")
+        _panel_status_pill(f"{unattr_count} adrift", "warning")
         if unattr_count
-        else _panel_status_pill("all attributed", "healthy")
+        else _panel_status_pill("manifest clean", "healthy")
     )
 
     time_state = "healthy" if human_time.month_minutes > 0 else "muted"
@@ -248,7 +248,7 @@ def _render_state(state: DashboardState) -> str:
     if session_count == 0:
         projects_pill = _panel_status_pill("no data", "muted")
     elif proj_count == 0:
-        projects_pill = _panel_status_pill("all unattributed", "warning")
+        projects_pill = _panel_status_pill("all adrift", "warning")
     else:
         label = "project" if proj_count == 1 else "projects"
         projects_pill = _panel_status_pill(f"{proj_count} {label}", "healthy")
@@ -370,8 +370,8 @@ def _render_state(state: DashboardState) -> str:
       <article class="panel span-12 attention-{_e("on" if report.unattributed_count else "off")}">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">Needs Attention</p>
-            <h2>Unattributed Sessions</h2>
+            <p class="eyebrow">· · · — — — · · ·</p>
+            <h2>Sessions Adrift</h2>
           </div>
           {unattr_pill}
         </div>
@@ -381,8 +381,8 @@ def _render_state(state: DashboardState) -> str:
       <article class="panel span-12">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">Work Trail</p>
-            <h2>Trail · {_e(now.strftime("%B %Y"))}</h2>
+            <p class="eyebrow">Ship's Wake</p>
+            <h2>Wake · {_e(now.strftime("%B %Y"))}</h2>
           </div>
           <div class="pill-group">{trail_pill}</div>
         </div>
@@ -503,7 +503,7 @@ def _timer_metric(active_timer: object) -> str:
             '<button class="btn btn-start" type="submit">&#9654; Start</button>'
             "</form>"
         )
-        value = "No active timer"
+        value = "⚓  at anchor"
         detail = ""
 
     return f"""
@@ -830,7 +830,7 @@ def _unattributed_table(sessions: Iterable[AiSession]) -> str:
             "</tr>"
         )
     if not rows:
-        return '<p class="empty">No unattributed sessions. Everything is invoice-ready.</p>'
+        return '<p class="empty">All hands accounted for. Manifest clean.</p>'
     return (
         "<table><thead><tr><th>Time</th><th>Tool</th><th>Model</th>"
         "<th>In / Out</th><th>Cost</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
@@ -936,7 +936,7 @@ def _celebration_script() -> str:
 
   var toast = document.createElement('div');
   toast.className = 'toast';
-  toast.textContent = '🎉 Trail closed — great work!';
+  toast.textContent = '🔔 Eight bells — watch complete!';
   document.body.appendChild(toast);
   requestAnimationFrame(function(){ toast.classList.add('show'); });
   setTimeout(function(){
@@ -1042,10 +1042,10 @@ def _trail_heatmap_html(sessions: list[AiSession], period: object) -> str:
 
     legend = (
         "<div class='trail-legend'>"
-        "<span class='trail-cell trail-none'></span><span>none</span>"
-        "<span class='trail-cell trail-unattr'></span><span>unattributed</span>"
-        "<span class='trail-cell trail-partial'></span><span>partial</span>"
-        "<span class='trail-cell trail-full'></span><span>attributed</span>"
+        "<span class='trail-cell trail-none'></span><span>becalmed</span>"
+        "<span class='trail-cell trail-unattr'></span><span>adrift</span>"
+        "<span class='trail-cell trail-partial'></span><span>making way</span>"
+        "<span class='trail-cell trail-full'></span><span>full sail</span>"
         "</div>"
     )
     return "<div class='trail-cal'>" + header + "".join(rows_html) + "</div>" + legend

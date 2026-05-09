@@ -149,7 +149,7 @@ def test_stop_attributes_sessions_in_window(tmp_path: Path) -> None:
 
     result = runner.invoke(app, ["stop"], catch_exceptions=False)
     assert result.exit_code == 0
-    assert "1 AI session attributed" in result.output
+    assert "logged to manifest" in result.output
 
     log = (tmp_path / AI_LOG_FILENAME).read_text()
     assert "project=acme:auth" in log

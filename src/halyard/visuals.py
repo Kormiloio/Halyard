@@ -46,14 +46,14 @@ def stop_card(slug: str, elapsed_minutes: float, elapsed_str: str, backfill_coun
     body.append("\n")
     if backfill_count:
         noun = "session" if backfill_count == 1 else "sessions"
-        body.append(f"  {backfill_count} AI {noun} attributed\n", style="green")
+        body.append(f"  {backfill_count} AI {noun} logged to manifest\n", style="green")
     else:
-        body.append("  AI sessions captured automatically\n", style="dim")
+        body.append("  sessions captured · manifest updated\n", style="dim")
     body.append("\n")
     body.append_text(_celebration_line(elapsed_minutes))
     return Panel(
         body,
-        title="[bold green]trail closed[/]",
+        title="[bold green]🔔  eight bells · watch complete[/]",
         border_style="green",
         padding=(0, 1),
         expand=False,
@@ -66,19 +66,19 @@ def _celebration_line(elapsed_minutes: float) -> Text:
     if elapsed_minutes >= 90:
         t.append("🎊 ", style="bold")
         t.append("✦ ", style="bold yellow")
-        t.append("full sail!", style="bold green")
+        t.append("full sail — all hands!", style="bold green")
         t.append(" ✦ ", style="bold cyan")
         t.append("🎊", style="bold")
     elif elapsed_minutes >= 45:
         t.append("🎉 ", style="bold")
-        t.append("great work!", style="bold green")
+        t.append("following seas!", style="bold green")
         t.append(" 🎉", style="bold")
     elif elapsed_minutes >= 15:
         t.append("✦ ", style="bold yellow")
-        t.append("good run.", style="green")
+        t.append("fair winds.", style="green")
         t.append(" ✦", style="bold cyan")
     else:
-        t.append("· trail noted. ·", style="dim")
+        t.append("· logged ·", style="dim")
     t.append("\n")
     return t
 
@@ -148,15 +148,15 @@ def trail_heatmap(sessions: list[AiSession], period: datetime) -> Panel:
         body.append("\n")
 
     body.append("\n")
-    body.append("  · none  ", style="dim")
-    body.append("░ unattributed  ", style="yellow")
-    body.append("▒ partial  ", style="yellow")
-    body.append("█ attributed", style="green")
+    body.append("  · becalmed  ", style="dim")
+    body.append("░ adrift  ", style="yellow")
+    body.append("▒ making way  ", style="yellow")
+    body.append("█ full sail", style="green")
     body.append("\n")
 
     return Panel(
         body,
-        title=f"[bold]Trail · {month_label}[/]",
+        title=f"[bold]Wake · {month_label}[/]",
         border_style="dim",
         padding=(0, 1),
         expand=False,
