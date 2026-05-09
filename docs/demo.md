@@ -229,6 +229,49 @@ into a project. Press `Esc`, then `q` to exit.*
 
 ---
 
+---
+
+### Part 1G — Honors and Friends of the Sea (2 min)
+
+> "One more thing — Halyard rewards clean proof, not raw hours."
+
+```bash
+halyard honors
+```
+
+*Point at the rank and progress bar.*
+
+> "Your rank advances on attributed sessions only — unattributed work doesn't
+> count. Right now I'm a Deckhand. At fifty attributed sessions I become a
+> Quartermaster. Reach a thousand across three projects and you're a Commodore.
+>
+> The stripes track your watch streak — consecutive days you opened and closed
+> a timer. The medals reward specific behaviors: Eight Bells for your first
+> completed watch, Clean Manifest for ending a day with nothing adrift, Fair
+> Winds for seven consecutive clean days.
+>
+> The Passport at the bottom is one stamp per AI tool you've actually used.
+> Claude Code, Cursor, Gemini — each tool gets a stamp the first time you
+> capture a session from it."
+
+```bash
+halyard voyage
+```
+
+*Show the voyage roster if there are attributed sessions.*
+
+> "And every project you work in gets a voyage. As sessions accumulate it
+> moves through stages — Anchors Aweigh, Making Headway, Rounding the Mark,
+> Flying Colors. When it hits your session budget or goes quiet for two weeks,
+> it moors itself and earns a sea creature badge.
+>
+> The creature is personality-assigned: a big project with lots of sessions
+> gets the Whale. A project that spanned three months gets the Sea Turtle. A
+> tight, focused, fully-attributed delivery gets the Clownfish. You don't pick
+> it — the log does."
+
+---
+
 ### Closing (talk, no typing)
 
 > "So what did we build?
@@ -393,6 +436,31 @@ halyard invoice acme --period 2026-05 --include-ai-evidence
 This generates `invoices/2026-05-001-acme.md` with an AI Usage Evidence
 appendix showing session counts, token totals, and cost breakdown.
 
+### Step 9 — Check your service record
+
+```bash
+halyard honors
+```
+
+Shows your rank (based on attributed sessions), watch streak, earned medals,
+and Passport stamps — one per AI tool you've used.
+
+### Step 10 — View your voyage roster
+
+```bash
+halyard voyage
+```
+
+Lists every project you've worked on with its current stage and session
+progress. Set a custom budget target:
+
+```bash
+halyard voyage set acme --sessions 30
+```
+
+When a project moors (target hit or 14 days quiet), it earns a sea creature
+badge assigned by personality — visible in `halyard voyage` and on The Bridge.
+
 ---
 
 ### What you now have
@@ -400,6 +468,7 @@ appendix showing session counts, token totals, and cost breakdown.
 - `ai-sessions.log` — every AI session, plain text, append-only
 - `time.timeclock` — human time in hledger-compatible format
 - `invoices/2026-05-001-acme.md` — invoice with AI evidence appendix
+- `voyages.toml` — project voyage stages and earned sea creatures
 - Full cost breakdown: direct API + allocated seat/credit plans
 
 For an explanation of `captured`, `allocated`, and `inferred`, see

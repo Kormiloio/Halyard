@@ -6,6 +6,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **v2.26 — Friends of the Sea:** One sea creature per completed project,
+  auto-assigned by personality (Whale, Sea Turtle, Dolphin, Octopus, Clownfish,
+  Shark, Coral Reef, Seal). Projects progress through nautical voyage stages:
+  Anchors Aweigh → Making Headway → Rounding the Mark → Flying Colors →
+  Shipshape · Moored. Auto-completes when sessions hit target or after
+  configurable inactivity. New `voyages.toml` data file. New commands:
+  `halyard voyage` (list), `halyard voyage complete <slug>`,
+  `halyard voyage set <slug> [--sessions N] [--inactivity N]`.
+  Friends of the Sea panel added to The Bridge dashboard.
+- **v2.26 — Passport:** One stamp per AI tool first used, shown in Captain's
+  Quarters on The Bridge and in `halyard honors`. Known tools get a named icon
+  (🤖 Claude Code, 🖱️ Cursor, ♊ Gemini CLI, 📦 Codex, ✏️ Manual); unknown
+  tools get a generic wrench stamp.
+- **v2.25 — Honors and Achievements:** `halyard honors` displays a full service
+  record: rank (Deckhand → Commodore, based on attributed session count),
+  stripes (watch streak), gold stripe (30+ consecutive clean-watch days), proof
+  score, and eight medals (Eight Bells, Full Sail, Clean Manifest, Lighthouse,
+  Signal Master, Harbor Master, Fair Winds, Rescue at Sea). Captain's Quarters
+  panel added to The Bridge dashboard. Pure read layer — no new data formats.
+
 ## [0.2.0] — 2026-05-09
 
 ### Added

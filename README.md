@@ -74,6 +74,10 @@ without showing prompts, transcripts, source code, or file contents.
 
 **Rich Session Telemetry** — Where tools expose it, Halyard captures operational metadata beyond cost: tool call counts, error rates, wall time vs. active agent time, code delta, and per-model breakdowns. Gemini CLI sessions include full multi-model breakdowns from the history file. These signals surface in the TUI and Glass Cockpit as work-health indicators — not productivity scores, but honest signals of session shape.
 
+**Honors** — A service record that rewards clean proof, not raw hours. Ranks advance on attributed sessions (Deckhand → Commodore), stripes track your watch streak, and eight medals recognize behaviors that matter: completing your first watch, keeping a clean manifest, rescuing adrift sessions, and more. Run `halyard honors` to see your record.
+
+**Friends of the Sea** — One sea creature per completed project, auto-assigned by personality. Projects move through nautical voyage stages (Anchors Aweigh → Making Headway → Rounding the Mark → Flying Colors → Shipshape · Moored) as sessions accumulate. Auto-completes on target hit or inactivity. Run `halyard voyage` to see the roster. Your Captain's Quarters on The Bridge shows a Passport — one stamp per AI tool you've used.
+
 ---
 
 ## Quickstart
@@ -134,6 +138,14 @@ halyard invoice acme --period 2026-05 --include-ai-evidence
 
 # Keep pricing table fresh
 halyard update-pricing
+
+# Service record — rank, stripes, medals, passport
+halyard honors
+
+# Project voyage roster — stages and sea creatures
+halyard voyage
+halyard voyage set acme --sessions 30    # set session budget
+halyard voyage complete acme             # manually moor a project
 ```
 
 See [`docs/demo.md`](docs/demo.md) for a full walkthrough — self-guided and
@@ -212,14 +224,8 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 
 | Change | Description |
 |--------|-------------|
-| [`v2.16-distribution-and-security`](./openspec/changes/v2.16-distribution-and-security/) | Distribution checks, dashboard auth, and launch-readiness hardening |
-| [`v2.17-log-integrity`](./openspec/changes/v2.17-log-integrity/) | Locking, append-only correction records, and shared timer orchestration |
-| [`v2.18-cache-and-audit-hardening`](./openspec/changes/v2.18-cache-and-audit-hardening/) | SQLite cache, invoice audit, pricing, and integrity hardening |
-| [`v2.19-attestable-appendix`](./openspec/changes/v2.19-attestable-appendix/) | Signed, verifiable, privacy-preserving AI work appendix |
-| [`v2.20-security-remediation`](./openspec/changes/v2.20-security-remediation/) | Targeted security remediation from the first AppSec review |
-| [`v2.21-attribution-provenance`](./openspec/changes/v2.21-attribution-provenance/) | Attribution provenance (`attr_method`) for billing and audit clarity |
-| [`v2.22-security-architecture`](./openspec/changes/v2.22-security-architecture/) | Architectural security follow-ups and coverage gaps |
-| [`v2.23-usage-analytics`](./openspec/changes/v2.23-usage-analytics/) | Stats-forward usage analytics: activity heatmap, streaks, peak hour, and model share |
+| [`v2.19-attestable-appendix`](./openspec/changes/v2.19-attestable-appendix/) | Signed, verifiable, privacy-preserving AI work appendix (gated on v2.24) |
+| [`v2.24-outcome-metadata`](./openspec/changes/v2.24-outcome-metadata/) | Branch as first-class field, commit count, code delta, `halyard outcome sync` |
 
 ### Shipped
 
@@ -249,6 +255,15 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 | [`v2.14-sqlite-read-model`](./openspec/changes/v2.14-sqlite-read-model/) | SQLite read-model cache over plain-text source files |
 | [`v2.15-transaction-history`](./openspec/changes/v2.15-transaction-history/) | Rate history and invoice audit support |
 | [`v4-tui`](./openspec/changes/v4-tui/) | Textual interactive terminal dashboard (`halyard tui`) |
+| [`v2.16-distribution-and-security`](./openspec/changes/v2.16-distribution-and-security/) | Distribution checks, dashboard auth, and launch-readiness hardening |
+| [`v2.17-log-integrity`](./openspec/changes/v2.17-log-integrity/) | Locking, append-only correction records, and shared timer orchestration |
+| [`v2.18-cache-and-audit-hardening`](./openspec/changes/v2.18-cache-and-audit-hardening/) | SQLite cache, invoice audit, pricing, and integrity hardening |
+| [`v2.20-security-remediation`](./openspec/changes/v2.20-security-remediation/) | Targeted security remediation from the first AppSec review |
+| [`v2.21-attribution-provenance`](./openspec/changes/v2.21-attribution-provenance/) | Attribution provenance (`attr_method`) for billing and audit clarity |
+| [`v2.22-security-architecture`](./openspec/changes/v2.22-security-architecture/) | Architectural security follow-ups and coverage gaps |
+| [`v2.23-usage-analytics`](./openspec/changes/v2.23-usage-analytics/) | Stats-forward usage analytics: activity heatmap, streaks, peak hour, and model share |
+| [`v2.25-honors-and-achievements`](./openspec/changes/v2.25-honors-and-achievements/) | Ranks, stripes, medals, and service record (`halyard honors`) |
+| [`v2.26-passport-and-friends`](./openspec/changes/v2.26-passport-and-friends/) | Passport stamps + Friends of the Sea voyage stages and sea creatures (`halyard voyage`) |
 
 ### Gated Future Work
 
@@ -261,11 +276,10 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 
 ## Roadmap
 
-- **Now** — Cache and audit hardening (v2.18): project registry, schema migrations,
-  content-addressed session IDs, invoice front-matter rate fields.
-- **Next** — OSS launch (HN / Reddit / Lobsters), then outcome-aware metadata
-  (v2.24): branch as a first-class field, commit count, code delta for all
-  collectors, PR linkage via `halyard outcome sync`.
+- **Shipped** — OSS launch (v0.2.0), honors and achievements (`halyard honors`),
+  Passport stamps, Friends of the Sea voyage stages and sea creatures (`halyard voyage`).
+- **Next** — Outcome-aware metadata (v2.24): branch as a first-class field, commit
+  count, code delta for all collectors, PR linkage via `halyard outcome sync`.
 - **Then** — Attestable AI work appendix (v2.19): signed, client-safe proof of
   AI-assisted work, enriched with commit and PR signals.
 - **Later, if design partners ask** — Outcome graph (v3.0): connect sessions to
