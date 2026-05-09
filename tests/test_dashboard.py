@@ -354,19 +354,27 @@ def test_panel_status_costs_trust_pill_warning(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+_CSRF_TOKEN = "c" * 64  # fixed test token so auth doesn't interfere with CSRF checks
+
+
 def _make_request(
     project_dir: Path,
     path: str,
     body: bytes,
     headers: dict[str, str],
 ) -> tuple[int, str]:
-    """Spin up a real ThreadingHTTPServer, fire one POST, return (status, reason)."""
+    """Spin up a real ThreadingHTTPServer, fire one POST, return (status, reason).
+
+    Injects a fixed token and correct Host header by default so tests that
+    exercise Origin/CSRF logic are not blocked by the host or token checks.
+    Callers may override Host or omit Cookie to test those checks specifically.
+    """
     import threading
     from http.server import ThreadingHTTPServer
 
     from halyard.dashboard import _handler_for
 
-    handler_cls = _handler_for(project_dir)
+    handler_cls = _handler_for(project_dir, token=_CSRF_TOKEN)
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
     port = server.server_port
 
@@ -381,8 +389,16 @@ def _make_request(
 
     import http.client
 
+    # Default headers ensure Host + token are valid unless overridden by caller
+    default_headers: dict[str, str] = {
+        "Content-Length": str(len(body)),
+        "Host": f"127.0.0.1:{port}",
+        "Cookie": f"halyard_token={_CSRF_TOKEN}",
+    }
+    default_headers.update(headers)
+
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("POST", path, body=body, headers={"Content-Length": str(len(body)), **headers})
+    conn.request("POST", path, body=body, headers=default_headers)
     resp = conn.getresponse()
     status_box.append(resp.status)
     reason_box.append(resp.reason)
@@ -419,7 +435,7 @@ def test_csrf_allows_same_origin_post(tmp_path: Path) -> None:
 
     from halyard.dashboard import _handler_for
 
-    handler_cls = _handler_for(tmp_path)
+    handler_cls = _handler_for(tmp_path, token=_CSRF_TOKEN)
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
     port = server.server_port
 
@@ -439,6 +455,8 @@ def test_csrf_allows_same_origin_post(tmp_path: Path) -> None:
         headers={
             "Content-Length": str(len(body)),
             "Content-Type": "application/x-www-form-urlencoded",
+            "Host": f"127.0.0.1:{port}",
+            "Cookie": f"halyard_token={_CSRF_TOKEN}",
             "Origin": f"http://127.0.0.1:{port}",
         },
     )
@@ -452,9 +470,10 @@ def test_csrf_allows_same_origin_post(tmp_path: Path) -> None:
 
 
 def test_csrf_allows_no_origin_post(tmp_path: Path) -> None:
-    """A POST with no Origin header (curl/CLI) must not be blocked."""
+    """A POST with no Origin header (curl/CLI) must not be blocked by the CSRF check."""
     _init_project(tmp_path)
     body = b"project=acme/auth"
+    # No Origin header — default _make_request supplies Host + token
     status, _reason = _make_request(
         tmp_path,
         "/api/start",

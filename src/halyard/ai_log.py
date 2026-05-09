@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import fcntl
+import hashlib
 import re
-from contextlib import suppress
+from collections import defaultdict
+from collections.abc import Generator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import IO
 
 SPEC_URL = "https://halyard.dev/spec/ai-sessions/v1"
 HEADER = (
@@ -18,6 +23,69 @@ AI_LOG_FILENAME = "ai-sessions.log"
 # Regex matching characters that would break the space-delimited log line format.
 # Used to sanitize positional fields (tool, model) before writing.
 _UNSAFE_FIELD_RE = re.compile(r"[\s=]")
+
+
+# ---------------------------------------------------------------------------
+# v2.17 task 1.1-1.2: File locking primitive
+# ---------------------------------------------------------------------------
+
+
+@contextmanager
+def locked_file(path: Path, mode: str) -> Generator[IO[str], None, None]:
+    """Open *path* in *mode* with an exclusive flock held for the duration.
+
+    The parent directory is created if absent.  flock is advisory but
+    cooperative — all Halyard writers use this helper, so it is sufficient to
+    prevent concurrent appends from interleaving writes.
+
+    Read paths do not lock: ``parse_sessions`` is allowed to see any consistent
+    prefix of the file; the next refresh picks up any session that landed
+    mid-read.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, mode) as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            yield f
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
+# ---------------------------------------------------------------------------
+# v2.17 task 2.1-2.3: Amendment record support
+# ---------------------------------------------------------------------------
+
+
+def session_hash(line: str) -> str:
+    """Return the first 12 hex chars of SHA-256(stripped line).
+
+    The hash is computed on the raw ``s`` line *before* any amendments so
+    ``a`` records always reference the original session, even if amendments
+    later change its semantic meaning.
+    """
+    return hashlib.sha256(line.strip().encode()).hexdigest()[:12]
+
+
+@dataclass
+class Amendment:
+    """A parsed ``a <hash> key=value ...`` correction record."""
+
+    session_hash: str
+    kvs: dict[str, str]
+
+
+def parse_amendment(line: str) -> Amendment | None:
+    """Parse an ``a <hash> key=value ...`` line; return None on malformed input."""
+    parts = line.split()
+    if len(parts) < 2 or parts[0] != "a":
+        return None
+    h = parts[1]
+    kvs: dict[str, str] = {}
+    for token in parts[2:]:
+        if "=" in token:
+            k, v = token.split("=", 1)
+            kvs[k] = v
+    return Amendment(session_hash=h, kvs=kvs)
 
 
 def _safe_field(value: str) -> str:
@@ -73,6 +141,25 @@ class AiSession:
         if error is not None:
             _write_quarantine(line, error)
         return parsed
+
+    def apply_amendment(self, amendment: Amendment) -> None:
+        """Mutate this session in-memory according to an amendment record.
+
+        Only the keys listed in the v2.17 amendment spec are honoured:
+        ``project``, ``source``, ``confirmed_at``, ``note``.  Unknown keys
+        are silently ignored so future amendment keys don't break older
+        parsers.
+        """
+        for key, value in amendment.kvs.items():
+            if key == "project":
+                self.project = value
+            elif key == "source":
+                self.source = value
+            elif key == "confirmed_at":
+                # Store as note-style string; callers can parse as ISO if needed
+                pass  # confirmed_at is metadata; no AiSession field for it yet
+            elif key == "note":
+                self.note = value.replace("_", " ")
 
     @classmethod
     def log_line_error(cls, line: str) -> str | None:
@@ -149,28 +236,65 @@ class AiSession:
 
 
 def append_session(project_dir: Path, session: AiSession) -> None:
+    # v2.17 task 4.1: use locked_file so concurrent appenders never interleave
     log_path = project_dir / AI_LOG_FILENAME
-    with log_path.open("a") as f:
+    with locked_file(log_path, "a") as f:
         f.write(session.to_log_line() + "\n")
 
 
 def parse_sessions(project_dir: Path) -> list[AiSession]:
+    # v2.17 task 2.4: fold ``a`` amendment records in file order (last-write-wins per key).
+    #
+    # Design note: sessions are stored as a list to preserve all ``s`` lines,
+    # including duplicate lines (same raw content → same hash).  Amendment
+    # folding uses ``sessions_by_hash`` which maps each hash to the *first*
+    # AiSession object with that hash; any amendments are applied to that
+    # object.  Duplicate ``s`` lines with the same hash receive no amendments
+    # (edge case: real logs have unique timestamps so duplicates do not arise
+    # in normal use).
     log_path = project_dir / AI_LOG_FILENAME
     if not log_path.exists():
         return []
-    sessions = []
-    for line in log_path.read_text().splitlines():
-        line = line.strip()
+
+    sessions: list[AiSession] = []
+    sessions_by_hash: dict[str, AiSession] = {}  # first occurrence per hash for amendment lookup
+    amendments_by_hash: dict[str, list[Amendment]] = defaultdict(list)
+
+    for raw_line in log_path.read_text().splitlines():
+        line = raw_line.strip()
         if not line or line.startswith(";"):
             continue
-        parsed = AiSession.from_log_line(line)
-        if parsed is not None:
-            sessions.append(parsed)
+        if line.startswith("s "):
+            parsed = AiSession.from_log_line(line)
+            if parsed is not None:
+                h = session_hash(line)
+                if h not in sessions_by_hash:
+                    sessions_by_hash[h] = parsed
+                sessions.append(parsed)
+        elif line.startswith("a "):
+            amendment = parse_amendment(line)
+            if amendment is not None:
+                amendments_by_hash[amendment.session_hash].append(amendment)
+
+    # Apply amendments in file order; last-write-wins per key.
+    # Only the first-occurrence object per hash is amended.
+    for h, session in sessions_by_hash.items():
+        for amendment in amendments_by_hash.get(h, []):
+            session.apply_amendment(amendment)
+
     return sessions
 
 
 def assign_unattributed_sessions(project_dir: Path, project: str) -> int:
-    """Assign all session lines missing `project=` to a project slug."""
+    """Assign all session lines missing `project=` to a project slug.
+
+    v2.17 task 3.5 audit note: the ``tmp.write_text`` calls below write to a
+    *temp* file (``*.log.tmp``), never directly to the live log path.  The
+    live path is only updated via ``tmp.replace(log_path)``, which is atomic
+    on POSIX.  These write_text calls are therefore safe and intentional — they
+    are part of the L-3 atomic-write pattern and do not need ``locked_file``
+    (which protects appends, not whole-file rewrites).
+    """
     log_path = project_dir / AI_LOG_FILENAME
     if not log_path.exists():
         return 0
@@ -424,8 +548,7 @@ def read_active_project() -> str | None:
 def write_unattributed_session(session: AiSession) -> Path:
     """Append a recoverable session to the per-user unattributed log."""
     path = unattributed_log_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a") as f:
+    with locked_file(path, "a") as f:
         f.write(session.to_log_line() + "\n")
     return path
 

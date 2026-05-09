@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -11,6 +13,40 @@ from xml.sax.saxutils import escape
 PLIST_LABEL = "io.kormilo.halyard"
 PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{PLIST_LABEL}.plist"
 LOG_PATH = Path.home() / "Library" / "Logs" / "halyard-dashboard.log"
+
+
+# ---------------------------------------------------------------------------
+# C2: Dashboard token helpers
+# ---------------------------------------------------------------------------
+
+
+def _token_path() -> Path:
+    """Return the path to the per-install dashboard token file."""
+    return Path.home() / ".halyard" / "dashboard.token"
+
+
+def _load_or_create_token() -> str:
+    """Return the dashboard auth token, creating it if absent.
+
+    The token is a 32-byte (64 hex char) secret stored at mode 0600.
+    It is set as a cookie on every GET / response and validated on every
+    POST.  Cross-origin pages cannot read the cookie (HttpOnly + SameSite=Strict)
+    and cannot read the file, so they cannot forge a valid request.
+    """
+    path = _token_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        token = path.read_text().strip()
+        if len(token) == 64 and all(c in "0123456789abcdef" for c in token):
+            return token
+    # Generate fresh token and write with 0600 permissions
+    token = secrets.token_hex(32)
+    # Write atomically via a temp file, then chmod before rename
+    tmp = path.with_suffix(".token.tmp")
+    tmp.write_text(token)
+    os.chmod(tmp, 0o600)
+    tmp.replace(path)
+    return token
 
 
 def install_service(project_dir: Path, port: int = 7432) -> str:
@@ -43,7 +79,13 @@ def uninstall_service() -> None:
 
 
 def service_status() -> tuple[bool, str]:
-    """Return (is_running, message)."""
+    """Return (is_running, message).
+
+    The message includes the dashboard URL and the location of the per-install
+    auth token.  If the token is ever compromised, run:
+        halyard service uninstall && halyard service install
+    which regenerates a fresh token.
+    """
     if not PLIST_PATH.exists():
         return False, "not installed"
     result = subprocess.run(
@@ -55,7 +97,8 @@ def service_status() -> tuple[bool, str]:
         return False, "installed but not running — run: launchctl load -w " + str(PLIST_PATH)
     from halyard.dashboard import DASHBOARD_PORT
 
-    return True, f"http://127.0.0.1:{DASHBOARD_PORT}/"
+    token_note = f" | token: {_token_path()}"
+    return True, f"http://127.0.0.1:{DASHBOARD_PORT}/{token_note}"
 
 
 def _plist(halyard_exe: str, project_dir: Path, port: int) -> str:

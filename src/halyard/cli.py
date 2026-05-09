@@ -422,13 +422,19 @@ def start(
     account = slug.replace("/", ":", 1)
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    with timeclock.open("a") as f:
-        f.write(f"i {ts} {account}\n")
-
+    from halyard.ai_log import locked_file
     from halyard.reports import _HALYARD_ACTIVE
 
+    # v2.17 task 4.2: lock the timeclock for the clock-in write
+    with locked_file(timeclock, "a") as f:
+        f.write(f"i {ts} {account}\n")
+
+    # v2.17 task 4.3: atomic write for the active-timer state file
     _HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
-    _HALYARD_ACTIVE.write_text(f"timeclock={timeclock}\nslug={account}\nstarted={ts}\n")
+    _active_content = f"timeclock={timeclock}\nslug={account}\nstarted={ts}\n"
+    _active_tmp = _HALYARD_ACTIVE.with_suffix(".tmp")
+    _active_tmp.write_text(_active_content)
+    _active_tmp.replace(_HALYARD_ACTIVE)
 
     console.print(f"[bold green]Started[/] [bold]{account}[/] at {ts}.")
 
@@ -455,10 +461,13 @@ def stop() -> None:
     slug = active.slug
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    with timeclock.open("a") as f:
+    from halyard.ai_log import locked_file
+
+    # v2.17 task 4.2: lock the timeclock for the clock-out write
+    with locked_file(timeclock, "a") as f:
         f.write(f"o {ts}\n")
 
-    _HALYARD_ACTIVE.unlink()
+    _HALYARD_ACTIVE.unlink(missing_ok=True)
 
     from halyard.reports import _elapsed_minutes, format_minutes
 

@@ -58,7 +58,11 @@ def render_dashboard(project_dir: Path) -> str:
     return _render_state(build_dashboard_state(project_dir))
 
 
-def _handler_for(project_dir: Path) -> type[BaseHTTPRequestHandler]:
+def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRequestHandler]:
+    from halyard.service import _load_or_create_token
+
+    _token: str = token if token is not None else _load_or_create_token()
+
     class DashboardHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             self._send_dashboard(include_body=True)
@@ -71,23 +75,50 @@ def _handler_for(project_dir: Path) -> type[BaseHTTPRequestHandler]:
 
             from halyard.reports import _HALYARD_ACTIVE, read_active_timer
 
-            # CSRF guard: browsers always send Origin on cross-site form POSTs.
-            # Reject any POST whose Origin header is present but does not match
-            # the dashboard's own origin.  Curl/CLI calls with no Origin header
-            # are still permitted (same-host tool access).
-            origin = self.headers.get("Origin", "")
-            if origin:
-                # server_port is the bound port; dashboard always binds 127.0.0.1
-                server_port = self.server.server_port  # type: ignore[attr-defined]
-                allowed = {
-                    f"http://127.0.0.1:{server_port}",
-                    f"http://localhost:{server_port}",
-                }
-                if origin not in allowed:
-                    self.send_error(HTTPStatus.FORBIDDEN, "Cross-origin POST not allowed")
-                    return
+            server_port = self.server.server_port  # type: ignore[attr-defined]
 
-            length = int(self.headers.get("Content-Length", 0))
+            # 2.3: Validate Host header — must be 127.0.0.1:<port>
+            host = self.headers.get("Host", "")
+            if host != f"127.0.0.1:{server_port}":
+                self._send_json_error(HTTPStatus.BAD_REQUEST, "invalid Host header")
+                return
+
+            # 2.4 (H-1): CSRF guard — reject cross-origin POSTs.
+            # Browsers always send Origin on cross-site form POSTs.
+            # Curl/CLI calls with no Origin header are still permitted.
+            origin = self.headers.get("Origin", "")
+            referer = self.headers.get("Referer", "")
+            allowed_origin = f"http://127.0.0.1:{server_port}"
+            if origin and origin not in {allowed_origin, f"http://localhost:{server_port}"}:
+                self._send_json_error(HTTPStatus.FORBIDDEN, "cross-origin POST not allowed")
+                return
+            if (
+                not origin
+                and referer
+                and not referer.startswith(f"http://127.0.0.1:{server_port}/")
+                and not referer.startswith(f"http://localhost:{server_port}/")
+            ):
+                # Validate Referer prefix when Origin is absent
+                self._send_json_error(HTTPStatus.FORBIDDEN, "cross-origin POST not allowed")
+                return
+
+            # 2.7: Cap Content-Length to prevent large-body DoS
+            raw_cl = self.headers.get("Content-Length", "0")
+            try:
+                content_length = int(raw_cl)
+            except ValueError:
+                content_length = 0
+            if content_length > 8192:
+                self._send_json_error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "body too large")
+                return
+
+            # 2.5: Validate token via Cookie or X-Halyard-Token header
+            submitted_token = self._extract_token()
+            if submitted_token != _token:
+                self._send_json_error(HTTPStatus.UNAUTHORIZED, "missing or invalid token")
+                return
+
+            length = content_length
             body = self.rfile.read(length).decode(errors="replace") if length else ""
             params = {k: v[0] for k, v in parse_qs(body).items()}
 
@@ -104,14 +135,15 @@ def _handler_for(project_dir: Path) -> type[BaseHTTPRequestHandler]:
                     if timeclock.exists():
                         from datetime import datetime
 
+                        from halyard.ai_log import locked_file
+
                         account = slug.replace("/", ":", 1)
                         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        with timeclock.open("a") as f:
+                        # v2.17 task 4.2: lock the timeclock for the clock-in write
+                        with locked_file(timeclock, "a") as f:
                             f.write(f"i {ts} {account}\n")
                         _HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
-                        # D-2: atomic write — collectors read this file concurrently;
-                        # write to a temp file then rename so a collector never sees
-                        # partial content during the truncate-then-write window.
+                        # D-2 + v2.17 task 4.3: atomic write for active-timer state file
                         _active_content = f"timeclock={timeclock}\nslug={account}\nstarted={ts}\n"
                         _active_tmp = _HALYARD_ACTIVE.with_suffix(".tmp")
                         _active_tmp.write_text(_active_content)
@@ -122,8 +154,11 @@ def _handler_for(project_dir: Path) -> type[BaseHTTPRequestHandler]:
                 if active and active.timeclock and active.timeclock.exists():
                     from datetime import datetime
 
+                    from halyard.ai_log import locked_file
+
                     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    with active.timeclock.open("a") as f:
+                    # v2.17 task 4.2: lock the timeclock for the clock-out write
+                    with locked_file(active.timeclock, "a") as f:
                         f.write(f"o {ts}\n")
                     _HALYARD_ACTIVE.unlink(missing_ok=True)
 
@@ -140,9 +175,38 @@ def _handler_for(project_dir: Path) -> type[BaseHTTPRequestHandler]:
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            # 2.2: Set token cookie so the browser can authenticate POSTs.
+            # HttpOnly prevents JS access; SameSite=Strict prevents CSRF.
+            self.send_header(
+                "Set-Cookie",
+                f"halyard_token={_token}; Path=/; HttpOnly; SameSite=Strict",
+            )
             self.end_headers()
             if include_body:
                 self.wfile.write(body)
+
+        def _extract_token(self) -> str:
+            """Return the submitted token from Cookie or X-Halyard-Token header."""
+            x_token = self.headers.get("X-Halyard-Token", "")
+            if x_token:
+                return x_token
+            cookie_header = self.headers.get("Cookie", "")
+            for part in cookie_header.split(";"):
+                part = part.strip()
+                if part.startswith("halyard_token="):
+                    return part[len("halyard_token="):]
+            return ""
+
+        def _send_json_error(self, status: HTTPStatus, reason: str) -> None:
+            """Send a terse JSON error body with the given HTTP status."""
+            import json as _json
+
+            body = _json.dumps({"error": reason}).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
         def log_message(self, format: str, *args: object) -> None:
             return

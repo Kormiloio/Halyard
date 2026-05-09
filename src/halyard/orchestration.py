@@ -384,6 +384,12 @@ def _ensure_gitignore(path: Path) -> None:
 
 
 def _rewrite_lines_atomic(path: Path, lines: list[str]) -> None:
+    # v2.17 task 3.4 audit: this function is called only from
+    # interactive_assign_unattributed() (lines above), which is a user-driven
+    # destructive path — the user explicitly chooses to assign/hub/discard
+    # sessions one at a time via interactive prompt.  That is the intended use.
+    # It is NOT used on any background or automatic write path.  No unexpected
+    # callers found.
     tmp = path.with_suffix(path.suffix + ".tmp")
     content = "\n".join(lines)
     tmp.write_text((content + "\n") if content else "")

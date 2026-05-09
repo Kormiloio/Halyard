@@ -1,5 +1,16 @@
 ; Halyard AI session log — sample local format (public spec pending external emitter)
 ; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd> [key=value ...]
+; a <session_hash> key=value [key=value ...]   (v2.17 amendment record — see below)
+;
+; Record types
+; ------------
+; s  Session record.  Appended by hooks/collectors.  Never mutated after write.
+;    The 12-char session_hash is SHA-256(stripped s line)[:12].
+;
+; a  Amendment record (v2.17+).  Appended to correct attribution after the fact.
+;    References the session by its hash.  Multiple ``a`` records for the same
+;    session are applied in file order; the last write wins per key.
+;    Allowed keys: project, source, confirmed_at, note.
 ;
 ; This is a sample log file for documentation and demo purposes.
 ; Real logs are written by halyard hooks and collectors.
@@ -16,3 +27,8 @@ s 2026-05-07T13:00:00 2026-05-07T13:28:30 claude-code claude-sonnet-4-6 7200 980
 s 2026-05-07T14:05:22 2026-05-07T14:31:47 gemini-cli gemini-2.5-pro 18400 3200 0.0480 project=acme:dash billing=api source=hook
 s 2026-05-07T15:20:00 2026-05-07T15:45:12 cursor claude-sonnet-4-6 6300 1100 0.0000 project=acme:dash billing=credits credits=15.0000 source=hook
 s 2026-05-07T16:00:00 2026-05-07T16:22:08 claude-code claude-sonnet-4-6 5800 890 0.0000 project=acme:auth billing=seat tags=branch:main source=hook
+;
+; Example amendment record (v2.17): the unattributed session above is
+; retrospectively attributed by appending an ``a`` line.  The hash is
+; SHA-256("s 2026-05-07T13:00:00 ...")[:12].
+; a 3f9a1b2c4d5e project=acme:auth source=backfill confirmed_at=2026-05-08T09:00:00

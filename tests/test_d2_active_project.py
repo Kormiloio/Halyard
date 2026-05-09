@@ -33,9 +33,16 @@ def _init_project(project_dir: Path) -> None:
     (project_dir / AI_LOG_FILENAME).write_text(HEADER)
 
 
+_TEST_TOKEN = "b" * 64  # fixed 64-char hex token for tests
+
+
 def _post(project_dir: Path, path: str, body: bytes) -> int:
-    """Spin up a real server, fire one POST, return HTTP status."""
-    handler_cls = _handler_for(project_dir)
+    """Spin up a real server, fire one POST, return HTTP status.
+
+    Uses a fixed test token injected via _handler_for so auth does not block
+    the D-2 behaviour under test.
+    """
+    handler_cls = _handler_for(project_dir, token=_TEST_TOKEN)
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
     port = server.server_port
 
@@ -53,6 +60,8 @@ def _post(project_dir: Path, path: str, body: bytes) -> int:
         headers={
             "Content-Length": str(len(body)),
             "Content-Type": "application/x-www-form-urlencoded",
+            "Host": f"127.0.0.1:{port}",
+            "Cookie": f"halyard_token={_TEST_TOKEN}",
         },
     )
     resp = conn.getresponse()

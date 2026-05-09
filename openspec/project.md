@@ -72,10 +72,13 @@ Per-user agent state (skills, API keys, active timer) lives in
 `~/.halyard/`, not in the project folder.
 
 `ai-sessions.log` is plain text, open format — the same local-first guarantee
-as `time.timeclock`. New sessions are always appended. The current hardening
-track is moving attribution corrections toward explicit correction records so
-the open log can become genuinely append-only. Cloud sync and enterprise layers
-must read from this local source of truth; they do not replace it.
+as `time.timeclock`. New sessions are always appended. Since v2.17, attribution
+corrections are written as `a <hash> key=value …` amendment records appended to
+the log; the original `s` lines are never mutated.  The log is now genuinely
+append-only in normal operation: in-place rewrites (`_rewrite_lines_atomic`)
+are reserved exclusively for user-driven interactive triage
+(`halyard assign-unattributed` interactive prompt).  Cloud sync and enterprise
+layers must read from this local source of truth; they do not replace it.
 
 ## Active focus (May 2026)
 

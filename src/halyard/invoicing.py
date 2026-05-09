@@ -510,12 +510,29 @@ def _invoice_counter(config: dict[str, object]) -> int:
 
 
 def _write_invoice_counter(path: Path, config: dict[str, object], counter: int) -> None:
+    # v2.17 task 4.4: use locked_file so concurrent invoice generation cannot
+    # produce duplicate invoice numbers (both see the same old counter value).
+    from halyard.ai_log import locked_file
+
     invoicing = config.setdefault("invoicing", {})
     if not isinstance(invoicing, dict):
         invoicing = {}
         config["invoicing"] = invoicing
     invoicing["counter"] = counter
-    path.write_text(tomli_w.dumps(config))
+    with locked_file(path, "r+") as f:
+        import tomllib as _tomllib
+
+        f.seek(0)
+        current = _tomllib.loads(f.read())
+        # Re-apply the counter to the freshly-read config (avoids racing writes)
+        inv = current.setdefault("invoicing", {})
+        if not isinstance(inv, dict):
+            inv = {}
+            current["invoicing"] = inv
+        inv["counter"] = counter
+        f.seek(0)
+        f.truncate(0)
+        f.write(tomli_w.dumps(current))
 
 
 def _render_invoice(

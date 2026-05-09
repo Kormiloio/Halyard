@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **v2.17 — Log Integrity:** `ai-sessions.log` now supports `a` amendment
+  records (`a <hash> key=value …`) for post-hoc attribution correction without
+  mutating the original `s` lines.  `parse_sessions` folds amendments in file
+  order; last-write-wins per key.  Allowed keys: `project`, `source`,
+  `confirmed_at`, `note`.
+- **v2.17 — File locking:** `locked_file(path, mode)` context manager
+  (`fcntl.flock`) wraps all log mutators — `append_session`, timeclock
+  clock-in/clock-out, and the invoice counter — so concurrent writers never
+  interleave.
+- **v2.16 — Dashboard token auth:** Each Halyard install now generates a
+  per-install 32-byte secret at `~/.halyard/dashboard.token` (mode `0600`).
+  The token is set as a cookie on every dashboard page load and validated on
+  every POST.  POSTs with a wrong `Host` header return 400; cross-origin POSTs
+  return 403; missing/invalid tokens return 401; bodies over 8192 bytes return
+  413.  **Breaking:** pre-v2.16 direct POST integrations (none documented) will
+  receive 401 until updated to include the token cookie or `X-Halyard-Token`
+  header.
+
+### Added
+
 - `halyard init` command — scaffolds a new Halyard project with `halyard.toml`,
   `clients.toml`, `projects.toml`, `time.timeclock`, `invoices/`, and
   `.gitignore`. (v0 task 2.3)
