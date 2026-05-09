@@ -214,6 +214,24 @@ def _resolve_port(port: int) -> int:
         return int(sock.getsockname()[1])
 
 
+_MORSE_TABLE: dict[str, str] = {
+    "A": "·—", "B": "—···", "C": "—·—·", "D": "—··", "E": "·",
+    "F": "··—·", "G": "——·", "H": "····", "I": "··", "J": "·———",
+    "K": "—·—", "L": "·—··", "M": "——", "N": "—·", "O": "———",
+    "P": "·——·", "Q": "——·—", "R": "·—·", "S": "···", "T": "—",
+    "U": "··—", "V": "···—", "W": "·——", "X": "—··—", "Y": "—·——",
+    "Z": "——··",
+}
+
+
+def _morse(text: str) -> str:
+    """Encode text as Morse — symbols spaced within letters, double-space between letters."""
+    return "  ".join(
+        " ".join(_MORSE_TABLE[c] for c in w.upper() if c in _MORSE_TABLE)
+        for w in text.split()
+    )
+
+
 def _proof_score(sessions: list[AiSession]) -> tuple[int, str]:
     """Return (score 0-100, css_class) representing client-ready confidence.
 
@@ -489,7 +507,7 @@ def _render_state(state: DashboardState) -> str:
       <article class="panel span-7">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">Live Stream</p>
+            <p class="eyebrow">{_morse("LOG")}</p>
             <h2>Recent AI Sessions</h2>
           </div>
           <div class="pill-group">{sessions_pill}<span class="pill">↺ 10s</span></div>
@@ -521,7 +539,7 @@ def _render_state(state: DashboardState) -> str:
       <article class="panel span-12">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">Ship's Wake</p>
+            <p class="eyebrow">{_morse("WAKE")}</p>
             <h2>Wake · {_e(now.strftime("%B %Y"))}</h2>
           </div>
           <div class="pill-group">{trail_pill}</div>
@@ -532,7 +550,7 @@ def _render_state(state: DashboardState) -> str:
       <article class="panel span-6">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">Human Work</p>
+            <p class="eyebrow">{_morse("TIME")}</p>
             <h2>Timeclock</h2>
           </div>
           {time_pill}

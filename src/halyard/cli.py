@@ -1463,25 +1463,25 @@ def honors() -> None:
         )
     )
 
-    # Passport
+    # Passport  (· — — ·  — — —  · — ·  — = PORT)
     if record.passport:
-        console.print("\n[bold]Passport · Ports of Call[/]")
+        console.print("\n[dim]· — — ·  — — —  · — ·  —[/]  [bold]Passport · Ports of Call[/]")
         for stamp in record.passport:
             console.print(f"  {stamp.icon}  [bold]{stamp.name}[/]  [dim]{stamp.tool}[/]")
     else:
         console.print("\n[dim]Passport empty — capture sessions to earn stamps.[/]")
 
-    # Medals
+    # Medals  (· · · — — — · · · = SOS — fitting for Rescue at Sea and earned-through-struggle)
     if record.earned_medals:
-        console.print("\n[bold]Medals earned[/]")
+        console.print("\n[dim]· · ·  — — —  · · ·[/]  [bold]Medals earned[/]")
         for medal in record.earned_medals:
             console.print(f"  {medal.icon}  [bold]{medal.name}[/]  [dim]{medal.description}[/]")
             console.print(f"     [dim italic]{medal.detail}[/]")
     else:
         console.print("\n[dim]No medals yet — complete watches to start earning honors.[/]")
 
-    # Ranks reference
-    console.print("\n[dim]All ranks:[/]")
+    # Ranks reference  (· — ·  · —  — ·  — · — = RANK)
+    console.print("\n[dim]· — ·  · —  — ·  — · —[/]  [dim]All ranks:[/]")
     for r in RANKS[1:]:
         marker = "▶ " if r.level == rank.level else "  "
         style = "bold cyan" if r.level == rank.level else "dim"
