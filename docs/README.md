@@ -26,6 +26,7 @@ win when docs conflict.
 - [`PRD-developer-experience.md`](PRD-developer-experience.md)
 - [`PRD-local-activity-dashboard.md`](PRD-local-activity-dashboard.md)
 - [`PRD-org-admin-dashboard.md`](PRD-org-admin-dashboard.md)
+- [`PRD-usage-analytics.md`](PRD-usage-analytics.md)
 
 ## Reviews And Audits
 

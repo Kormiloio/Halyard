@@ -216,6 +216,7 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 | [`v2.20-security-remediation`](./openspec/changes/v2.20-security-remediation/) | Targeted security remediation from the first AppSec review |
 | [`v2.21-attribution-provenance`](./openspec/changes/v2.21-attribution-provenance/) | Attribution provenance (`attr_method`) for billing and audit clarity |
 | [`v2.22-security-architecture`](./openspec/changes/v2.22-security-architecture/) | Architectural security follow-ups and coverage gaps |
+| [`v2.23-usage-analytics`](./openspec/changes/v2.23-usage-analytics/) | Stats-forward usage analytics: activity heatmap, streaks, peak hour, and model share |
 
 ### Shipped
 

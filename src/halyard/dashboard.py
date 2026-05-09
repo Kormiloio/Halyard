@@ -73,8 +73,6 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
         def do_POST(self) -> None:
             from urllib.parse import parse_qs
 
-            from halyard.reports import _HALYARD_ACTIVE, read_active_timer
-
             server_port = self.server.server_port  # type: ignore[attr-defined]
 
             # 2.3: Validate Host header — must be 127.0.0.1:<port>
@@ -129,38 +127,22 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
                     and "/" in slug
                     and not slug.startswith("/")
                     and not slug.endswith("/")
-                    and not read_active_timer()
                 ):
-                    timeclock = project_dir / "time.timeclock"
-                    if timeclock.exists():
-                        from datetime import datetime
+                    # v2.17 task 5.5: delegate to shared start_timer; ignores
+                    # TimerAlreadyRunning (dashboard silently no-ops on duplicate start)
+                    from halyard.orchestration import TimerAlreadyRunning, start_timer
 
-                        from halyard.ai_log import locked_file
-
-                        account = slug.replace("/", ":", 1)
-                        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        # v2.17 task 4.2: lock the timeclock for the clock-in write
-                        with locked_file(timeclock, "a") as f:
-                            f.write(f"i {ts} {account}\n")
-                        _HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
-                        # D-2 + v2.17 task 4.3: atomic write for active-timer state file
-                        _active_content = f"timeclock={timeclock}\nslug={account}\nstarted={ts}\n"
-                        _active_tmp = _HALYARD_ACTIVE.with_suffix(".tmp")
-                        _active_tmp.write_text(_active_content)
-                        _active_tmp.replace(_HALYARD_ACTIVE)
+                    account = slug.replace("/", ":", 1)
+                    try:
+                        start_timer(project_dir, account)
+                    except TimerAlreadyRunning:
+                        pass  # dashboard silently ignores duplicate start
 
             elif self.path == "/api/stop":
-                active = read_active_timer()
-                if active and active.timeclock and active.timeclock.exists():
-                    from datetime import datetime
+                # v2.17 task 5.5: delegate to shared stop_timer
+                from halyard.orchestration import stop_timer
 
-                    from halyard.ai_log import locked_file
-
-                    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    # v2.17 task 4.2: lock the timeclock for the clock-out write
-                    with locked_file(active.timeclock, "a") as f:
-                        f.write(f"o {ts}\n")
-                    _HALYARD_ACTIVE.unlink(missing_ok=True)
+                stop_timer(project_dir)
 
             self.send_response(HTTPStatus.FOUND)
             self.send_header("Location", "/")

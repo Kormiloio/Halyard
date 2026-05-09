@@ -180,15 +180,25 @@ def generate_invoice(
     invoice_dir = project_dir / "invoices"
     invoice_dir.mkdir(exist_ok=True)
     existing = sorted(invoice_dir.glob(f"{period}-*-{client_slug}.md"))
-    counter = _invoice_counter(config)
     if existing:
         if not force:
             raise InvoiceError(f"Invoice already exists: {existing[0]}. Use --force to overwrite.")
         invoice_path = existing[0]
         invoice_number = invoice_path.stem.removesuffix(f"-{client_slug}")
+        _new_invoice = False
     else:
-        invoice_number = f"{period}-{counter + 1:03d}"
+        # For dry runs use the current counter value to build a preview number
+        # without touching the on-disk counter.  For real writes the counter is
+        # allocated (read + increment) atomically inside _allocate_invoice_number
+        # so concurrent callers each receive a unique number.
+        if dry_run:
+            preview_counter = _invoice_counter(config) + 1
+            invoice_number = f"{period}-{preview_counter:03d}"
+        else:
+            allocated = _allocate_invoice_number(project_dir / "halyard.toml")
+            invoice_number = f"{period}-{allocated:03d}"
         invoice_path = invoice_dir / f"{invoice_number}-{client_slug}.md"
+        _new_invoice = True
 
     # M-4: confirm the resolved invoice path stays within invoice_dir.
     # Slug validation in _read_clients already blocks traversal chars, but this
@@ -231,8 +241,8 @@ def generate_invoice(
         )
 
     invoice_path.write_text(rendered)
-    if not existing:
-        _write_invoice_counter(project_dir / "halyard.toml", config, counter + 1)
+    # Counter already persisted by _allocate_invoice_number() for new invoices.
+    # No further write needed for the existing-invoice (force=True) path.
 
     return InvoiceResult(
         path=invoice_path, rendered=rendered, total=view.total, dry_run=False, warning=warning
@@ -509,16 +519,39 @@ def _invoice_counter(config: dict[str, object]) -> int:
     return int(value or 0)
 
 
+def _allocate_invoice_number(path: Path) -> int:
+    """Read, increment, and persist the invoice counter in a single locked section.
+
+    Returns the newly allocated counter value (old_value + 1).  All concurrent
+    callers serialise on the flock so each gets a unique number.
+    """
+    from halyard.ai_log import locked_file
+
+    with locked_file(path, "r+") as f:
+        import tomllib as _tomllib
+
+        f.seek(0)
+        current = _tomllib.loads(f.read())
+        inv = current.setdefault("invoicing", {})
+        if not isinstance(inv, dict):
+            inv = {}
+            current["invoicing"] = inv
+        old: int = int(inv.get("counter", inv.get("invoice_counter", 0)) or 0)
+        new_counter = old + 1
+        inv["counter"] = new_counter
+        f.seek(0)
+        f.truncate(0)
+        f.write(tomli_w.dumps(current))
+    return new_counter
+
+
 def _write_invoice_counter(path: Path, config: dict[str, object], counter: int) -> None:
     # v2.17 task 4.4: use locked_file so concurrent invoice generation cannot
     # produce duplicate invoice numbers (both see the same old counter value).
+    # NOTE: prefer _allocate_invoice_number() for new call sites — it reads and
+    # increments atomically within a single lock section.
     from halyard.ai_log import locked_file
 
-    invoicing = config.setdefault("invoicing", {})
-    if not isinstance(invoicing, dict):
-        invoicing = {}
-        config["invoicing"] = invoicing
-    invoicing["counter"] = counter
     with locked_file(path, "r+") as f:
         import tomllib as _tomllib
 

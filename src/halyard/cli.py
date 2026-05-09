@@ -394,18 +394,10 @@ def start(
     slug: str = typer.Argument(..., help="client/project slug, e.g. acme/auth-migration"),
 ) -> None:
     """Start the active timer."""
-    from halyard.reports import read_active_timer
+    from halyard.orchestration import TimerAlreadyRunning, start_timer
 
-    active = read_active_timer()
-    if active:
-        console.print(
-            f"[bold red]Error:[/] Timer already running for [bold]{active.slug}[/].\n"
-            "Run [bold]halyard stop[/] first."
-        )
-        raise typer.Exit(code=1)
-
-    timeclock = Path.cwd() / "time.timeclock"
-    if not timeclock.exists():
+    timeclock_candidate = Path.cwd() / "time.timeclock"
+    if not timeclock_candidate.exists():
         console.print(
             "[bold red]Error:[/] No [bold]time.timeclock[/] in the current directory.\n"
             "Run [bold]halyard init[/] first."
@@ -420,30 +412,27 @@ def start(
         raise typer.Exit(code=1)
 
     account = slug.replace("/", ":", 1)
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        # v2.17 task 5.4: delegate to shared start_timer (orchestration.py)
+        timer = start_timer(Path.cwd(), account)
+    except TimerAlreadyRunning as e:
+        console.print(
+            f"[bold red]Error:[/] Timer already running for [bold]{e.slug}[/].\n"
+            "Run [bold]halyard stop[/] first."
+        )
+        raise typer.Exit(code=1) from e
 
-    from halyard.ai_log import locked_file
-    from halyard.reports import _HALYARD_ACTIVE
-
-    # v2.17 task 4.2: lock the timeclock for the clock-in write
-    with locked_file(timeclock, "a") as f:
-        f.write(f"i {ts} {account}\n")
-
-    # v2.17 task 4.3: atomic write for the active-timer state file
-    _HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
-    _active_content = f"timeclock={timeclock}\nslug={account}\nstarted={ts}\n"
-    _active_tmp = _HALYARD_ACTIVE.with_suffix(".tmp")
-    _active_tmp.write_text(_active_content)
-    _active_tmp.replace(_HALYARD_ACTIVE)
-
-    console.print(f"[bold green]Started[/] [bold]{account}[/] at {ts}.")
+    console.print(f"[bold green]Started[/] [bold]{timer.slug}[/] at {timer.started}.")
 
 
 @app.command()
 def stop() -> None:
     """Stop the active timer."""
-    from halyard.reports import _HALYARD_ACTIVE, read_active_timer
+    from halyard.orchestration import stop_timer
+    from halyard.reports import _elapsed_minutes, format_minutes, read_active_timer
 
+    # Peek at the active timer first so we can surface a helpful error and
+    # compute elapsed time for the user-facing message.
     active = read_active_timer()
     if active is None:
         console.print(
@@ -452,40 +441,26 @@ def stop() -> None:
         )
         raise typer.Exit(code=1)
 
-    timeclock = active.timeclock
-    if timeclock is None or not timeclock.exists():
+    if active.timeclock is None or not active.timeclock.exists():
         console.print("[bold red]Error:[/] Active timer has no valid timeclock path.")
+        from halyard.reports import _HALYARD_ACTIVE
         _HALYARD_ACTIVE.unlink(missing_ok=True)
         raise typer.Exit(code=1)
 
     slug = active.slug
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now()
 
-    from halyard.ai_log import locked_file
+    # v2.17 task 5.4: delegate to shared stop_timer (orchestration.py)
+    result = stop_timer(Path.cwd())
 
-    # v2.17 task 4.2: lock the timeclock for the clock-out write
-    with locked_file(timeclock, "a") as f:
-        f.write(f"o {ts}\n")
-
-    _HALYARD_ACTIVE.unlink(missing_ok=True)
-
-    from halyard.reports import _elapsed_minutes, format_minutes
-
-    elapsed = format_minutes(_elapsed_minutes(active.started or ts, datetime.now()))
-    console.print(f"[bold green]Stopped[/] [bold]{slug}[/]. Elapsed: {elapsed}.")
-
-    if active.started and timeclock:
-        from halyard.ai_log import backfill_window
-
-        try:
-            start_dt = datetime.strptime(active.started, "%Y-%m-%d %H:%M:%S")
-            end_dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
-            count = backfill_window(timeclock.parent, start_dt, end_dt, slug)
-            if count:
-                noun = "session" if count == 1 else "sessions"
-                console.print(f"  Attributed {count} AI {noun} to [bold]{slug}[/].")
-        except Exception:
-            pass
+    if result.was_running:
+        elapsed = format_minutes(_elapsed_minutes(active.started or now.strftime("%Y-%m-%d %H:%M:%S"), now))
+        console.print(f"[bold green]Stopped[/] [bold]{slug}[/]. Elapsed: {elapsed}.")
+        if result.backfill_count:
+            noun = "session" if result.backfill_count == 1 else "sessions"
+            console.print(f"  Attributed {result.backfill_count} AI {noun} to [bold]{slug}[/].")
+    else:
+        console.print("[yellow]No active timer was running.[/]")
 
 
 @app.command()
@@ -1302,8 +1277,13 @@ def import_gemini(
                             session_files.extend(
                                 (_GEMINI_TMP / slug_dir.name / "chats").glob("session-*.json")
                             )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        from halyard.ai_log import _log_error
+                        _log_error("reading gemini .project_root failed", e)
+                        console.print(
+                            f"[yellow]Warning:[/] could not read Gemini project root "
+                            f"({type(e).__name__}). See ~/.halyard/halyard.log."
+                        )
         if not session_files:
             # Fallback: all files
             session_files = find_all_session_files()
@@ -2438,7 +2418,9 @@ def org_purge_user(
 
     try:
         purged_by = getpass.getuser()
-    except Exception:
+    except Exception as e:
+        from halyard.ai_log import _log_error
+        _log_error("getpass.getuser failed in org-purge", e)
         purged_by = "unknown"
 
     db_path = effective_hub / ORG_DB_FILENAME

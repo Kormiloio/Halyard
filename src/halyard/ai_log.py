@@ -5,11 +5,13 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import re
+import threading
+import traceback
 from collections import defaultdict
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO
 
@@ -19,10 +21,35 @@ HEADER = (
     "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd> [key=value ...]\n"
 )
 AI_LOG_FILENAME = "ai-sessions.log"
+_HALYARD_LOG = Path.home() / ".halyard" / "halyard.log"
 
 # Regex matching characters that would break the space-delimited log line format.
 # Used to sanitize positional fields (tool, model) before writing.
 _UNSAFE_FIELD_RE = re.compile(r"[\s=]")
+_PATH_LOCKS_GUARD = threading.Lock()
+_PATH_LOCKS: dict[str, threading.RLock] = {}
+
+
+# ---------------------------------------------------------------------------
+# v2.17 Section 6.1: Error visibility helper
+# ---------------------------------------------------------------------------
+
+
+def _log_error(msg: str, exc: Exception) -> None:
+    """Append a timestamped traceback entry to ~/.halyard/halyard.log.
+
+    Never raises — if the log write itself fails the error is silently dropped
+    (we cannot log the logger failure).
+    """
+    try:
+        _HALYARD_LOG.parent.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+        tb = traceback.format_exc()
+        entry = f"[{ts}] {msg}: {type(exc).__name__}: {exc}\n{tb}\n"
+        with _HALYARD_LOG.open("a") as fh:
+            fh.write(entry)
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -43,12 +70,16 @@ def locked_file(path: Path, mode: str) -> Generator[IO[str], None, None]:
     mid-read.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, mode) as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-        try:
-            yield f
-        finally:
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    lock_key = str(path.resolve())
+    with _PATH_LOCKS_GUARD:
+        thread_lock = _PATH_LOCKS.setdefault(lock_key, threading.RLock())
+    with thread_lock:
+        with open(path, mode) as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                yield f
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 # ---------------------------------------------------------------------------
@@ -498,27 +529,27 @@ def backfill_window(
     if not log_path.exists():
         return 0
 
-    changed = 0
-    new_lines = []
-    for raw_line in log_path.read_text().splitlines():
-        line = raw_line.rstrip()
-        if _is_assignable_session_line(line):
-            session = _parse_line(line)
-            if session is not None and start <= session.start < end:
-                if not dry_run:
-                    # D-1: record provenance — backfill is a post-hoc attribution
-                    new_lines.append(f"{line} project={project} attr_method=backfill")
-                else:
-                    new_lines.append(raw_line)
-                changed += 1
-                continue
-        new_lines.append(raw_line)
+    with locked_file(log_path, "r+") as f:
+        changed = 0
+        new_lines = []
+        for raw_line in f.read().splitlines():
+            line = raw_line.rstrip()
+            if _is_assignable_session_line(line):
+                session = _parse_line(line)
+                if session is not None and start <= session.start < end:
+                    if not dry_run:
+                        # D-1: record provenance — backfill is a post-hoc attribution
+                        new_lines.append(f"{line} project={project} attr_method=backfill")
+                    else:
+                        new_lines.append(raw_line)
+                    changed += 1
+                    continue
+            new_lines.append(raw_line)
 
-    if changed and not dry_run:
-        # L-3: atomic write — same pattern as assign_unattributed_sessions
-        tmp = log_path.with_suffix(".log.tmp")
-        tmp.write_text("\n".join(new_lines) + "\n")
-        tmp.replace(log_path)
+        if changed and not dry_run:
+            f.seek(0)
+            f.truncate()
+            f.write("\n".join(new_lines) + "\n")
 
     return changed
 

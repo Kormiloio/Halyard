@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import subprocess
 import tomllib
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -13,15 +14,141 @@ from rich.console import Console
 from halyard.ai_log import (
     AI_LOG_FILENAME,
     AiSession,
+    _log_error,
     append_session,
     assign_unattributed_sessions,
+    backfill_window,
     confirm_session_attributions,
     find_project_dir,
+    locked_file,
     unattributed_log_path,
 )
 from halyard.hub import find_hub, set_hub
+import halyard.reports as _reports_mod
+from halyard.reports import ActiveTimer
 
 console = Console()
+
+
+# ---------------------------------------------------------------------------
+# v2.17 Section 5: Shared timer functions
+# ---------------------------------------------------------------------------
+
+
+class TimerAlreadyRunning(Exception):
+    """Raised by start_timer when a timer is already active."""
+
+    def __init__(self, slug: str) -> None:
+        super().__init__(f"Timer already running for {slug!r}. Stop it first.")
+        self.slug = slug
+
+
+@dataclass(frozen=True)
+class StopResult:
+    """Return value of stop_timer."""
+
+    was_running: bool
+    slug: str | None = None
+    elapsed_seconds: float | None = None
+    backfill_count: int = 0
+
+
+def write_active_timer(timeclock: Path, slug: str, started: str) -> None:
+    """Write the active-timer state file atomically (tmp → rename).
+
+    This helper is shared by start_timer and the CLI/dashboard start paths so
+    the write pattern is never duplicated.
+    """
+    _reports_mod._HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
+    content = f"timeclock={timeclock}\nslug={slug}\nstarted={started}\n"
+    tmp = _reports_mod._HALYARD_ACTIVE.with_suffix(".tmp")
+    tmp.write_text(content)
+    tmp.replace(_reports_mod._HALYARD_ACTIVE)
+
+
+def start_timer(project_dir: Path, slug: str) -> ActiveTimer:
+    """Start the timeclock for *slug* and write the active-timer state file.
+
+    Raises TimerAlreadyRunning if a timer is already active.
+    Writes the clock-in entry to ``project_dir/time.timeclock`` under flock.
+    Writes the active-timer state file atomically via write_active_timer().
+
+    The TimerAlreadyRunning check and the clock-in write are performed inside
+    the timeclock flock so concurrent start_timer calls are serialised: only
+    the first acquires the lock when no timer is active; the rest find the
+    active file already present and raise TimerAlreadyRunning.
+    """
+    timeclock = project_dir / "time.timeclock"
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    with locked_file(timeclock, "a") as f:
+        # Re-check inside the lock so two concurrent callers cannot both pass
+        # the "no active timer" check and both write a clock-in entry.
+        active = _reports_mod.read_active_timer(_reports_mod._HALYARD_ACTIVE)
+        if active is not None:
+            raise TimerAlreadyRunning(active.slug)
+
+        f.write(f"i {ts} {slug}\n")
+        # Atomic active-timer state file written while holding the lock
+        write_active_timer(timeclock, slug, ts)
+
+    return ActiveTimer(slug=slug, timeclock=timeclock, started=ts, elapsed_minutes=0)
+
+
+def stop_timer(project_dir: Path) -> StopResult:
+    """Stop the active timer and invoke backfill_window.
+
+    Writes the clock-out entry to the timeclock under flock.
+    Removes ~/.halyard/active (missing_ok=True).
+    Invokes backfill_window on the window just closed.
+    Returns StopResult(was_running=False) if no timer was active.
+    """
+    active = _reports_mod.read_active_timer(_reports_mod._HALYARD_ACTIVE)
+    if active is None:
+        return StopResult(was_running=False)
+
+    timeclock = active.timeclock
+    if timeclock is None or not timeclock.exists():
+        # Active file is stale — clean it up
+        _reports_mod._HALYARD_ACTIVE.unlink(missing_ok=True)
+        return StopResult(was_running=False)
+
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    slug = active.slug
+
+    # Clock-out under exclusive lock.
+    # After acquiring the lock, re-check that the active file still exists —
+    # a concurrent stop_timer may have already written the clock-out and
+    # removed it.  If so, return early to avoid a duplicate ``o`` line.
+    # v2.17 task 5.6: unlink(missing_ok=True) is done inside the lock so the
+    # check-then-unlink is atomic with respect to other lock holders.
+    wrote_clockout = False
+    with locked_file(timeclock, "a") as f:
+        if _reports_mod._HALYARD_ACTIVE.exists():
+            f.write(f"o {ts}\n")
+            # v2.17 task 5.6: unlink active-timer file inside the lock
+            _reports_mod._HALYARD_ACTIVE.unlink(missing_ok=True)
+            wrote_clockout = True
+
+    if not wrote_clockout:
+        return StopResult(was_running=False)
+
+    elapsed: float | None = None
+    count = 0
+    if active.started:
+        try:
+            start_dt = datetime.strptime(active.started, "%Y-%m-%d %H:%M:%S")
+            end_dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+            elapsed = (end_dt - start_dt).total_seconds()
+            count = backfill_window(timeclock.parent, start_dt, end_dt, slug)
+        except Exception as e:
+            _log_error("backfill_window failed in stop_timer", e)
+            console.print(
+                f"[yellow]Warning:[/] attribution backfill skipped "
+                f"({type(e).__name__}). See ~/.halyard/halyard.log."
+            )
+
+    return StopResult(was_running=True, slug=slug, elapsed_seconds=elapsed, backfill_count=count)
 
 # ---------------------------------------------------------------------------
 # Default file contents written by `halyard init`
@@ -343,8 +470,12 @@ def _is_valid_project(slug: str, project_dir: Path) -> bool:
         for entry in data.get("project", []):
             if entry.get("slug") == slug:
                 return True
-    except Exception:
-        pass
+    except Exception as e:
+        _log_error("projects.toml parse failed in _is_valid_project", e)
+        console.print(
+            f"[yellow]Warning:[/] could not parse projects.toml "
+            f"({type(e).__name__}). See ~/.halyard/halyard.log."
+        )
     return False
 
 
@@ -359,8 +490,8 @@ def _detect_business_name() -> str:
         name = result.stdout.strip()
         if name:
             return f"{name} Consulting"
-    except Exception:
-        pass
+    except Exception as e:
+        _log_error("git config user.name failed in _detect_business_name", e)
     return "Your Name Consulting"
 
 

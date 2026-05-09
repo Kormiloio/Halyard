@@ -66,7 +66,9 @@ def sync_project(project_dir: Path, hub_dir: Path | None = None) -> SyncResult:
 
     try:
         synced_by = getpass.getuser()
-    except Exception:
+    except Exception as e:
+        from halyard.ai_log import _log_error
+        _log_error("getpass.getuser failed in sync", e)
         synced_by = "unknown"
     record_sync(
         db_path,
