@@ -150,7 +150,7 @@ Halyard ships in layers, each proving the next:
 | v2.16-v2.23 | Hardening Track | Can the local ledger survive real use and review? | Shipped |
 | v2.18 | Cache + Audit Hardening | Is the local cache stable enough to rely on? | Active |
 | OSS Launch | Community Release | Do real users trust and use the format? | Next |
-| v2.24 | Outcome Metadata | Does each session carry branch, commits, code delta, PR? | After launch |
+| v2.24 | Outcome Metadata | Does each session carry branch, commits, code delta, PR? | Shipped |
 | v2.19 | Attestable Appendix | Can I prove AI-assisted work to someone else safely? | Gated on v2.24 |
 | v3.0 | Outcome Graph | Did AI-assisted work connect to outcomes? | Design-partner gated |
 | v3+ | Org Intelligence | What is the org getting from AI investment? | Deferred |
@@ -306,14 +306,14 @@ working end-to-end with zero friction in a clean venv. Once that passes smoke
 test, the HN / Reddit / Lobsters post goes out. The goal is not stars — it is
 comments from people who installed it and it worked.
 
-**Outcome-aware metadata (v2.24).** The current session model scores 2/10 on
-outcome awareness: branch is stored as a tag (not a first-class field), code
-delta is Gemini-only, and there is no commit count or PR linkage. Moving to
-6/10 requires: branch as a first-class field, commit count at session close,
-code delta across Claude/Cursor/Codex collectors, and a `halyard outcome sync`
-command that resolves PR linkage via `gh`. Spec in
-`openspec/changes/v2.24-outcome-metadata/`. This is the work to do
-immediately after the OSS launch.
+**Outcome-aware metadata (v2.24) — shipped.** Branch is now a first-class
+`AiSession` field, commit count and code delta are captured by all four
+collectors, and `halyard outcome sync` resolves PR linkage via `gh`. The
+outcome score moves from 2/10 to 6/10. The `halyard report --outcomes` and
+`halyard outcome report` commands bucket sessions by PR state (shipped /
+in-flight / abandoned / no PR). Amendment records in `ai-sessions.log` carry
+pr_ref and pr_state; the SQLite cache (v3 schema) indexes them for fast
+queries.
 
 **Attestable appendix (v2.19).** The next network-effect feature is a signed,
 verifiable AI work appendix — a recipient verifies without seeing prompts or

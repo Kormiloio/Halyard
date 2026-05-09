@@ -1615,6 +1615,7 @@ def report(
     ledger: bool = typer.Option(
         False, "--ledger", help="Include allocated seat/credits costs from ai-plans.toml."
     ),
+    outcomes: bool = typer.Option(False, "--outcomes", help="Show outcome bucket totals."),
 ) -> None:
     """Show AI usage, cost, and human time summary."""
     from datetime import datetime
@@ -1707,6 +1708,39 @@ def report(
         for bucket in report.by_model:
             console.print(
                 f"  {bucket.label:<32} [green]${bucket.cost_usd:.2f}[/]  {bucket.sessions} sessions"
+            )
+
+    # By branch — only shown when at least one session has branch data
+    branch_sessions = [(s.branch, s) for s in report.sessions if s.branch]
+    if branch_sessions:
+        from collections import Counter
+
+        branch_counts = Counter(b for b, _ in branch_sessions)
+        console.print("\n[bold]By branch[/]")
+        for branch_name, count in branch_counts.most_common(10):
+            branch_sessions_list = [s for b, s in branch_sessions if b == branch_name]
+            commits = sum(s.commit_count or 0 for s in branch_sessions_list)
+            added = sum(s.code_added or 0 for s in branch_sessions_list)
+            meta = f"  [dim]{commits} commits  +{added} lines[/]" if commits or added else ""
+            console.print(
+                f"  {branch_name:<32} [dim]{count} session{'s' if count != 1 else ''}[/]"
+                f"{meta}"
+            )
+
+    if outcomes:
+        from halyard.ai_log import parse_sessions
+        from halyard.outcomes import outcome_report
+
+        all_sessions = parse_sessions(project_dir)
+        buckets = outcome_report(all_sessions, project_slug=project)
+        console.print("\n[bold]Outcome buckets[/]")
+        for b in buckets:
+            if b.session_count == 0:
+                continue
+            cost_col = f"[green]${b.total_cost:.2f}[/]" if b.trust else "[dim]—[/]"
+            plural = "s" if b.session_count != 1 else ""
+            console.print(
+                f"  {b.label:<30} [bold]{b.session_count:>4}[/] session{plural}  {cost_col}"
             )
 
     if human.by_project:

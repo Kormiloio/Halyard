@@ -63,36 +63,35 @@ meaningful.
 
 ---
 
-## Outcome-Aware Metadata Gap
+## Outcome-Aware Metadata — Shipped (v2.24)
 
-As of May 2026, the session model scores 2/10 on outcome awareness. The
-current state:
+The session model now scores 6/10 on outcome awareness. Current state:
 
 | Signal | Status |
 |---|---|
-| Branch name | Captured — but stored as a tag string, not a first-class field |
-| `code_added` / `code_removed` | First-class fields — Gemini only |
-| `tool_calls` / `wall_seconds` | First-class fields — Gemini only |
-| Commit count in session window | Not captured |
-| PR linkage / PR outcome | Not captured |
-| Repeated attempts on same ticket | Not captured |
+| Branch name | First-class `AiSession.branch` field — all four collectors |
+| `code_added` / `code_removed` | First-class fields — all collectors with git access |
+| Commit count in session window | `AiSession.commit_count` — all four collectors |
+| PR linkage / PR outcome | `pr_ref` + `pr_state` via `halyard outcome sync` |
+| Repeated attempts on same ticket | Not captured (v3.0 scope) |
 
-Moving from 2/10 to 6/10 is the named initiative in v2.24. It requires:
+What shipped in v2.24:
 
-1. **Branch as a first-class field** — the data is already captured by all
-   collectors, but stored as a tag. Promote to `branch: str | None` on the
-   `AiSession` dataclass.
-2. **Commit count at session close** — run `git log --since --until` at stop
-   time in all collectors. One new function in `git_context.py`.
-3. **Code delta for Claude/Cursor/Codex** — approximate via
-   `git diff --numstat` over commits in the session window. Trust label:
-   `calculated`.
-4. **PR linkage** — `halyard outcome sync` command queries `gh pr list`,
-   appends `a <hash> pr_ref=... pr_state=...` amendment records. New
-   `outcomes` and `pr_cache` SQLite tables (requires v2.18 migration
-   framework first).
+1. **Branch as first-class field** — `branch: str | None` on `AiSession`,
+   serialized to log and parsed back. Legacy `branch:<name>` tags auto-promoted.
+2. **Commit count at session close** — `commits_in_window()` in `git_context.py`;
+   called by all four collectors at stop.
+3. **Code delta for Claude/Cursor** — `git diff --numstat` from `sha_at_start`
+   captured at session open. Codex is pull-based so sha_at_start is omitted;
+   Gemini uses its own history file (unchanged).
+4. **PR linkage** — `halyard outcome sync` queries `gh pr list`, writes
+   `a <hash> pr_ref=... pr_state=...` amendment records. `outcomes` and
+   `pr_cache` SQLite tables added in schema v3. 1-hour cache TTL.
+5. **Outcome report** — `halyard outcome report` and `halyard report --outcomes`
+   bucket sessions by state: shipped (merged), in-flight (open), abandoned
+   (closed), no PR, not synced.
 
-Spec: `openspec/changes/v2.24-outcome-metadata/`.
+Spec: `openspec/changes/v2.24-outcome-metadata/`. 902 tests passing.
 
 ---
 
@@ -104,8 +103,8 @@ Spec: `openspec/changes/v2.24-outcome-metadata/`.
 2. **OSS launch** — HN / Reddit / Lobsters. Gate: `pipx install halyard &&
    halyard init` works end-to-end in a clean venv. Goal: real users, not
    stars.
-3. **v2.24** — Outcome metadata uplift: branch field, commit count, code
-   delta for all collectors, PR linkage via `halyard outcome sync`.
+3. **v2.24** — Outcome metadata uplift — **shipped**: branch field, commit
+   count, code delta for all collectors, PR linkage via `halyard outcome sync`.
 4. **v2.19** — Attestable AI work appendix. Gated on v2.24 so the appendix
    can include commit and PR evidence.
 5. **v3.0** — Outcome graph (connect sessions to commits, PRs, tests) only

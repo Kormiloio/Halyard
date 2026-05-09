@@ -35,6 +35,7 @@ class SessionFeed(Static):
             is_new = (now - session.end).total_seconds() < _NEW_ARRIVAL_SECONDS
             marker = "▶" if index == selected_index else ("+" if is_new else " ")
             err_badge = f" ⚠{session.tool_errors}e" if session.tool_errors else ""
+            branch_badge = f" [{session.branch}]" if session.branch else ""
             line = (
                 f"{marker} {tool_icon(session.tool)} "
                 f"{truncate(session.model, 20):20} "
@@ -42,7 +43,7 @@ class SessionFeed(Static):
                 f"{duration_str(session.end - session.start):>7} "
                 f"{tokens:>8} tok "
                 f"{cost_str(session.cost_usd):>9}"
-                f"{err_badge}"
+                f"{err_badge}{branch_badge}"
             )
             lines.append(line)
         self.last_rendered_text = "\n".join(lines)

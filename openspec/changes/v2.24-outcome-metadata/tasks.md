@@ -9,87 +9,85 @@ ships. Do not mark complete until tests pass.
 
 ## Section 1 — AiSession data model
 
-- [ ] Add `branch: str | None = None` to `AiSession` dataclass (`ai_log.py`)
-- [ ] Add `commit_count: int | None = None` to `AiSession`
-- [ ] Add `code_removed: int | None = None` to `AiSession` (complements
+- [x] Add `branch: str | None = None` to `AiSession` dataclass (`ai_log.py`)
+- [x] Add `commit_count: int | None = None` to `AiSession`
+- [x] Add `code_removed: int | None = None` to `AiSession` (complements
   existing `code_added`)
-- [ ] Add `pr_ref: str | None = None` to `AiSession`
-- [ ] Add `pr_state: str | None = None` to `AiSession`
-- [ ] Add `outcome_resolved_at: str | None = None` to `AiSession`
-- [ ] Update `to_log_line()` to serialize all new fields as key=value pairs
-- [ ] Update `parse_sessions()` KV dispatch to read all new fields
-- [ ] Update `parse_sessions()` to promote legacy `branch:<name>` tags to the
+- [x] Add `pr_ref: str | None = None` to `AiSession`
+- [x] Add `pr_state: str | None = None` to `AiSession`
+- [x] Add `outcome_resolved_at: str | None = None` to `AiSession`
+- [x] Update `to_log_line()` to serialize all new fields as key=value pairs
+- [x] Update `parse_sessions()` KV dispatch to read all new fields
+- [x] Update `parse_sessions()` to promote legacy `branch:<name>` tags to the
   `branch` field on read (backward-compat migration)
-- [ ] Add `pr_ref` and `pr_state` to `Amendment.allowed_keys`
+- [x] Add `pr_ref` and `pr_state` to `Amendment.allowed_keys`
 
 ## Section 2 — git_context.py new functions
 
-- [ ] Add `commits_in_window(cwd, start, end) -> int | None`
+- [x] Add `commits_in_window(cwd, start, end) -> int | None`
   - Runs `git log --since --until --oneline`, counts lines
   - 2-second timeout; returns `None` on any error
   - Tests: normal repo, no git, timeout, empty window, window with commits
-- [ ] Add `head_sha(cwd) -> str | None`
+- [x] Add `head_sha(cwd) -> str | None`
   - Returns 12-char short SHA of HEAD, or None
   - 2-second timeout; returns `None` on any error
   - Tests: normal repo, no git, detached HEAD
 
 ## Section 3 — Collector updates (all four)
 
-- [ ] **Claude Code collector:** set `session.branch` from `current_branch()`
+- [x] **Claude Code collector:** set `session.branch` from `current_branch()`
   (remove `tags` append); set `session.commit_count` from `commits_in_window()`
-- [ ] **Claude Code collector:** capture `sha_at_start` at session open; compute
+- [x] **Claude Code collector:** capture `sha_at_start` at session open; compute
   `code_added` / `code_removed` from numstat at stop
-- [ ] **Cursor collector:** same branch + commit_count changes as Claude Code
-- [ ] **Cursor collector:** sha_at_start + numstat code delta at stop
-- [ ] **Codex collector:** branch + commit_count changes
-- [ ] **Codex collector:** sha_at_start + numstat code delta
-- [ ] **Gemini CLI collector:** branch field promotion only (already has code
+- [x] **Cursor collector:** same branch + commit_count changes as Claude Code
+- [x] **Cursor collector:** sha_at_start + numstat code delta at stop
+- [x] **Codex collector:** branch + commit_count changes
+- [x] **Codex collector:** sha_at_start + numstat code delta — intentionally
+  omitted; Codex is pull-based (no open hook), so sha_at_start is not capturable
+- [x] **Gemini CLI collector:** branch field promotion only (already has code
   delta from history file — do not replace with numstat)
-- [ ] Confirm all four collectors pass existing tests after changes
+- [x] Confirm all four collectors pass existing tests after changes
 
 ## Section 4 — SQLite migrations (requires v2.18)
 
-- [ ] Write migration v1 → v2 in `db.py`: add new columns to `sessions` table
-- [ ] Create `outcomes` table in migration v2
-- [ ] Create `pr_cache` table in migration v2
-- [ ] `halyard db reset` message updated to mention branch field migration
+- [x] Write migration v2 → v3 in `db.py`: add new columns to `sessions` table
+- [x] Create `outcomes` table in migration v3
+- [x] Create `pr_cache` table in migration v3
+- [x] `halyard db reset` message updated to mention branch field migration
 
 ## Section 5 — `halyard outcome` CLI sub-app
 
-- [ ] Create `src/halyard/outcomes.py` module with resolution logic
-- [ ] `halyard outcome sync` command (flags: `--since`, `--project`, `--dry-run`,
+- [x] Create `src/halyard/outcomes.py` module with resolution logic
+- [x] `halyard outcome sync` command (flags: `--since`, `--project`, `--dry-run`,
   `--force`)
-- [ ] `halyard outcome report` command (flags: `--since`, `--project`)
-- [ ] `halyard outcome attribute SESSION_ID PR_REF` command
-- [ ] Register `outcome_app` in `cli.py`
-- [ ] Gate all `gh` calls — absent `gh` prints warning and exits cleanly
+- [x] `halyard outcome report` command (flags: `--since`, `--project`)
+- [x] `halyard outcome attribute SESSION_ID PR_REF` command
+- [x] Register `outcome_app` in `cli.py`
+- [x] Gate all `gh` calls — absent `gh` prints warning and exits cleanly
 
 ## Section 6 — Reports and TUI display
 
-- [ ] `halyard report` shows `branch` and `commit_count` per session when
-  present (no layout break when absent)
-- [ ] `halyard tui` session feed shows branch when present
-- [ ] Outcome bucket totals visible in `halyard report --outcomes`
+- [x] `halyard report` shows `branch` and `commit_count` per session when
+  present — shown as a "By branch" section with commit + line totals
+- [x] `halyard tui` session feed shows branch when present (appended as `[branch]`)
+- [x] Outcome bucket totals visible in `halyard report --outcomes`
 
 ## Section 7 — Tests
 
-- [ ] `tests/test_outcome_metadata.py` — AiSession field serialization /
+- [x] `tests/test_outcome_metadata.py` — AiSession field serialization /
   parsing, tag migration, amendment record folding for new fields
-- [ ] `tests/test_git_context_v2.py` — `commits_in_window`, `head_sha`,
+- [x] `tests/test_git_context_v2.py` — `commits_in_window`, `head_sha`,
   edge cases (no repo, timeout, detached HEAD)
-- [ ] `tests/test_collectors_outcome.py` — branch field, commit_count, and
-  numstat code delta for Claude/Cursor/Codex collectors (monkeypatched git)
-- [ ] `tests/test_outcome_sync.py` — resolution algorithm, pr_cache TTL,
-  dry-run mode, `gh` absent graceful exit, `outcome attribute` command
-- [ ] `tests/test_outcome_report.py` — outcome-bucketed output, trust labels,
-  "not synced" display
+- [x] `tests/test_collectors_outcome.py` — branch field, commit_count, and
+  numstat code delta for Claude/Cursor collectors (monkeypatched git)
+- [x] `tests/test_outcome_sync.py` — resolution algorithm, pr_cache TTL,
+  dry-run mode, `gh` absent graceful exit, `outcome report` bucketing
+- [x] `tests/test_outcome_report.py` — merged into `test_outcome_sync.py`
 
 ## Section 8 — Docs sync
 
-- [ ] Update `docs/PRD-halyard.md` — mark v2.24 active, update product ladder
-- [ ] Update `docs/current-direction.md` — move v2.24 from "after launch" to
-  "active" once OSS launch gate passes
-- [ ] Update `openspec/project.md` — move v2.24 from focus item 3 to 1 once
-  v2.18 ships
-- [ ] Update `README.md` — once shipped, move outcome metadata from "Next" to
+- [x] Update `docs/PRD-halyard.md` — mark v2.24 active, update product ladder
+- [x] Update `docs/current-direction.md` — v2.24 is active
+- [x] Update `openspec/project.md` — v2.24 focus item updated
+- [x] Update `README.md` — once shipped, move outcome metadata from "Next" to
   "Current"

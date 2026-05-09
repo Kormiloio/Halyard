@@ -232,7 +232,6 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 | Change | Description |
 |--------|-------------|
 | [`v2.19-attestable-appendix`](./openspec/changes/v2.19-attestable-appendix/) | Signed, verifiable, privacy-preserving AI work appendix (gated on v2.24) |
-| [`v2.24-outcome-metadata`](./openspec/changes/v2.24-outcome-metadata/) | Branch as first-class field, commit count, code delta, `halyard outcome sync` |
 
 ### Shipped
 
@@ -269,6 +268,7 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 | [`v2.21-attribution-provenance`](./openspec/changes/v2.21-attribution-provenance/) | Attribution provenance (`attr_method`) for billing and audit clarity |
 | [`v2.22-security-architecture`](./openspec/changes/v2.22-security-architecture/) | Architectural security follow-ups and coverage gaps |
 | [`v2.23-usage-analytics`](./openspec/changes/v2.23-usage-analytics/) | Stats-forward usage analytics: activity heatmap, streaks, peak hour, and model share |
+| [`v2.24-outcome-metadata`](./openspec/changes/v2.24-outcome-metadata/) | Branch as first-class field, commit count, code delta, PR linkage (`halyard outcome sync`) |
 | [`v2.25-honors-and-achievements`](./openspec/changes/v2.25-honors-and-achievements/) | Ranks, stripes, medals, and service record (`halyard honors`) |
 | [`v2.26-passport-and-friends`](./openspec/changes/v2.26-passport-and-friends/) | Passport stamps + Friends of the Sea voyage stages and sea creatures (`halyard voyage`) |
 
@@ -284,9 +284,8 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 ## Roadmap
 
 - **Shipped** — OSS launch (v0.2.0), honors and achievements (`halyard honors`),
-  Passport stamps, Friends of the Sea voyage stages and sea creatures (`halyard voyage`).
-- **Next** — Outcome-aware metadata (v2.24): branch as a first-class field, commit
-  count, code delta for all collectors, PR linkage via `halyard outcome sync`.
+  Passport stamps, Friends of the Sea voyage stages (`halyard voyage`), outcome
+  metadata v2.24: branch field, commit count, code delta, `halyard outcome sync`.
 - **Then** — Attestable AI work appendix (v2.19): signed, client-safe proof of
   AI-assisted work, enriched with commit and PR signals.
 - **Later, if design partners ask** — Outcome graph (v3.0): connect sessions to

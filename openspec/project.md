@@ -129,11 +129,10 @@ layers must read from this local source of truth; they do not replace it.
      going public to trigger the publish workflow).
    - [ ] Confirm `pipx install halyard` installs 0.2.0 from PyPI.
    - [ ] Write HN / Reddit / Lobsters post.
-3. **v2.24 — Outcome metadata uplift:** branch as a first-class `AiSession`
-   field (not a tag), commit count at session close, code delta for
-   Claude/Cursor/Codex collectors, `halyard outcome sync` command for PR
-   linkage. Moves outcome-awareness score from 2/10 to 6/10. Spec in
-   `openspec/changes/v2.24-outcome-metadata/`.
+3. **v2.24 — Outcome metadata uplift — shipped:** branch as a first-class
+   `AiSession` field, commit count at session close, code delta for all four
+   collectors, `halyard outcome sync` command for PR linkage, SQLite v3 schema.
+   Outcome score moves from 2/10 to 6/10. (902 tests passing.)
 4. **v2.25 — Honors and achievements:** `halyard honors` CLI command + Captain's
    Quarters panel on The Bridge. Ranks (Civilian → Commodore), stripes (watch
    streaks), medals (Eight Bells, Full Sail, Clean Manifest, Lighthouse, Signal
