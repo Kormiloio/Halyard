@@ -226,11 +226,31 @@ def _resolve_port(port: int) -> int:
 
 
 _MORSE_TABLE: dict[str, str] = {
-    "A": "·—", "B": "—···", "C": "—·—·", "D": "—··", "E": "·",
-    "F": "··—·", "G": "——·", "H": "····", "I": "··", "J": "·———",
-    "K": "—·—", "L": "·—··", "M": "——", "N": "—·", "O": "———",
-    "P": "·——·", "Q": "——·—", "R": "·—·", "S": "···", "T": "—",
-    "U": "··—", "V": "···—", "W": "·——", "X": "—··—", "Y": "—·——",
+    "A": "·—",
+    "B": "—···",
+    "C": "—·—·",
+    "D": "—··",
+    "E": "·",
+    "F": "··—·",
+    "G": "——·",
+    "H": "····",
+    "I": "··",
+    "J": "·———",
+    "K": "—·—",
+    "L": "·—··",
+    "M": "——",
+    "N": "—·",
+    "O": "———",
+    "P": "·——·",
+    "Q": "——·—",
+    "R": "·—·",
+    "S": "···",
+    "T": "—",
+    "U": "··—",
+    "V": "···—",
+    "W": "·——",
+    "X": "—··—",
+    "Y": "—·——",
     "Z": "——··",
 }
 
@@ -238,8 +258,7 @@ _MORSE_TABLE: dict[str, str] = {
 def _morse(text: str) -> str:
     """Encode text as Morse — symbols spaced within letters, double-space between letters."""
     return "  ".join(
-        " ".join(_MORSE_TABLE[c] for c in w.upper() if c in _MORSE_TABLE)
-        for w in text.split()
+        " ".join(_MORSE_TABLE[c] for c in w.upper() if c in _MORSE_TABLE) for w in text.split()
     )
 
 
@@ -289,7 +308,11 @@ def _voyage_panel(state: DashboardState) -> str:
         score_label = (
             "not underway"
             if total == 0
-            else "client-ready" if score >= 80 else "review needed" if score >= 60 else "gaps present"
+            else "client-ready"
+            if score >= 80
+            else "review needed"
+            if score >= 60
+            else "gaps present"
         )
         adrift_col = (
             f'<div class="voyage-col voyage-col-warn">'
@@ -332,7 +355,11 @@ def _voyage_panel(state: DashboardState) -> str:
         score_label = (
             "not underway"
             if total == 0
-            else "client-ready" if score >= 80 else "review needed" if score >= 60 else "gaps present"
+            else "client-ready"
+            if score >= 80
+            else "review needed"
+            if score >= 60
+            else "gaps present"
         )
         adrift = report.unattributed_count
         adrift_col = (
