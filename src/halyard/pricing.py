@@ -6,7 +6,9 @@ Run `halyard update-pricing` to refresh from the live table.
 
 from __future__ import annotations
 
+import hashlib
 import os
+import sys
 import tempfile
 import tomllib
 import urllib.error
@@ -52,6 +54,45 @@ _REMOTE_URL = "https://raw.githubusercontent.com/Kormiloio/Halyard/main/pricing/
 
 # Cached merged table; computed once per process
 _merged_table: dict[str, tuple[float, float]] | None = None
+
+
+def _pricing_hash_path() -> Path:
+    """Return the path for the stored pricing table SHA-256 hash."""
+    return Path.home() / ".halyard" / "pricing-hash.txt"
+
+
+def _check_pricing_hash(body: bytes) -> bool:
+    """D-5: Detect silent changes to the remote pricing table.
+
+    Computes SHA-256 of the fetched response body and compares against the
+    hash stored in ~/.halyard/pricing-hash.txt.
+
+    Returns True when hashes match (or no stored hash yet — first fetch).
+    Returns False when the stored hash differs from the new hash.
+
+    A warning is printed to stderr when the table has changed.  The new hash
+    is NOT written here — the caller writes it only after accepting the table.
+    """
+    new_hash = hashlib.sha256(body).hexdigest()
+    hash_path = _pricing_hash_path()
+
+    if not hash_path.exists():
+        # First fetch — no baseline yet; accept silently.
+        return True
+
+    stored = hash_path.read_text().strip()
+    if not stored:
+        return True
+
+    if stored == new_hash:
+        return True
+
+    # Hash differs — warn before accepting.
+    print(
+        "[halyard] Warning: remote pricing table has changed. Review before accepting.",
+        file=sys.stderr,
+    )
+    return False
 
 
 class PricingFetchError(Exception):
@@ -146,13 +187,18 @@ def update_pricing(timeout: int = 5) -> tuple[int, int]:
             headers={"User-Agent": "halyard/update-pricing"},
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            content = resp.read().decode("utf-8")
+            body = resp.read()
     except urllib.error.URLError as exc:
         raise PricingFetchError(f"could not fetch pricing table — {exc.reason}") from exc
     except TimeoutError as exc:
         raise PricingFetchError("could not fetch pricing table — connection timed out") from exc
     except OSError as exc:
         raise PricingFetchError(f"could not fetch pricing table — {exc}") from exc
+
+    try:
+        content = body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PricingFetchError(f"pricing table has invalid encoding — {exc}") from exc
 
     try:
         data = tomllib.loads(content)
@@ -185,6 +231,11 @@ def update_pricing(timeout: int = 5) -> tuple[int, int]:
             if val is not None and (not isinstance(val, (int, float)) or float(val) <= 0):
                 raise PricingFetchError(f"Model {model_name!r} has invalid {field}: {val!r}")
 
+    # D-5: check hash before accepting the table.
+    # _check_pricing_hash prints a warning if the table has changed.
+    # The hash is persisted below only after the table is written successfully.
+    _check_pricing_hash(body)
+
     # Count new vs updated relative to bundled table
     new_count = sum(1 for m in fetched if m not in PRICING)
     updated_count = sum(1 for m, rates in fetched.items() if m in PRICING and rates != PRICING[m])
@@ -200,6 +251,12 @@ def update_pricing(timeout: int = 5) -> tuple[int, int]:
         with suppress(OSError):
             os.unlink(tmp_path)
         raise
+
+    # D-5: persist the new hash now that the table has been accepted and written.
+    new_hash = hashlib.sha256(body).hexdigest()
+    hash_path = _pricing_hash_path()
+    hash_path.parent.mkdir(parents=True, exist_ok=True)
+    hash_path.write_text(new_hash + "\n")
 
     # Invalidate process cache
     global _merged_table

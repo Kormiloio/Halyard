@@ -39,17 +39,23 @@ Implementation checklist for v2.17 — Log Integrity.
 
 ## 5. Shared timer functions
 
-- [x] 5.1 Add `start_timer(project_dir, slug)` to orchestration.py.
-  — Implemented in D-2 (v2.21): read_active_project() extracted to ai_log.py; all collectors import canonical function; dashboard write is atomic.
-- [x] 5.2 Add `stop_timer(project_dir)` to orchestration.py.
-  — Implemented in D-2 (v2.21): read_active_project() extracted to ai_log.py; all collectors import canonical function; dashboard write is atomic.
+- [ ] 5.1 Add `start_timer(project_dir, slug)` to orchestration.py.
+  — Review note 2026-05-08: this is not complete while CLI `start` and
+  dashboard `/api/start` still duplicate timer-write logic.
+- [ ] 5.2 Add `stop_timer(project_dir)` to orchestration.py.
+  — Review note 2026-05-08: this is not complete while CLI `stop` and
+  dashboard `/api/stop` still duplicate timer-write logic.
 - [x] 5.3 `stop_timer` invokes `backfill_window`.
   — Implemented in D-2 (v2.21): read_active_project() extracted to ai_log.py; all collectors import canonical function; dashboard write is atomic.
-- [x] 5.4 CLI `start` and `stop` call the orchestration functions.
-  — Implemented in D-2 (v2.21): read_active_project() extracted to ai_log.py; all collectors import canonical function; dashboard write is atomic.
+- [ ] 5.4 CLI `start` and `stop` call the orchestration functions.
+  — Review note 2026-05-08: CLI `start` still writes `~/.halyard/active`
+  directly via `write_text`; it must use the shared atomic helper.
 - [ ] 5.5 Dashboard `do_POST` calls the orchestration functions, removes
   duplicate logic.
 - [ ] 5.6 `unlink(missing_ok=True)` on active-timer file.
+- [ ] 5.7 Add shared `write_active_timer()` helper that writes to a unique
+  temp path and atomically replaces `~/.halyard/active`; use it from both CLI
+  and dashboard start paths.
 
 ## 6. Error visibility
 

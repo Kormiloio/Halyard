@@ -154,7 +154,13 @@ def parse_session_file(path: Path) -> GeminiSessionSummary | None:
 
 
 def find_session_file(session_id: str) -> Path | None:
-    """Find the history JSON for a session by its ID prefix."""
+    """Find the history JSON for a session by its ID.
+
+    Globs for files whose name ends in the 8-char prefix of *session_id*, then
+    confirms the full ``sessionId`` field in the JSON body matches exactly.
+    This prevents false-positive matches when two sessions share the same
+    8-char prefix (Gap-7 collision scenario).
+    """
     prefix = session_id[:8]
     matches: list[Path] = []
     for candidate in _GEMINI_TMP.glob(f"*/chats/session-*-{prefix}.json"):
@@ -163,6 +169,18 @@ def find_session_file(session_id: str) -> Path | None:
         return None
     if len(matches) == 1:
         return matches[0]
+    # Ambiguous prefix — verify each candidate against the full session ID.
+    exact: list[Path] = []
+    for path in matches:
+        try:
+            data = json.loads(path.read_text())
+            if str(data.get("sessionId") or "") == session_id:
+                exact.append(path)
+        except Exception:
+            continue
+    if exact:
+        return max(exact, key=lambda p: p.stat().st_mtime)
+    # No exact match — fall back to most-recently-modified prefix match.
     return max(matches, key=lambda p: p.stat().st_mtime)
 
 

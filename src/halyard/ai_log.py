@@ -85,8 +85,8 @@ class AiSession:
             "s",
             self.start.strftime("%Y-%m-%dT%H:%M:%S"),
             self.end.strftime("%Y-%m-%dT%H:%M:%S"),
-            _safe_field(self.tool),    # M-1: sanitize whitespace/= injection
-            _safe_field(self.model),   # M-1: sanitize whitespace/= injection
+            _safe_field(self.tool),  # M-1: sanitize whitespace/= injection
+            _safe_field(self.model),  # M-1: sanitize whitespace/= injection
             str(self.input_tokens),
             str(self.output_tokens),
             f"{self.cost_usd:.4f}",

@@ -477,9 +477,7 @@ def test_note_newline_stripped_on_encode(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_quarantine_error_newline_escaped(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_quarantine_error_newline_escaped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Embedded newlines in the error string must not inject extra '; error=' header lines.
 
     The _write_quarantine function receives error strings derived from user-controlled
@@ -599,8 +597,7 @@ def test_attr_method_backfill_set_by_assign_unattributed(tmp_path: Path) -> None
     """assign_unattributed_sessions must write attr_method=backfill on every attributed line."""
     log = tmp_path / AI_LOG_FILENAME
     log.write_text(
-        HEADER
-        + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-sonnet-4-6 "
+        HEADER + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-sonnet-4-6 "
         "5000 1000 0.0500 source=hook\n"
     )
 
@@ -616,8 +613,7 @@ def test_attr_method_backfill_set_by_backfill_window(tmp_path: Path) -> None:
     """backfill_window must write attr_method=backfill on every attributed line."""
     log = tmp_path / AI_LOG_FILENAME
     log.write_text(
-        HEADER
-        + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-sonnet-4-6 "
+        HEADER + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-sonnet-4-6 "
         "5000 1000 0.0500 source=hook\n"
     )
 

@@ -286,9 +286,7 @@ def test_backfill_window_dry_run_leaves_no_tmp(tmp_path: Path) -> None:
 
     append_session(tmp_path, _session(start=start))
 
-    changed = backfill_window(
-        tmp_path, start, window_end, "acme:auth", dry_run=True
-    )
+    changed = backfill_window(tmp_path, start, window_end, "acme:auth", dry_run=True)
 
     log = tmp_path / AI_LOG_FILENAME
     assert changed == 1

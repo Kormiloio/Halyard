@@ -267,5 +267,3 @@ def _format_model_breakdown(model_stats: list[GeminiModelStats]) -> str:
     """Compact model breakdown: 'gemini-2.0-flash:3|gemini-2.0-pro:1'."""
     parts = [f"{s.model}:{s.requests}" for s in model_stats if s.requests > 0]
     return "|".join(parts)
-
-

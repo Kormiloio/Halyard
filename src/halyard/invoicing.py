@@ -194,9 +194,7 @@ def generate_invoice(
     # Slug validation in _read_clients already blocks traversal chars, but this
     # adds a second layer of defence for the force=True branch (existing path).
     if not invoice_path.resolve().is_relative_to(invoice_dir.resolve()):
-        raise InvoiceError(
-            f"Invoice path escapes invoice directory: {invoice_path}"
-        )
+        raise InvoiceError(f"Invoice path escapes invoice directory: {invoice_path}")
 
     business = config.get("business", {}) if isinstance(config.get("business"), dict) else {}
     currency = str(business.get("currency") or "USD")

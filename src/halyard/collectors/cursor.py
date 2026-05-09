@@ -172,5 +172,3 @@ def _read_session_start() -> datetime | None:
 
 def _clear_session_start() -> None:
     _CURSOR_SESSION_FILE.unlink(missing_ok=True)
-
-

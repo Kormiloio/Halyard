@@ -6,6 +6,25 @@ Three design-level security findings from Sage's architectural review (D-3,
 D-4, D-5), plus 10 test coverage gaps identified in the same review. None
 of the D-3/D-4/D-5 findings are yet implemented.
 
+## Code Review Notes — 2026-05-08
+
+These notes come from the post-implementation review of the first v2.22 slice.
+They are part of the acceptance criteria for closing this changeset.
+
+- Pricing hash mismatch must not be a warning-only path that still overwrites
+  the persisted local pricing table and hash. A mismatch must abort persistence
+  unless the caller explicitly accepts the new table via a force/accept flag.
+- Active-file concurrency tests must fail on writer-thread exceptions. A green
+  pytest run with `PytestUnhandledThreadExceptionWarning` is not acceptable for
+  a concurrency/data-integrity test.
+- Concurrent active-file writers must not share a fixed temp file name such as
+  `active.tmp`. Use a unique temp file per writer before atomic replace.
+- `org.toml` hash state must be scoped by hub path or org id. A single global
+  `~/.halyard/org-hash.txt` creates false warnings when users switch between
+  hubs/orgs.
+- New tests must pass `ruff check` and `ruff format --check`; test-only lint
+  failures still block closing the spec.
+
 ---
 
 ## D-4: Plist XML injection
@@ -28,17 +47,21 @@ without escaping.
 ### WHEN org.toml is loaded at startup
 THEN a SHA-256 hash of the file content is computed.
 
-### WHEN the computed hash differs from the hash stored in ~/.halyard/org-hash.txt
+### WHEN the computed hash differs from the stored hash for the same hub/org
 THEN a warning is printed to stderr:
 "[halyard] Warning: org.toml has changed since last run. Historical sessions
 may be re-attributed on next sync."
-The new hash is stored in ~/.halyard/org-hash.txt after the warning.
+The new hash is stored after the warning.
 
-### WHEN the computed hash matches ~/.halyard/org-hash.txt
+### WHEN the computed hash matches the stored hash for the same hub/org
 THEN no warning is printed. The file is loaded normally.
 
-### WHEN ~/.halyard/org-hash.txt does not exist (first run)
+### WHEN no stored hash exists for the current hub/org (first run)
 THEN no warning is printed. The hash is computed and stored for future runs.
+
+### WHEN two different hubs/orgs are loaded on the same machine
+THEN each hub/org uses an independent hash baseline and loading one does not
+warn or overwrite the baseline for the other.
 
 ---
 
@@ -49,10 +72,14 @@ THEN the response body is hashed with SHA-256 and compared against the hash
 stored in ~/.halyard/pricing-hash.txt.
 
 ### WHEN the hashes differ (or pricing-hash.txt does not exist)
-THEN a warning is printed before the new table is accepted:
+THEN a warning is printed before the new table is persisted:
 "[halyard] Warning: remote pricing table has changed. Review before accepting."
-The new hash is NOT written to pricing-hash.txt until the table is explicitly
-accepted.
+The local pricing table and pricing-hash.txt are NOT updated until the user
+explicitly accepts the table via a dedicated accept/force path.
+
+### WHEN the user explicitly accepts a changed pricing table
+THEN the local pricing table is overwritten atomically and the new hash is
+stored in pricing-hash.txt.
 
 ### WHEN the hashes match
 THEN the pricing table is accepted silently. No warning is printed.
@@ -73,6 +100,9 @@ THEN all fields on the parsed session are identical to the original session.
 WHEN two writes to ~/.halyard/active are in flight simultaneously
 THEN a concurrent read always returns either the previous complete slug or the
 new complete slug — never a partial or corrupted slug.
+THEN writer-thread exceptions are captured and fail the test.
+THEN the writers use unique temp file paths so the test proves concurrent
+atomic replacement rather than racing over the same `.tmp` file.
 
 ### Gap 3: Partial active file read
 WHEN ~/.halyard/active contains a truncated write (incomplete slug)

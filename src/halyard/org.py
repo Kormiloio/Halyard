@@ -7,6 +7,7 @@ to teams and departments.  All org-level rollup work reads from this file.
 from __future__ import annotations
 
 import hashlib
+import sys
 import tomllib
 from datetime import datetime
 from pathlib import Path
@@ -95,12 +96,45 @@ class OrgConfig(BaseModel):
         return ORG_NOTES_POLICY_DEFAULT
 
 
+def _org_hash_path() -> Path:
+    """Return the path for the stored org.toml SHA-256 hash."""
+    return Path.home() / ".halyard" / "org-hash.txt"
+
+
+def _check_org_hash(content: bytes) -> None:
+    """D-3: Detect silent changes to org.toml between runs.
+
+    Computes SHA-256 of the org.toml bytes, compares against the hash stored
+    in ~/.halyard/org-hash.txt.  If the hashes differ a warning is printed to
+    stderr (informational — does not block startup).  The new hash is always
+    written so the next run has a current baseline.
+
+    On the very first run (no stored hash) the hash is written silently.
+    """
+    new_hash = hashlib.sha256(content).hexdigest()
+    hash_path = _org_hash_path()
+
+    if hash_path.exists():
+        stored = hash_path.read_text().strip()
+        if stored and stored != new_hash:
+            print(
+                "[halyard] Warning: org.toml has changed since last run. "
+                "Historical sessions may be re-attributed on next sync.",
+                file=sys.stderr,
+            )
+
+    hash_path.parent.mkdir(parents=True, exist_ok=True)
+    hash_path.write_text(new_hash + "\n")
+
+
 def read_org_config(hub_dir: Path) -> OrgConfig | None:
     """Read org.toml from the hub directory. Returns None if absent."""
     path = hub_dir / ORG_TOML_FILENAME
     if not path.exists():
         return None
-    data = tomllib.loads(path.read_text())
+    content = path.read_bytes()
+    _check_org_hash(content)
+    data = tomllib.loads(content.decode())
     return OrgConfig(
         org=OrgInfo.model_validate(data["org"]),
         departments=tuple(Department.model_validate(d) for d in data.get("department", [])),
