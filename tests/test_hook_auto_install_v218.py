@@ -38,9 +38,7 @@ def test_install_hook_claude_creates_settings(
 # ---------------------------------------------------------------------------
 
 
-def test_auto_install_writes_claude_hooks(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_auto_install_writes_claude_hooks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
 
     def _which(binary: str) -> str | None:
@@ -92,9 +90,7 @@ def test_install_hook_claude_preserves_existing_settings(
 # ---------------------------------------------------------------------------
 
 
-def test_install_hook_claude_idempotent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_install_hook_claude_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
 
     _do_install_hook_claude(global_=True)
@@ -102,11 +98,5 @@ def test_install_hook_claude_idempotent(
 
     data = json.loads(_settings(tmp_path).read_text())
     for event, entries in data.get("hooks", {}).items():
-        commands = [
-            h.get("command")
-            for entry in entries
-            for h in entry.get("hooks", [])
-        ]
-        assert len(commands) == len(set(commands)), (
-            f"Duplicate hook commands in event '{event}'"
-        )
+        commands = [h.get("command") for entry in entries for h in entry.get("hooks", [])]
+        assert len(commands) == len(set(commands)), f"Duplicate hook commands in event '{event}'"

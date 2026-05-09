@@ -94,9 +94,7 @@ def get_db() -> sqlite3.Connection:
         # Check if tables exist (old pre-migration database vs. fresh install).
         tables = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
         if "sessions" not in tables:
             # Fresh database — create schema directly at current version.
@@ -163,9 +161,7 @@ def sync_all() -> SyncResult:
         from rich.console import Console as _Console
 
         _Console().print(
-            "[yellow]Warning:[/] "
-            + str(len(stale))
-            + " registered project(s) no longer found."
+            "[yellow]Warning:[/] " + str(len(stale)) + " registered project(s) no longer found."
             " Run [bold]halyard projects list[/] to review."
         )
 

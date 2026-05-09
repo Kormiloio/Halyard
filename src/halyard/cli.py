@@ -111,9 +111,7 @@ def _auto_install_detected_hooks() -> None:
     if found:
         console.print(f"\n[bold green]Auto-installed hooks:[/] {', '.join(found)}")
     if failed:
-        console.print(
-            f"[yellow]Hook install failed:[/] {', '.join(failed)}"
-        )
+        console.print(f"[yellow]Hook install failed:[/] {', '.join(failed)}")
     if not_found:
         console.print(
             f"[dim]Not on PATH:[/] {', '.join(not_found)} "
