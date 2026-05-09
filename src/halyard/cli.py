@@ -459,12 +459,12 @@ def stop() -> None:
     result = stop_timer(Path.cwd())
 
     if result.was_running:
+        from halyard.visuals import stop_card
+
         started = active.started or now.strftime("%Y-%m-%d %H:%M:%S")
-        elapsed = format_minutes(_elapsed_minutes(started, now))
-        console.print(f"[bold green]Stopped[/] [bold]{slug}[/]. Elapsed: {elapsed}.")
-        if result.backfill_count:
-            noun = "session" if result.backfill_count == 1 else "sessions"
-            console.print(f"  Attributed {result.backfill_count} AI {noun} to [bold]{slug}[/].")
+        elapsed_mins = _elapsed_minutes(started, now)
+        elapsed = format_minutes(elapsed_mins)
+        console.print(stop_card(slug, elapsed_mins, elapsed, result.backfill_count))
     else:
         console.print("[yellow]No active timer was running.[/]")
 
@@ -1470,6 +1470,12 @@ def report(
         console.print(
             f"  Tokens       in {report.total_input_tokens:,}  out {report.total_output_tokens:,}"
         )
+
+    if not all_time:
+        from halyard.visuals import trail_heatmap
+
+        console.print()
+        console.print(trail_heatmap(report.sessions, period))
 
     if not project and report.by_project:
         console.print("\n[bold]By project[/]")
