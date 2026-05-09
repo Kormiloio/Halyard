@@ -430,10 +430,7 @@ def _evaluate_passport(sessions: list[AiSession]) -> list[PassportStamp]:
     seen: dict[str, PassportStamp] = {}
     for s in sessions:
         if s.tool not in seen:
-            if s.tool in PASSPORT_STAMPS:
-                name, icon = PASSPORT_STAMPS[s.tool]
-            else:
-                name, icon = s.tool, _PASSPORT_DEFAULT_ICON
+            name, icon = PASSPORT_STAMPS.get(s.tool, (s.tool, _PASSPORT_DEFAULT_ICON))
             seen[s.tool] = PassportStamp(tool=s.tool, name=name, icon=icon)
     return list(seen.values())
 
