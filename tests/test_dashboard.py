@@ -1,10 +1,11 @@
-"""Tests for the local Glass Cockpit dashboard."""
+"""Tests for the Halyard Bridge dashboard."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
@@ -24,7 +25,7 @@ def test_dashboard_command_registered() -> None:
     result = runner.invoke(app, ["dashboard", "--help"])
 
     assert result.exit_code == 0
-    assert "Glass Cockpit" in result.output
+    assert "dashboard" in result.output
 
 
 def test_render_dashboard_shows_cockpit_and_session(tmp_path: Path) -> None:
@@ -45,7 +46,7 @@ def test_render_dashboard_shows_cockpit_and_session(tmp_path: Path) -> None:
 
     html = render_dashboard(tmp_path)
 
-    assert "Halyard Glass Cockpit" in html
+    assert "Halyard · The Bridge" in html
     assert "Recent AI Sessions" in html
     assert "Usage Analytics" in html
     assert "Favorite model" in html
@@ -483,3 +484,255 @@ def test_csrf_allows_no_origin_post(tmp_path: Path) -> None:
         {"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert status != 403
+
+
+# ---------------------------------------------------------------------------
+# Security: Host validation on GET/HEAD
+# ---------------------------------------------------------------------------
+
+
+def _make_get_request(
+    project_dir: Path,
+    method: str = "GET",
+    host_override: str | None = None,
+) -> int:
+    """Spin up a real server, fire one GET or HEAD, return status code."""
+    import http.client
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from halyard.dashboard import _handler_for
+
+    handler_cls = _handler_for(project_dir, token="t" * 64)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
+    port = server.server_port
+
+    def _serve_one() -> None:
+        server.handle_request()
+
+    t = threading.Thread(target=_serve_one, daemon=True)
+    t.start()
+
+    host_header = host_override if host_override is not None else f"127.0.0.1:{port}"
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    conn.request(method, "/", headers={"Host": host_header})
+    resp = conn.getresponse()
+    status = resp.status
+    conn.close()
+    server.server_close()
+    t.join(timeout=2)
+    return status
+
+
+def test_get_valid_host_127_returns_200(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    assert _make_get_request(tmp_path, "GET") == 200
+
+
+def test_get_valid_host_localhost_returns_200(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    import http.client
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from halyard.dashboard import _handler_for
+
+    handler_cls = _handler_for(tmp_path, token="t" * 64)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
+    port = server.server_port
+
+    def _serve() -> None:
+        server.handle_request()
+
+    t = threading.Thread(target=_serve, daemon=True)
+    t.start()
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    conn.request("GET", "/", headers={"Host": f"localhost:{port}"})
+    status = conn.getresponse().status
+    conn.close()
+    server.server_close()
+    t.join(timeout=2)
+    assert status == 200
+
+
+def test_get_wrong_host_returns_400(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    assert _make_get_request(tmp_path, "GET", host_override="evil.example.com") == 400
+
+
+def test_get_missing_host_returns_400(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    assert _make_get_request(tmp_path, "GET", host_override="") == 400
+
+
+def test_head_valid_host_returns_200(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    assert _make_get_request(tmp_path, "HEAD") == 200
+
+
+def test_head_wrong_host_returns_400(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    assert _make_get_request(tmp_path, "HEAD", host_override="evil.example.com") == 400
+
+
+# ---------------------------------------------------------------------------
+# Proof score
+# ---------------------------------------------------------------------------
+
+
+def _make_session(
+    *,
+    project: str | None = "acme:auth",
+    input_tokens: int = 1000,
+    tokens_available: bool = True,
+) -> AiSession:
+    s = AiSession(
+        start=datetime(2026, 5, 9, 10, 0),
+        end=datetime(2026, 5, 9, 10, 30),
+        tool="claude-code",
+        model="claude-sonnet-4-6",
+        input_tokens=input_tokens,
+        output_tokens=200,
+        cost_usd=0.01,
+        project=project,
+    )
+    s.tokens_available = tokens_available
+    return s
+
+
+def test_proof_score_empty_sessions() -> None:
+    from halyard.dashboard import _proof_score
+
+    score, cls = _proof_score([])
+    assert score == 100
+    assert cls == "proof-healthy"
+
+
+def test_proof_score_fully_attributed_with_tokens() -> None:
+    from halyard.dashboard import _proof_score
+
+    sessions = [_make_session(project="acme:auth", tokens_available=True) for _ in range(5)]
+    score, cls = _proof_score(sessions)
+    assert score == 100
+    assert cls == "proof-healthy"
+
+
+def test_proof_score_zero_attribution() -> None:
+    from halyard.dashboard import _proof_score
+
+    sessions = [_make_session(project=None, tokens_available=True) for _ in range(5)]
+    score, cls = _proof_score(sessions)
+    assert score == 40  # 0*0.6 + 1*0.4 = 0.4 → 40
+    assert cls == "proof-low"
+
+
+def test_proof_score_boundary_healthy() -> None:
+    from halyard.dashboard import _proof_score
+
+    # 10 sessions: 10 attributed, 6 with tokens → 1*0.6 + 0.6*0.4 = 0.84 → 84
+    sessions = [_make_session(tokens_available=(i < 6)) for i in range(10)]
+    score, cls = _proof_score(sessions)
+    assert score == 84
+    assert cls == "proof-healthy"
+
+
+def test_proof_score_warn_range() -> None:
+    from halyard.dashboard import _proof_score
+
+    # 10 sessions: 8 attributed, 5 with tokens → 0.8*0.6 + 0.5*0.4 = 0.68 → 68
+    sessions = [
+        _make_session(project="p" if i < 8 else None, tokens_available=(i < 5)) for i in range(10)
+    ]
+    score, cls = _proof_score(sessions)
+    assert score == 68
+    assert cls == "proof-warn"
+
+
+def test_proof_score_low_range() -> None:
+    from halyard.dashboard import _proof_score
+
+    # 10 sessions: 3 attributed, 0 tokens → 0.3*0.6 + 0 = 0.18 → 18
+    sessions = [
+        _make_session(project="p" if i < 3 else None, tokens_available=False) for i in range(10)
+    ]
+    score, cls = _proof_score(sessions)
+    assert score == 18
+    assert cls == "proof-low"
+
+
+# ---------------------------------------------------------------------------
+# Current Voyage panel
+# ---------------------------------------------------------------------------
+
+
+def test_voyage_panel_idle_shows_at_anchor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from halyard import reports
+
+    monkeypatch.setattr(reports, "_HALYARD_ACTIVE", tmp_path / "no-active")
+    _init_project(tmp_path)
+    html = render_dashboard(tmp_path)
+    assert "At anchor" in html
+    assert "Current Voyage · Web Dashboard" in html
+
+
+def test_voyage_panel_idle_shows_proof_score(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from halyard import reports
+
+    monkeypatch.setattr(reports, "_HALYARD_ACTIVE", tmp_path / "no-active")
+    _init_project(tmp_path)
+    append_session(tmp_path, _make_session())
+    html = render_dashboard(tmp_path)
+    assert "Proof Score" in html
+
+
+def test_voyage_panel_active_shows_making_way(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from halyard.reports import _HALYARD_ACTIVE
+
+    _init_project(tmp_path)
+    _HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
+    _HALYARD_ACTIVE.write_text(
+        "timeclock=/tmp/t.timeclock\nslug=acme:auth\nstarted=2026-05-09 10:00:00\n"
+    )
+    try:
+        html = render_dashboard(tmp_path)
+        assert "Making Way" in html
+        assert "acme:auth" in html
+    finally:
+        _HALYARD_ACTIVE.unlink(missing_ok=True)
+
+
+def test_voyage_panel_adrift_hidden_when_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from halyard import reports
+
+    monkeypatch.setattr(reports, "_HALYARD_ACTIVE", tmp_path / "no-active")
+    _init_project(tmp_path)
+    append_session(tmp_path, _make_session(project="acme:auth"))
+    html = render_dashboard(tmp_path)
+    # voyage-col-warn only appears in HTML elements when adrift > 0;
+    # CSS definition always adds one occurrence, so >1 means an element rendered
+    assert html.count("voyage-col-warn") == 1  # only CSS, no element
+
+
+def test_voyage_panel_adrift_shown_when_nonzero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from halyard import reports
+
+    monkeypatch.setattr(reports, "_HALYARD_ACTIVE", tmp_path / "no-active")
+    _init_project(tmp_path)
+    append_session(tmp_path, _make_session(project=None))
+    html = render_dashboard(tmp_path)
+    assert html.count("voyage-col-warn") > 1  # CSS definition + rendered element
+
+
+def test_render_dashboard_title_is_the_bridge(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    html = render_dashboard(tmp_path)
+    assert "Halyard · The Bridge" in html
+    assert "Halyard Glass Cockpit" not in html

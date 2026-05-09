@@ -1,4 +1,4 @@
-"""Local Glass Cockpit dashboard server."""
+"""Local Bridge dashboard server — Halyard's web command center."""
 
 # ruff: noqa: E501
 
@@ -39,7 +39,7 @@ def run_dashboard(
     host = "127.0.0.1"
     server = ThreadingHTTPServer((host, _resolve_port(port)), _handler_for(project_dir))
     url = f"http://{host}:{server.server_port}/"
-    print(f"Halyard Glass Cockpit: {url}")
+    print(f"Halyard · The Bridge: {url}")
     print("Press Ctrl-C to stop.")
 
     if open_browser:
@@ -67,9 +67,19 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
 
     class DashboardHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            server_port = self.server.server_port  # type: ignore[attr-defined]
+            host = self.headers.get("Host", "")
+            if host not in {f"127.0.0.1:{server_port}", f"localhost:{server_port}"}:
+                self.send_error(HTTPStatus.BAD_REQUEST, "invalid Host header")
+                return
             self._send_dashboard(include_body=True)
 
         def do_HEAD(self) -> None:
+            server_port = self.server.server_port  # type: ignore[attr-defined]
+            host = self.headers.get("Host", "")
+            if host not in {f"127.0.0.1:{server_port}", f"localhost:{server_port}"}:
+                self.send_error(HTTPStatus.BAD_REQUEST, "invalid Host header")
+                return
             self._send_dashboard(include_body=False)
 
         def do_POST(self) -> None:
@@ -204,6 +214,132 @@ def _resolve_port(port: int) -> int:
         return int(sock.getsockname()[1])
 
 
+def _proof_score(sessions: list[AiSession]) -> tuple[int, str]:
+    """Return (score 0-100, css_class) representing client-ready confidence.
+
+    Score = attribution_rate * 60% + token_capture_rate * 40%.
+    css_class is one of: proof-healthy (>=80), proof-warn (60-79), proof-low (<60).
+    Empty session list returns (100, 'proof-healthy') - nothing broken.
+    """
+    total = len(sessions)
+    if total == 0:
+        return 100, "proof-healthy"
+    attributed = sum(1 for s in sessions if s.project)
+    with_tokens = sum(1 for s in sessions if s.tokens_available)
+    score = round((attributed / total * 0.6 + with_tokens / total * 0.4) * 100)
+    if score >= 80:
+        return score, "proof-healthy"
+    if score >= 60:
+        return score, "proof-warn"
+    return score, "proof-low"
+
+
+def _voyage_panel(state: DashboardState) -> str:
+    """Current Voyage panel — the live work state shown at the top of The Bridge."""
+    from datetime import datetime as _dt
+
+    report = state.report
+    timer = state.active_timer
+
+    if timer is not None:
+        eyebrow = "Current Voyage · Making Way"
+        title = _e(timer.slug)
+        timer_start: _dt | None = None
+        if timer.started:
+            with suppress(ValueError):
+                timer_start = _dt.strptime(timer.started, "%Y-%m-%d %H:%M:%S")
+        watch = [s for s in report.sessions if timer_start and s.start >= timer_start]
+        total = len(watch)
+        attributed = sum(1 for s in watch if s.project)
+        watch_cost = sum(s.cost_usd for s in watch)
+        adrift = total - attributed
+        score, score_cls = _proof_score(watch)
+        score_display = "—" if total == 0 else str(score)
+        bar_pct = min(100, int(timer.elapsed_minutes / 90 * 100))
+        manifest_label = f"{attributed}/{total} in manifest" if total else "no sessions yet"
+        score_label = (
+            "client-ready" if score >= 80 else "review needed" if score >= 60 else "gaps present"
+        )
+        adrift_col = (
+            f'<div class="voyage-col voyage-col-warn">'
+            f'<span class="voyage-label">Adrift</span>'
+            f'<span class="voyage-value proof-low">{adrift}</span>'
+            f'<span class="voyage-sub">· · · — — — · · ·</span></div>'
+            if adrift > 0
+            else ""
+        )
+        body = f"""
+        <div class="voyage-bar-outer"><div class="voyage-bar-fill" style="width:{bar_pct}%"></div></div>
+        <div class="voyage-grid">
+          <div class="voyage-col">
+            <span class="voyage-label">Elapsed</span>
+            <span class="voyage-value">{_e(timer.elapsed_label)}</span>
+          </div>
+          <div class="voyage-col">
+            <span class="voyage-label">Sessions · this watch</span>
+            <span class="voyage-value">{total}</span>
+            <span class="voyage-sub">{_e(manifest_label)}</span>
+          </div>
+          <div class="voyage-col">
+            <span class="voyage-label">Proof Score</span>
+            <span class="voyage-value"><span class="{_e(score_cls)}">{score_display}%</span></span>
+            <span class="voyage-sub">{_e(score_label)}</span>
+          </div>
+          <div class="voyage-col">
+            <span class="voyage-label">Cost · this watch</span>
+            <span class="voyage-value">${watch_cost:.4f}</span>
+          </div>
+          {adrift_col}
+        </div>"""
+    else:
+        eyebrow = "Current Voyage · Web Dashboard"
+        title = "⚓  At anchor"
+        sessions = report.sessions
+        total = len(sessions)
+        score, score_cls = _proof_score(sessions)
+        score_display = "—" if total == 0 else str(score)
+        score_label = (
+            "client-ready" if score >= 80 else "review needed" if score >= 60 else "gaps present"
+        )
+        adrift = report.unattributed_count
+        adrift_col = (
+            f'<div class="voyage-col voyage-col-warn">'
+            f'<span class="voyage-label">Adrift</span>'
+            f'<span class="voyage-value proof-low">{adrift}</span>'
+            f'<span class="voyage-sub">· · · — — — · · ·</span></div>'
+            if adrift > 0
+            else ""
+        )
+        body = f"""
+        <div class="voyage-grid">
+          <div class="voyage-col">
+            <span class="voyage-label">Sessions · this month</span>
+            <span class="voyage-value">{total}</span>
+          </div>
+          <div class="voyage-col">
+            <span class="voyage-label">Proof Score</span>
+            <span class="voyage-value"><span class="{_e(score_cls)}">{score_display}%</span></span>
+            <span class="voyage-sub">{_e(score_label)}</span>
+          </div>
+          <div class="voyage-col">
+            <span class="voyage-label">Cost · this month</span>
+            <span class="voyage-value">${report.total_cost:.2f}</span>
+          </div>
+          {adrift_col}
+        </div>"""
+
+    return f"""
+      <article class="panel span-12">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">{_e(eyebrow)}</p>
+            <h2>{title}</h2>
+          </div>
+        </div>
+        {body}
+      </article>"""
+
+
 def _render_state(state: DashboardState) -> str:
     report = state.report
     human_time = state.human_time
@@ -305,7 +441,7 @@ def _render_state(state: DashboardState) -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="refresh" content="10">
-  <title>Halyard Glass Cockpit</title>
+  <title>Halyard · The Bridge</title>
   <style>{_CSS}</style>
 </head>
 <body>
@@ -320,7 +456,7 @@ def _render_state(state: DashboardState) -> str:
           </svg>
         </div>
         <div>
-          <p class="eyebrow">Halyard Glass Cockpit</p>
+          <p class="eyebrow">Halyard · The Bridge · Web Dashboard</p>
           <h1>{_e(state.project_dir.name)}</h1>
         </div>
       </div>
@@ -335,6 +471,8 @@ def _render_state(state: DashboardState) -> str:
     </section>
 
     <section class="grid">
+      {_voyage_panel(state)}
+
       <article class="panel span-12">
         <div class="panel-head">
           <div>
@@ -1263,6 +1401,19 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .trail-legend .trail-cell { width: 14px; height: 14px; min-width: 14px; border-radius: 3px; pointer-events: none; }
 .trail-legend .trail-dn { display: none; }
 
+/* Current Voyage panel */
+.voyage-bar-outer { width: 100%; background: var(--line); border-radius: 99px; height: 5px; overflow: hidden; margin: 10px 0 14px; }
+.voyage-bar-fill { height: 100%; border-radius: 99px; background: var(--cyan); transition: width .4s ease; }
+.voyage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.voyage-col { display: flex; flex-direction: column; gap: 5px; padding: 12px 14px; border: 1px solid rgba(37,64,74,.7); border-radius: 8px; background: var(--panel-2); }
+.voyage-col-warn { border-color: rgba(243,191,91,.3); }
+.voyage-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .09em; font-weight: 700; }
+.voyage-value { font-size: 26px; font-weight: 700; line-height: 1.1; color: var(--text); }
+.voyage-sub { font-size: 11px; color: var(--muted); }
+.proof-healthy { color: var(--green); }
+.proof-warn { color: var(--amber); }
+.proof-low { color: var(--red); }
+
 @media (max-width: 1100px) {
   body { min-width: 760px; }
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1270,5 +1421,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   .usage-grid { grid-template-columns: 1fr; }
   .usage-stats, .usage-warnings { grid-column: span 1; }
   .usage-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .voyage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 """
