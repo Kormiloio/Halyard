@@ -11,7 +11,7 @@ from collections import defaultdict
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO
 
@@ -43,7 +43,7 @@ def _log_error(msg: str, exc: Exception) -> None:
     """
     try:
         _HALYARD_LOG.parent.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+        ts = datetime.now(tz=UTC).isoformat(timespec="seconds")
         tb = traceback.format_exc()
         entry = f"[{ts}] {msg}: {type(exc).__name__}: {exc}\n{tb}\n"
         with _HALYARD_LOG.open("a") as fh:
@@ -73,13 +73,12 @@ def locked_file(path: Path, mode: str) -> Generator[IO[str], None, None]:
     lock_key = str(path.resolve())
     with _PATH_LOCKS_GUARD:
         thread_lock = _PATH_LOCKS.setdefault(lock_key, threading.RLock())
-    with thread_lock:
-        with open(path, mode) as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            try:
-                yield f
-            finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    with thread_lock, open(path, mode) as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            yield f
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 # ---------------------------------------------------------------------------
@@ -177,15 +176,17 @@ class AiSession:
         """Mutate this session in-memory according to an amendment record.
 
         Only the keys listed in the v2.17 amendment spec are honoured:
-        ``project``, ``source``, ``confirmed_at``, ``note``.  Unknown keys
-        are silently ignored so future amendment keys don't break older
-        parsers.
+        ``project``, ``source``, ``confirmed_at``, ``note``, plus
+        ``attr_method`` from v2.21 attribution provenance. Unknown keys are
+        silently ignored so future amendment keys don't break older parsers.
         """
         for key, value in amendment.kvs.items():
             if key == "project":
                 self.project = value
             elif key == "source":
                 self.source = value
+            elif key == "attr_method":
+                self.attr_method = value
             elif key == "confirmed_at":
                 # Store as note-style string; callers can parse as ISO if needed
                 pass  # confirmed_at is metadata; no AiSession field for it yet
@@ -317,38 +318,25 @@ def parse_sessions(project_dir: Path) -> list[AiSession]:
 
 
 def assign_unattributed_sessions(project_dir: Path, project: str) -> int:
-    """Assign all session lines missing `project=` to a project slug.
+    """Assign all effectively unattributed sessions to a project slug.
 
-    v2.17 task 3.5 audit note: the ``tmp.write_text`` calls below write to a
-    *temp* file (``*.log.tmp``), never directly to the live log path.  The
-    live path is only updated via ``tmp.replace(log_path)``, which is atomic
-    on POSIX.  These write_text calls are therefore safe and intentional — they
-    are part of the L-3 atomic-write pattern and do not need ``locked_file``
-    (which protects appends, not whole-file rewrites).
+    The original ``s`` records remain immutable. Corrections are appended as
+    ``a`` amendment records and folded by ``parse_sessions``.
     """
     log_path = project_dir / AI_LOG_FILENAME
     if not log_path.exists():
         return 0
 
-    changed = 0
-    lines = []
-    for line in log_path.read_text().splitlines():
-        if _is_assignable_session_line(line):
-            # D-1: record provenance so auditors can distinguish automatic
-            # backfill attribution from timer-confirmed attribution.
-            lines.append(f"{line} project={project} attr_method=backfill")
-            changed += 1
-        else:
-            lines.append(line)
-
-    if changed:
-        # L-3: atomic write — write to a temp file then rename so a crash
-        # mid-write cannot leave the log in a partially-written state.
-        tmp = log_path.with_suffix(".log.tmp")
-        tmp.write_text("\n".join(lines) + "\n")
-        tmp.replace(log_path)
-
-    return changed
+    with locked_file(log_path, "a+") as f:
+        f.seek(0)
+        content = f.read()
+        amendment_lines = [
+            _amendment_line(raw_line, project=project, attr_method="backfill")
+            for raw_line, session in _effective_session_lines(content.splitlines())
+            if session.project is None
+        ]
+        _append_lines(f, amendment_lines, content)
+        return len(amendment_lines)
 
 
 def find_project_dir(start: Path | None = None) -> Path | None:
@@ -484,7 +472,7 @@ def confirm_session_attributions(
     """Write confirmed project attributions into ai-sessions.log.
 
     Each entry in confirmations is (original_line, project_slug). The matching
-    line in the log gets ' project=<slug>' appended in place.
+    line receives an appended ``a`` amendment record.
     Returns the number of lines updated.
     """
     log_path = project_dir / AI_LOG_FILENAME
@@ -492,23 +480,22 @@ def confirm_session_attributions(
         return 0
 
     confirm_map = {line.rstrip(): project for line, project in confirmations}
-    changed = 0
-    new_lines = []
-    for raw_line in log_path.read_text().splitlines():
-        stripped = raw_line.rstrip()
-        if stripped in confirm_map:
-            new_lines.append(f"{stripped} project={confirm_map[stripped]}")
-            changed += 1
-        else:
-            new_lines.append(raw_line)
-
-    if changed:
-        # L-3: atomic write
-        tmp = log_path.with_suffix(".log.tmp")
-        tmp.write_text("\n".join(new_lines) + "\n")
-        tmp.replace(log_path)
-
-    return changed
+    with locked_file(log_path, "a+") as f:
+        f.seek(0)
+        content = f.read()
+        amendment_lines = []
+        for raw_line, _session in _effective_session_lines(content.splitlines()):
+            stripped = raw_line.rstrip()
+            if stripped in confirm_map:
+                amendment_lines.append(
+                    _amendment_line(
+                        stripped,
+                        project=confirm_map[stripped],
+                        attr_method="manual",
+                    )
+                )
+        _append_lines(f, amendment_lines, content)
+        return len(amendment_lines)
 
 
 def backfill_window(
@@ -529,29 +516,54 @@ def backfill_window(
     if not log_path.exists():
         return 0
 
-    with locked_file(log_path, "r+") as f:
-        changed = 0
-        new_lines = []
-        for raw_line in f.read().splitlines():
-            line = raw_line.rstrip()
-            if _is_assignable_session_line(line):
-                session = _parse_line(line)
-                if session is not None and start <= session.start < end:
-                    if not dry_run:
-                        # D-1: record provenance — backfill is a post-hoc attribution
-                        new_lines.append(f"{line} project={project} attr_method=backfill")
-                    else:
-                        new_lines.append(raw_line)
-                    changed += 1
-                    continue
-            new_lines.append(raw_line)
+    with locked_file(log_path, "a+") as f:
+        f.seek(0)
+        content = f.read()
+        amendment_lines = [
+            _amendment_line(raw_line, project=project, attr_method="backfill")
+            for raw_line, session in _effective_session_lines(content.splitlines())
+            if session.project is None and start <= session.start < end
+        ]
+        if not dry_run:
+            _append_lines(f, amendment_lines, content)
+        return len(amendment_lines)
 
-        if changed and not dry_run:
-            f.seek(0)
-            f.truncate()
-            f.write("\n".join(new_lines) + "\n")
 
-    return changed
+def _effective_session_lines(lines: list[str]) -> list[tuple[str, AiSession]]:
+    """Return raw ``s`` lines paired with sessions after folded amendments."""
+    entries: list[tuple[str, str, AiSession]] = []
+    amendments_by_hash: dict[str, list[Amendment]] = defaultdict(list)
+    for raw_line in lines:
+        line = raw_line.rstrip()
+        if line.startswith("s "):
+            session = _parse_line(line)
+            if session is not None:
+                entries.append((line, session_hash(line), session))
+        elif line.startswith("a "):
+            amendment = parse_amendment(line)
+            if amendment is not None:
+                amendments_by_hash[amendment.session_hash].append(amendment)
+
+    result: list[tuple[str, AiSession]] = []
+    for raw_line, h, session in entries:
+        for amendment in amendments_by_hash.get(h, []):
+            session.apply_amendment(amendment)
+        result.append((raw_line, session))
+    return result
+
+
+def _amendment_line(raw_session_line: str, *, project: str, attr_method: str) -> str:
+    h = session_hash(raw_session_line)
+    return f"a {h} project={project} attr_method={attr_method}"
+
+
+def _append_lines(f: IO[str], lines: list[str], existing_content: str) -> None:
+    if not lines:
+        return
+    if existing_content and not existing_content.endswith("\n"):
+        f.write("\n")
+    for line in lines:
+        f.write(line + "\n")
 
 
 def _is_assignable_session_line(line: str) -> bool:

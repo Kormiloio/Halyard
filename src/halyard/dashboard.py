@@ -8,6 +8,7 @@ import html
 import socket
 import webbrowser
 from collections.abc import Iterable
+from contextlib import suppress
 from datetime import timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -133,10 +134,8 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
                     from halyard.orchestration import TimerAlreadyRunning, start_timer
 
                     account = slug.replace("/", ":", 1)
-                    try:
+                    with suppress(TimerAlreadyRunning):
                         start_timer(project_dir, account)
-                    except TimerAlreadyRunning:
-                        pass  # dashboard silently ignores duplicate start
 
             elif self.path == "/api/stop":
                 # v2.17 task 5.5: delegate to shared stop_timer

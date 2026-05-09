@@ -11,6 +11,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+import halyard.reports as _reports_mod
 from halyard.ai_log import (
     AI_LOG_FILENAME,
     AiSession,
@@ -24,7 +25,6 @@ from halyard.ai_log import (
     unattributed_log_path,
 )
 from halyard.hub import find_hub, set_hub
-import halyard.reports as _reports_mod
 from halyard.reports import ActiveTimer
 
 console = Console()
@@ -35,7 +35,7 @@ console = Console()
 # ---------------------------------------------------------------------------
 
 
-class TimerAlreadyRunning(Exception):
+class TimerAlreadyRunning(Exception):  # noqa: N818
     """Raised by start_timer when a timer is already active."""
 
     def __init__(self, slug: str) -> None:
@@ -84,7 +84,7 @@ def start_timer(project_dir: Path, slug: str) -> ActiveTimer:
     with locked_file(timeclock, "a") as f:
         # Re-check inside the lock so two concurrent callers cannot both pass
         # the "no active timer" check and both write a clock-in entry.
-        active = _reports_mod.read_active_timer(_reports_mod._HALYARD_ACTIVE)
+        active = _reports_mod.read_active_timer()
         if active is not None:
             raise TimerAlreadyRunning(active.slug)
 
@@ -103,7 +103,7 @@ def stop_timer(project_dir: Path) -> StopResult:
     Invokes backfill_window on the window just closed.
     Returns StopResult(was_running=False) if no timer was active.
     """
-    active = _reports_mod.read_active_timer(_reports_mod._HALYARD_ACTIVE)
+    active = _reports_mod.read_active_timer()
     if active is None:
         return StopResult(was_running=False)
 

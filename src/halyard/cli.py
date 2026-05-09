@@ -454,7 +454,8 @@ def stop() -> None:
     result = stop_timer(Path.cwd())
 
     if result.was_running:
-        elapsed = format_minutes(_elapsed_minutes(active.started or now.strftime("%Y-%m-%d %H:%M:%S"), now))
+        started = active.started or now.strftime("%Y-%m-%d %H:%M:%S")
+        elapsed = format_minutes(_elapsed_minutes(started, now))
         console.print(f"[bold green]Stopped[/] [bold]{slug}[/]. Elapsed: {elapsed}.")
         if result.backfill_count:
             noun = "session" if result.backfill_count == 1 else "sessions"

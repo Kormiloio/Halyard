@@ -37,6 +37,7 @@ a a3f9c1d2e4b7 project=acme:auth source=backfill confirmed_at=2026-01-08T14:00:0
 |----------------|------------|-------------------------------------------------|
 | `project`      | string     | Client:project slug                             |
 | `source`       | enum       | `backfill`, `manual`, `confirmed`, `correction` |
+| `attr_method`  | enum       | Attribution provenance; e.g. `backfill`, `manual` |
 | `confirmed_at` | ISO 8601   | When the amendment was made                     |
 | `note`         | string     | Free-form, surfaced in dashboard tooltips       |
 

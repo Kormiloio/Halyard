@@ -18,7 +18,6 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-import tomli_w
 
 from halyard.ai_log import (
     AI_LOG_FILENAME,
@@ -339,9 +338,7 @@ def test_concurrent_stop_timer_produces_exactly_one_o_line(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Two concurrent stop_timer calls must produce exactly one clock-out line."""
-    import pytest
-
-    from halyard.orchestration import TimerAlreadyRunning, start_timer, stop_timer
+    from halyard.orchestration import start_timer, stop_timer
 
     _init_project(tmp_path)
     (tmp_path / "time.timeclock").write_text("")
@@ -459,10 +456,7 @@ def test_backfill_error_logs_to_halyard_log_and_warns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """When backfill_window raises, stop_timer must emit a warning and write to halyard.log."""
-    import pytest
-
-    from halyard.ai_log import _HALYARD_LOG
-    from halyard.orchestration import TimerAlreadyRunning, start_timer, stop_timer
+    from halyard.orchestration import start_timer, stop_timer
 
     _init_project(tmp_path)
     (tmp_path / "time.timeclock").write_text("")

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from halyard.ai_log import HEADER, AiSession, append_session
+from halyard.ai_log import HEADER, AiSession, append_session, parse_sessions
 from halyard.cli import app
 
 runner = CliRunner()
@@ -130,11 +130,16 @@ def test_confirm_does_not_touch_other_lines(tmp_path: Path) -> None:
     changed = confirm_session_attributions(tmp_path, [(unattributed_line, "acme:new")])
 
     assert changed == 1
-    lines = [ln for ln in log.read_text().splitlines() if ln.startswith("s ")]
+    content_lines = log.read_text().splitlines()
+    lines = [ln for ln in content_lines if ln.startswith("s ")]
+    amendment_lines = [ln for ln in content_lines if ln.startswith("a ")]
     attributed = [ln for ln in lines if "project=acme:existing" in ln]
-    new = [ln for ln in lines if "project=acme:new" in ln]
     assert len(attributed) == 1
-    assert len(new) == 1
+    assert all("project=acme:new" not in ln for ln in lines)
+    assert len([ln for ln in amendment_lines if "project=acme:new" in ln]) == 1
+
+    sessions = parse_sessions(tmp_path)
+    assert {session.project for session in sessions} == {"acme:existing", "acme:new"}
 
 
 def test_confirm_empty_confirmations_returns_zero(tmp_path: Path) -> None:

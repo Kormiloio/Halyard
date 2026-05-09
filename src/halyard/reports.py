@@ -174,8 +174,10 @@ def summarize_ai_sessions(sessions: list[AiSession], *, period_label: str) -> Ai
     )
 
 
-def read_active_timer(active_path: Path = _HALYARD_ACTIVE) -> ActiveTimer | None:
+def read_active_timer(active_path: Path | None = None) -> ActiveTimer | None:
     """Read the current active timer state, if any."""
+    if active_path is None:
+        active_path = _HALYARD_ACTIVE
     if not active_path.exists():
         return None
 

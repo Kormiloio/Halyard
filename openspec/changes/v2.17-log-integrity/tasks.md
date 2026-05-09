@@ -16,7 +16,8 @@ Implementation checklist for v2.17 — Log Integrity.
 - [x] 2.2 Add `Amendment` dataclass and parser for `a` lines.
   — `parse_amendment()` returns `Amendment | None`; handles empty kvs.
 - [x] 2.3 Add `AiSession.apply_amendment(amendment)` mutator.
-  — Handles project, source, note; confirmed_at is stored as metadata (no AiSession field yet); unknown keys silently ignored.
+  — Handles project, source, attr_method, note; confirmed_at is stored as
+  metadata (no AiSession field yet); unknown keys silently ignored.
 - [x] 2.4 Update `parse_sessions` to fold amendments.
   — Full fold algorithm per design.md; duplicate-line-safe (list + first-occurrence hash map).
 - [x] 2.5 Test: round-trip an attribution change via `a` record.
@@ -27,68 +28,89 @@ Implementation checklist for v2.17 — Log Integrity.
 ## 3. Replace in-place rewrites
 
 - [x] 3.1 `assign_unattributed_sessions` writes `a` records, no `write_text`.
-  — Implemented in L-3 (v2.20): atomic tmp-then-rename. Note: uses file-rewrite pattern rather than amendment records; amendment approach remains a future option.
+  — Implemented: appends `a <hash> project=<slug> attr_method=backfill`
+  records under `locked_file`; original `s` lines remain unchanged.
 - [x] 3.2 `confirm_session_attributions` writes `a` records.
-  — Implemented in L-3 (v2.20): atomic tmp-then-rename. Note: uses file-rewrite pattern rather than amendment records; amendment approach remains a future option.
+  — Implemented: appends `a <hash> project=<slug> attr_method=manual`
+  records under `locked_file`; original `s` lines remain unchanged.
 - [x] 3.3 `backfill_window` writes `a` records.
-  — Implemented in L-3 (v2.20): atomic tmp-then-rename. Note: uses file-rewrite pattern rather than amendment records; amendment approach remains a future option.
+  — Implemented: appends `a <hash> project=<slug> attr_method=backfill`
+  records under `locked_file`; dry-run counts candidates without writing.
 - [x] 3.4 Confirm the legacy `_rewrite_lines_atomic` is unused outside
   user-driven destructive paths.
   — Confirmed: only called from `interactive_assign_unattributed()` (interactive triage). Comment added to `_rewrite_lines_atomic` in orchestration.py.
 - [x] 3.5 Audit: grep for `write_text` against log paths; document each
   remaining call.
-  — Audit complete. All `write_text` calls against log paths write to `.log.tmp` temp files then `replace()` (L-3 atomic pattern) — never directly to the live log. Documented in `assign_unattributed_sessions()` docstring. No unexpected write_text-to-live-log calls found.
+  — Audit complete for v2.17 mutators. Attribution correction paths no longer
+  rewrite the live session log; `interactive_assign_unattributed()` remains the
+  user-driven destructive triage path.
 
 ## 4. Lock all mutators
 
 - [x] 4.1 `append_session` uses `locked_file`.
   — `ai_log.py:append_session` and `write_unattributed_session` both use `locked_file`.
 - [x] 4.2 Timeclock writes (clock-in / clock-out) use `locked_file`.
-  — `cli.py start/stop` and `dashboard.py /api/start /api/stop` all use `locked_file(timeclock, "a")`.
+  — `start_timer()` and `stop_timer()` write `time.timeclock` under
+  `locked_file`; CLI and dashboard route through those shared functions.
 - [x] 4.3 `~/.halyard/active.timer` writes use `locked_file`.
-  — Active-timer state file uses atomic tmp-then-rename (already satisfies the intent; flock not needed for a replace-only write path).
+  — Active-timer state file uses the shared `write_active_timer()` atomic
+  tmp-then-rename helper while the timeclock lock is held.
 - [x] 4.4 Invoice counter increment in `halyard.toml` uses `locked_file`.
-  — `_write_invoice_counter()` in `invoicing.py` uses `locked_file(path, "r+")` with seek/truncate/write.
+  — `_allocate_invoice_number()` and `_write_invoice_counter()` use
+  `locked_file(path, "r+")`; the lock helper now protects same-process threads
+  as well as cooperating processes.
 
 ## 5. Shared timer functions
 
-- [ ] 5.1 Add `start_timer(project_dir, slug)` to orchestration.py.
-  — Review note 2026-05-08: this is not complete while CLI `start` and
-  dashboard `/api/start` still duplicate timer-write logic.
-- [ ] 5.2 Add `stop_timer(project_dir)` to orchestration.py.
-  — Review note 2026-05-08: this is not complete while CLI `stop` and
-  dashboard `/api/stop` still duplicate timer-write logic.
+- [x] 5.1 Add `start_timer(project_dir, slug)` to orchestration.py.
+  — Implemented in `halyard.orchestration`; raises `TimerAlreadyRunning`.
+- [x] 5.2 Add `stop_timer(project_dir)` to orchestration.py.
+  — Implemented in `halyard.orchestration`; returns `StopResult`.
 - [x] 5.3 `stop_timer` invokes `backfill_window`.
-  — Implemented in D-2 (v2.21): read_active_project() extracted to ai_log.py; all collectors import canonical function; dashboard write is atomic.
-- [ ] 5.4 CLI `start` and `stop` call the orchestration functions.
-  — Review note 2026-05-08: CLI `start` still writes `~/.halyard/active`
-  directly via `write_text`; it must use the shared atomic helper.
-- [ ] 5.5 Dashboard `do_POST` calls the orchestration functions, removes
+  — Implemented; attribution backfill failures are logged and surfaced.
+- [x] 5.4 CLI `start` and `stop` call the orchestration functions.
+  — Implemented: CLI no longer duplicates timer file mutation logic.
+- [x] 5.5 Dashboard `do_POST` calls the orchestration functions, removes
   duplicate logic.
-- [ ] 5.6 `unlink(missing_ok=True)` on active-timer file.
-- [ ] 5.7 Add shared `write_active_timer()` helper that writes to a unique
+  — Implemented for `/api/start` and `/api/stop`.
+- [x] 5.6 `unlink(missing_ok=True)` on active-timer file.
+  — Implemented in `stop_timer()` and stale-active cleanup paths.
+- [x] 5.7 Add shared `write_active_timer()` helper that writes to a unique
   temp path and atomically replaces `~/.halyard/active`; use it from both CLI
   and dashboard start paths.
+  — Implemented; dashboard and CLI both reach it through `start_timer()`.
 
 ## 6. Error visibility
 
-- [ ] 6.1 Add `_log_error(msg, exc)` helper that writes to
+- [x] 6.1 Add `_log_error(msg, exc)` helper that writes to
   `~/.halyard/halyard.log`.
+  — Implemented in `ai_log.py`.
 - [ ] 6.2 Replace `except Exception: pass` in cli.py:478, cli.py:1296,
   cli.py:2432, orchestration.py:345, orchestration.py:361,
   config_history.py:248, sync.py:69, and the gemini collector swallows.
+  — Core CLI/orchestration/config/sync paths are covered; collector parse
+  helpers still intentionally return `None` quietly and need a focused
+  policy pass before this can be closed.
 - [ ] 6.3 Each replacement prints a `[yellow]Warning:[/]` line referencing
   the log path.
-- [ ] 6.4 Test: malformed log line in backfill produces visible warning
+  — Core user-facing paths print warnings; collector parse helpers remain open.
+- [x] 6.4 Test: malformed log line in backfill produces visible warning
   and a log entry.
+  — `tests/test_log_integrity.py::test_backfill_error_logs_to_halyard_log_and_warns`
 
 ## 7. Concurrency tests
 
-- [ ] 7.1 100 concurrent `append_session` calls.
-- [ ] 7.2 50 concurrent `start_timer` (49 fail with TimerAlreadyRunning).
-- [ ] 7.3 CLI stop + dashboard stop simultaneously: exactly one `o` line.
-- [ ] 7.4 Concurrent invoice generation produces unique numbers.
-- [ ] 7.5 Concurrent `backfill_window` + `append_session`: append survives.
+- [x] 7.1 100 concurrent `append_session` calls.
+  — `tests/test_log_integrity.py::test_100_concurrent_appenders_produce_exactly_100_lines`
+- [x] 7.2 50 concurrent `start_timer` (49 fail with TimerAlreadyRunning).
+  — `tests/test_log_integrity.py::test_50_concurrent_start_timer_exactly_one_succeeds`
+- [x] 7.3 CLI stop + dashboard stop simultaneously: exactly one `o` line.
+  — Covered at orchestration level by
+  `tests/test_log_integrity.py::test_concurrent_stop_timer_produces_exactly_one_o_line`
+- [x] 7.4 Concurrent invoice generation produces unique numbers.
+  — `tests/test_log_integrity.py::test_concurrent_invoice_allocation_unique_numbers`
+- [x] 7.5 Concurrent `backfill_window` + `append_session`: append survives.
+  — `tests/test_log_integrity.py::test_concurrent_backfill_and_append_no_lost_sessions`
 
 ## 8. Documentation
 
