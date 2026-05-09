@@ -16,25 +16,31 @@ from pathlib import Path
 _DB_PATH = Path.home() / ".halyard" / "cache.db"
 
 # Schema version this code expects. Bump whenever a migration is added.
-_CURRENT_VERSION = 2
+_CURRENT_VERSION = 3
 
-# Initial schema for a fresh database (version 1 baseline).
+# Initial schema for a fresh database — always reflects _CURRENT_VERSION.
 _CREATE_SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS sessions (
-    id          TEXT PRIMARY KEY,
-    project     TEXT,
-    tool        TEXT NOT NULL,
-    model       TEXT NOT NULL,
-    started_at  TEXT NOT NULL,
-    ended_at    TEXT NOT NULL,
-    input_tok   INTEGER NOT NULL DEFAULT 0,
-    output_tok  INTEGER NOT NULL DEFAULT 0,
-    cache_read  INTEGER,
-    cache_write INTEGER,
-    cost_usd    REAL NOT NULL DEFAULT 0,
-    tool_calls  INTEGER,
-    tool_errors INTEGER,
-    source_file TEXT NOT NULL
+    id                  TEXT PRIMARY KEY,
+    project             TEXT,
+    tool                TEXT NOT NULL,
+    model               TEXT NOT NULL,
+    started_at          TEXT NOT NULL,
+    ended_at            TEXT NOT NULL,
+    input_tok           INTEGER NOT NULL DEFAULT 0,
+    output_tok          INTEGER NOT NULL DEFAULT 0,
+    cache_read          INTEGER,
+    cache_write         INTEGER,
+    cost_usd            REAL NOT NULL DEFAULT 0,
+    tool_calls          INTEGER,
+    tool_errors         INTEGER,
+    source_file         TEXT NOT NULL,
+    branch              TEXT,
+    commit_count        INTEGER,
+    code_removed        INTEGER,
+    pr_ref              TEXT,
+    pr_state            TEXT,
+    outcome_resolved_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS timeclock (
@@ -52,6 +58,19 @@ CREATE TABLE IF NOT EXISTS sync_log (
     files_read  INTEGER NOT NULL,
     rows_added  INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS outcomes (
+    session_id  TEXT PRIMARY KEY,
+    pr_ref      TEXT,
+    pr_state    TEXT,
+    resolved_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS pr_cache (
+    cache_key   TEXT PRIMARY KEY,
+    payload     TEXT,
+    fetched_at  TEXT
+);
 """
 
 # Each tuple is (from_version, sql_or_sentinel).
@@ -62,6 +81,31 @@ _MIGRATIONS: list[tuple[int, str]] = [
     # v1 → v2: session IDs changed from sha256(raw_line) to content-addressed hash.
     #           Existing rows have stale IDs; user must reset the cache.
     (1, "REQUIRES_RESET"),
+    # v2 → v3: v2.24 outcome metadata — new columns on sessions, outcomes + pr_cache tables.
+    (
+        2,
+        """
+ALTER TABLE sessions ADD COLUMN branch TEXT;
+ALTER TABLE sessions ADD COLUMN commit_count INTEGER;
+ALTER TABLE sessions ADD COLUMN code_removed INTEGER;
+ALTER TABLE sessions ADD COLUMN pr_ref TEXT;
+ALTER TABLE sessions ADD COLUMN pr_state TEXT;
+ALTER TABLE sessions ADD COLUMN outcome_resolved_at TEXT;
+
+CREATE TABLE IF NOT EXISTS outcomes (
+    session_id  TEXT PRIMARY KEY,
+    pr_ref      TEXT,
+    pr_state    TEXT,
+    resolved_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS pr_cache (
+    cache_key   TEXT PRIMARY KEY,
+    payload     TEXT,
+    fetched_at  TEXT
+);
+""",
+    ),
 ]
 
 
@@ -255,8 +299,10 @@ def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
             INSERT OR IGNORE INTO sessions
                 (id, project, tool, model, started_at, ended_at,
                  input_tok, output_tok, cache_read, cache_write,
-                 cost_usd, tool_calls, tool_errors, source_file)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 cost_usd, tool_calls, tool_errors, source_file,
+                 branch, commit_count, code_removed,
+                 pr_ref, pr_state, outcome_resolved_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 sid,
@@ -273,6 +319,12 @@ def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
                 session.tool_calls,
                 session.tool_errors,
                 source,
+                session.branch,
+                session.commit_count,
+                session.code_removed,
+                session.pr_ref,
+                session.pr_state,
+                session.outcome_resolved_at,
             ),
         )
         added += result.rowcount
