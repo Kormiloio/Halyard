@@ -119,6 +119,16 @@ layers must read from this local source of truth; they do not replace it.
 2. **OSS launch:** `pipx install halyard && halyard init` must work end-to-end
    in a clean venv. Gate: zero-friction first-use experience confirmed. Then
    HN / Reddit / Lobsters post.
+   Pre-flight checklist (in order):
+   - [ ] Make GitHub repo public (currently private).
+   - [ ] Configure PyPI trusted publisher: PyPI project → Settings →
+     Trusted Publishers → Add (Owner: Kormiloio, Repo: Halyard,
+     Workflow: publish.yml, Environment: pypi).
+   - [ ] Create "pypi" environment in GitHub repo Settings → Environments.
+   - [ ] Push `v0.2.0` tag (already pushed; re-push or cut `v0.2.1` after
+     going public to trigger the publish workflow).
+   - [ ] Confirm `pipx install halyard` installs 0.2.0 from PyPI.
+   - [ ] Write HN / Reddit / Lobsters post.
 3. **v2.24 — Outcome metadata uplift:** branch as a first-class `AiSession`
    field (not a tag), commit count at session close, code delta for
    Claude/Cursor/Codex collectors, `halyard outcome sync` command for PR

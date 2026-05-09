@@ -1,4 +1,10 @@
 name: Publish to PyPI
+# SETUP REQUIRED (one-time, after making the repo public):
+#   1. Make the GitHub repo public.
+#   2. On PyPI: project Settings → Trusted Publishers → Add publisher.
+#      Owner: Kormiloio  |  Repo: Halyard  |  Workflow: publish.yml  |  Environment: pypi
+#   3. On GitHub: repo Settings → Environments → create "pypi" environment.
+#   After that, pushing a v*.*.* tag publishes automatically — no API token needed.
 
 on:
   push:
