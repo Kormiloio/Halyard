@@ -129,9 +129,9 @@ def test_assign_creature_turtle_long_voyage() -> None:
 
 
 def test_assign_creature_dolphin_clean_run() -> None:
-    sessions = [_session(project="proj") for _ in range(3)]
+    # >15 sessions, all attributed → dolphin
+    sessions = [_session(project="proj") for _ in range(16)]
     all_counts = {"other": 999}
-    # Not 90+ days, so turtle won't fire. All sessions attributed → dolphin
     emoji, trait = assign_creature("myproj", sessions, all_counts)
     assert emoji == "🐬"
     assert trait == "Clean run"
@@ -150,14 +150,13 @@ def test_assign_creature_octopus_multi_tool() -> None:
     assert trait == "Multi-tool"
 
 
-def test_assign_creature_clownfish_unreachable_dolphin_fires_first() -> None:
-    # Rule 5 (Clownfish: ≤15, fully attributed) is shadowed by Rule 3 (Dolphin: all attributed).
-    # When all sessions are attributed, Dolphin fires regardless of count.
+def test_assign_creature_clownfish_small_complete() -> None:
+    # ≤15 sessions, all attributed → clownfish (dolphin requires >15)
     sessions = [_session() for _ in range(5)]
     all_counts = {"other": 999}
     emoji, trait = assign_creature("myproj", sessions, all_counts)
-    assert emoji == "🐬"
-    assert trait == "Clean run"
+    assert emoji == "🐠"
+    assert trait == "Small but complete"
 
 
 def test_assign_creature_shark_intense_sprint() -> None:

@@ -178,15 +178,15 @@ def assign_creature(
         if span_days >= 90:
             return "🐢", "Long voyage"
 
-    # 3. Dolphin — zero unattributed sessions
-    if sessions and all(s.project for s in sessions):
+    # 3. Dolphin — large clean run (>15 sessions, all attributed)
+    if total > 15 and sessions and all(s.project for s in sessions):
         return "🐬", "Clean run"
 
     # 4. Octopus — 3+ distinct tools
     if len({s.tool for s in sessions}) >= 3:
         return "🦑", "Multi-tool"
 
-    # 5. Clownfish — ≤15 sessions, fully attributed
+    # 5. Clownfish — small but complete (≤15 sessions, all attributed)
     if total <= 15 and sessions and all(s.project for s in sessions):
         return "🐠", "Small but complete"
 
