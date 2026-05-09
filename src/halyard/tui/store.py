@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
-from halyard.ai_log import AiSession
+from halyard.ai_log import AiSession, parse_sessions
 
 TimeWindow = Literal["today", "week", "month", "all"]
 
@@ -60,6 +60,9 @@ class SessionStore:
             handle.seek(self._offset)
             lines = handle.read().splitlines()
             self._offset = handle.tell()
+        if any(line.startswith("a ") for line in lines):
+            self.load()
+            return []
         new_sessions = [_parse_session_line(line) for line in lines]
         parsed = [session for session in new_sessions if session is not None]
         if parsed:
@@ -107,9 +110,7 @@ class SessionStore:
 def _read_sessions_file(log_path: Path) -> list[AiSession]:
     if not log_path.exists():
         return []
-    sessions = [_parse_session_line(line.strip()) for line in log_path.read_text().splitlines()]
-    parsed = [session for session in sessions if session is not None]
-    return sorted(parsed, key=lambda s: s.start, reverse=True)
+    return sorted(parse_sessions(log_path.parent), key=lambda s: s.start, reverse=True)
 
 
 def _parse_session_line(line: str) -> AiSession | None:

@@ -47,6 +47,8 @@ def test_render_dashboard_shows_cockpit_and_session(tmp_path: Path) -> None:
 
     assert "Halyard Glass Cockpit" in html
     assert "Recent AI Sessions" in html
+    assert "Usage Analytics" in html
+    assert "Favorite model" in html
     assert "acme:auth" in html
     assert "claude-sonnet-4-6" in html
 

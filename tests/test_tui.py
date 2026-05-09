@@ -130,6 +130,25 @@ def test_session_feed_shows_sessions(tmp_path: Path) -> None:
     asyncio.run(run())
 
 
+def test_usage_pane_shows_summary(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+    from halyard.tui.widgets.usage_pane import UsagePane
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")
+        store.sessions = [_session()]
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            pane = pilot.app.query_one(UsagePane)
+            assert "Usage Overview" in pane.last_rendered_text
+            assert "claude-sonnet-4-6" in pane.last_rendered_text
+
+    asyncio.run(run())
+
+
 def test_time_window_key_changes_window(tmp_path: Path) -> None:
     pytest.importorskip("textual")
     from halyard.tui.app import HalyardApp

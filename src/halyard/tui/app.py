@@ -18,6 +18,7 @@ from halyard.tui.widgets.budget_pane import BudgetPane
 from halyard.tui.widgets.model_pane import ModelPane
 from halyard.tui.widgets.project_pane import ProjectPane
 from halyard.tui.widgets.session_feed import SessionFeed
+from halyard.tui.widgets.usage_pane import UsagePane
 
 if TYPE_CHECKING:
     from halyard.tui.widgets.branch_modal import BranchModal
@@ -74,6 +75,7 @@ class HalyardApp(App[None]):
                 yield SessionFeed(id="session-feed")
                 yield ProjectPane(id="project-pane")
             with Vertical(id="side-pane"):
+                yield UsagePane(id="usage-pane")
                 yield BudgetPane(id="budget-pane")
                 yield ModelPane(id="model-pane")
         yield Footer()
@@ -171,6 +173,7 @@ class HalyardApp(App[None]):
             detail.render_project(self.detail_project, project_sessions)
             pane_sessions = project_sessions
         self.query_one(ModelPane).render_sessions(pane_sessions)
+        self.query_one(UsagePane).render_sessions(pane_sessions)
         self.query_one(BudgetPane).render_budgets()
 
     def active_sessions(self) -> list[AiSession]:

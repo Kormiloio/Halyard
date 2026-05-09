@@ -10,13 +10,13 @@ Implementation checklist for v2.23 - Usage Analytics.
 
 ## 2. Shared aggregation service
 
-- [ ] 2.1 Add `src/halyard/usage.py` view models.
-- [ ] 2.2 Implement all/30d/7d range filtering.
-- [ ] 2.3 Implement daily usage buckets.
-- [ ] 2.4 Implement model and tool buckets.
-- [ ] 2.5 Implement active day, current streak, longest streak, and peak hour.
-- [ ] 2.6 Implement favorite model selection.
-- [ ] 2.7 Preserve missing-token and unavailable-data metadata.
+- [x] 2.1 Add `src/halyard/usage.py` view models.
+- [x] 2.2 Implement all/30d/7d range filtering.
+- [x] 2.3 Implement daily usage buckets.
+- [x] 2.4 Implement model and tool buckets.
+- [x] 2.5 Implement active day, current streak, longest streak, and peak hour.
+- [x] 2.6 Implement favorite model selection.
+- [x] 2.7 Preserve missing-token and unavailable-data metadata.
 
 ## 3. CLI
 
@@ -27,13 +27,13 @@ Implementation checklist for v2.23 - Usage Analytics.
 
 ## 4. Dashboard
 
-- [ ] 4.1 Add Usage view entry point from the local dashboard.
+- [x] 4.1 Add Usage view entry point from the local dashboard.
 - [ ] 4.2 Add Overview and Models tabs.
 - [ ] 4.3 Add range segmented control.
-- [ ] 4.4 Add summary metric cards.
-- [ ] 4.5 Add activity heatmap.
+- [x] 4.4 Add summary metric cards.
+- [x] 4.5 Add activity heatmap.
 - [ ] 4.6 Add daily model usage chart.
-- [ ] 4.7 Add model and tool breakdown rows.
+- [x] 4.7 Add model and tool breakdown rows.
 - [ ] 4.8 Add empty and missing-data states.
 
 ## 5. Visual quality
@@ -47,18 +47,17 @@ Implementation checklist for v2.23 - Usage Analytics.
 ## 6. Tests
 
 - [ ] 6.1 Test empty session data.
-- [ ] 6.2 Test range boundaries with fixed `now`.
-- [ ] 6.3 Test active days and streaks.
+- [x] 6.2 Test range boundaries with fixed `now`.
+- [x] 6.3 Test active days and streaks.
 - [ ] 6.4 Test peak hour tie-breaking.
 - [ ] 6.5 Test favorite model fallback behavior.
 - [ ] 6.6 Test model/tool share calculations.
-- [ ] 6.7 Test `tokens_available=false` handling.
+- [x] 6.7 Test `tokens_available=false` handling.
 - [ ] 6.8 Test CLI JSON output.
-- [ ] 6.9 Test dashboard Usage view renders core sections.
+- [x] 6.9 Test dashboard Usage view renders core sections.
 
 ## 7. Documentation
 
 - [ ] 7.1 Add README mention once implemented.
 - [ ] 7.2 Add demo screenshot or GIF once the dashboard view exists.
 - [ ] 7.3 Add troubleshooting note for missing token/cost data.
-

@@ -14,7 +14,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from halyard.ai_log import AiSession
+from halyard.ai_log import AiSession, parse_sessions
 from halyard.ai_plans import read_ai_plans
 from halyard.budget import BudgetStatus, budget_status
 from halyard.ledger import LedgerSummary, build_ledger
@@ -27,6 +27,7 @@ from halyard.reports import (
     format_minutes,
     parse_timeclock,
 )
+from halyard.usage import UsageAnalytics, build_usage_analytics, compact_number
 
 DASHBOARD_PORT = 7432
 
@@ -203,6 +204,7 @@ def _render_state(state: DashboardState) -> str:
     human_time = state.human_time
     latest = state.latest_session
     health_level = _overall_health(state)
+    usage = build_usage_analytics(parse_sessions(state.project_dir), now=state.generated_at)
 
     # Budget data
     budgets = budget_status()
@@ -308,6 +310,17 @@ def _render_state(state: DashboardState) -> str:
     </section>
 
     <section class="grid">
+      <article class="panel span-12">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Usage Analytics</p>
+            <h2>Overview</h2>
+          </div>
+          <div class="pill-group"><span class="pill">30d</span><span class="pill">{_e(usage.summary.active_days)} active days</span></div>
+        </div>
+        {_usage_panel(usage)}
+      </article>
+
       <article class="panel span-7">
         <div class="panel-head">
           <div>
@@ -510,6 +523,117 @@ def _health_badge(session: AiSession) -> str:
         removed = session.code_removed or 0
         parts.append(f"<span class='dim'>+{added}/-{removed}</span>")
     return " ".join(parts) if parts else "<span class='dim'>—</span>"
+
+
+def _usage_panel(usage: UsageAnalytics) -> str:
+    summary = usage.summary
+    peak = "—" if summary.peak_hour is None else _hour_label(summary.peak_hour)
+    favorite = summary.favorite_model or "—"
+    warnings = []
+    if summary.unattributed_sessions:
+        warnings.append(f"{summary.unattributed_sessions} unattributed")
+    if summary.token_data_missing_sessions:
+        warnings.append(f"{summary.token_data_missing_sessions} missing tokens")
+    warning_html = (
+        "<div class='usage-warnings'>"
+        + "".join(f"<span class='pill pill-warning'>{_e(w)}</span>" for w in warnings)
+        + "</div>"
+        if warnings
+        else ""
+    )
+
+    stats = [
+        ("Sessions", f"{summary.sessions:,}", "captured"),
+        ("Tokens", compact_number(summary.total_tokens), "in + out + cache"),
+        (
+            "Current streak",
+            f"{summary.current_streak_days}d",
+            f"longest {summary.longest_streak_days}d",
+        ),
+        ("Peak hour", peak, "session starts"),
+        ("Favorite model", favorite, "by token volume"),
+        ("Cost", f"${summary.total_cost_usd:.2f}", "captured"),
+    ]
+    stat_html = "".join(
+        "<div class='usage-stat'>"
+        f"<span>{_e(label)}</span><strong>{_e(value)}</strong><small>{_e(detail)}</small>"
+        "</div>"
+        for label, value, detail in stats
+    )
+    return (
+        "<div class='usage-grid'>"
+        f"<div class='usage-stats'>{stat_html}</div>"
+        f"<div class='usage-activity'><strong>Activity</strong>{_activity_heatmap(usage)}</div>"
+        f"<div class='usage-models'><strong>Models</strong>{_usage_model_rows(usage)}</div>"
+        f"<div class='usage-tools'><strong>Tools</strong>{_usage_tool_rows(usage)}</div>"
+        f"{warning_html}"
+        "</div>"
+    )
+
+
+def _activity_heatmap(usage: UsageAnalytics) -> str:
+    days = usage.daily[-30:]
+    max_tokens = max((day.tokens for day in days), default=0)
+    cells = []
+    for day in days:
+        level = _activity_level(day.tokens, day.sessions, max_tokens)
+        title = (
+            f"{day.day.isoformat()}: {day.sessions} sessions, "
+            f"{day.tokens:,} tokens, ${day.cost_usd:.4f}"
+        )
+        missing = " usage-cell-missing" if day.has_missing_token_data and day.tokens == 0 else ""
+        cells.append(
+            f"<span class='usage-cell usage-l{level}{missing}' title='{_e(title)}' "
+            f"aria-label='{_e(title)}'></span>"
+        )
+    return "<div class='usage-heatmap'>" + "".join(cells) + "</div>"
+
+
+def _activity_level(tokens: int, sessions: int, max_tokens: int) -> int:
+    if tokens <= 0 and sessions <= 0:
+        return 0
+    if max_tokens <= 0:
+        return 1
+    ratio = tokens / max_tokens
+    if ratio >= 0.75:
+        return 4
+    if ratio >= 0.4:
+        return 3
+    if ratio >= 0.15:
+        return 2
+    return 1
+
+
+def _usage_model_rows(usage: UsageAnalytics) -> str:
+    if not usage.by_model:
+        return "<p class='mini-empty'>No model usage.</p>"
+    rows = []
+    for bucket in usage.by_model[:5]:
+        pct = int(bucket.token_share * 100)
+        rows.append(
+            "<div class='usage-row'>"
+            f"<span>{_e(bucket.model)}</span>"
+            f"<div class='bar-wrap'><div class='bar' style='width:{pct}%'></div></div>"
+            f"<small>{_e(compact_number(bucket.tokens))} · {pct}%</small>"
+            "</div>"
+        )
+    return "<div class='usage-list'>" + "".join(rows) + "</div>"
+
+
+def _usage_tool_rows(usage: UsageAnalytics) -> str:
+    if not usage.by_tool:
+        return "<p class='mini-empty'>No tool usage.</p>"
+    rows = []
+    for bucket in usage.by_tool[:4]:
+        pct = int(bucket.session_share * 100)
+        rows.append(
+            "<div class='usage-row'>"
+            f"<span>{_e(bucket.tool)}</span>"
+            f"<div class='bar-wrap'><div class='bar bar-ok' style='width:{pct}%'></div></div>"
+            f"<small>{bucket.sessions} · {pct}%</small>"
+            "</div>"
+        )
+    return "<div class='usage-list'>" + "".join(rows) + "</div>"
 
 
 def _model_table(buckets: Iterable[CostBucket]) -> str:
@@ -717,6 +841,12 @@ def _tool_icon(tool: str) -> str:
     return "A"
 
 
+def _hour_label(hour: int) -> str:
+    suffix = "AM" if hour < 12 else "PM"
+    hour_12 = hour % 12 or 12
+    return f"{hour_12} {suffix}"
+
+
 def _duration_str(delta: timedelta) -> str:
     seconds = max(0, int(delta.total_seconds()))
     minutes, secs = divmod(seconds, 60)
@@ -868,6 +998,28 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .bar-cell .bar-wrap { flex: 1; min-width: 40px; }
 .bar-cell span { font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 30px; text-align: right; }
 
+/* Usage analytics */
+.usage-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; align-items: start; }
+.usage-stats { grid-column: span 3; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.usage-stat { min-height: 76px; padding: 10px 12px; border: 1px solid rgba(37,64,74,.7); border-radius: 8px; background: var(--panel-2); }
+.usage-stat span, .usage-stat small, .usage-tools small, .usage-models small, .mini-empty { color: var(--muted); }
+.usage-stat span, .usage-stat strong, .usage-stat small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usage-stat strong { margin: 7px 0 5px; font-size: 22px; line-height: 1; color: var(--text); }
+.usage-activity, .usage-models, .usage-tools { min-height: 120px; }
+.usage-activity > strong, .usage-models > strong, .usage-tools > strong { display: block; margin-bottom: 10px; font-size: 13px; }
+.usage-heatmap { display: grid; grid-template-columns: repeat(15, 16px); gap: 6px; align-content: start; }
+.usage-cell { width: 16px; height: 16px; border-radius: 4px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.04); }
+.usage-l1 { background: rgba(69,214,208,.18); }
+.usage-l2 { background: rgba(69,214,208,.34); }
+.usage-l3 { background: rgba(112,225,143,.44); }
+.usage-l4 { background: rgba(112,225,143,.72); }
+.usage-cell-missing { background: rgba(243,191,91,.25); }
+.usage-list { display: grid; gap: 9px; }
+.usage-row { display: grid; grid-template-columns: minmax(110px, 1fr) 1.2fr 78px; gap: 8px; align-items: center; font-size: 12px; }
+.usage-row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.usage-row small { text-align: right; white-space: nowrap; }
+.usage-warnings { grid-column: span 3; display: flex; gap: 8px; flex-wrap: wrap; }
+
 /* Budget panel */
 .budget-list { display: grid; gap: 8px; }
 .budget-item { padding: 10px 12px; border: 1px solid rgba(37,64,74,.7); border-radius: 8px; background: var(--panel-2); }
@@ -918,5 +1070,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   body { min-width: 760px; }
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .span-7, .span-6, .span-5, .span-4, .span-3 { grid-column: span 12; }
+  .usage-grid { grid-template-columns: 1fr; }
+  .usage-stats, .usage-warnings { grid-column: span 1; }
+  .usage-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 """
