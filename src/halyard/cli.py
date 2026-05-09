@@ -92,6 +92,7 @@ def _auto_install_detected_hooks() -> None:
     """Detect installed AI tools on PATH and auto-install their Halyard hooks."""
     found: list[str] = []
     not_found: list[str] = []
+    failed: list[str] = []
 
     for binary, label, installer in [
         ("claude", "Claude Code", lambda: _do_install_hook_claude(global_=True)),
@@ -103,15 +104,19 @@ def _auto_install_detected_hooks() -> None:
                 installer()  # type: ignore[no-untyped-call]
                 found.append(label)
             except OSError:
-                not_found.append(f"{label} (install failed — run halyard install-hook-{binary})")
+                failed.append(f"{label} (run halyard install-hook-{binary})")
         else:
             not_found.append(label)
 
     if found:
         console.print(f"\n[bold green]Auto-installed hooks:[/] {', '.join(found)}")
+    if failed:
+        console.print(
+            f"[yellow]Hook install failed:[/] {', '.join(failed)}"
+        )
     if not_found:
         console.print(
-            f"[dim]Not found on PATH:[/] {', '.join(not_found)} "
+            f"[dim]Not on PATH:[/] {', '.join(not_found)} "
             f"(install later with [bold]halyard install-hook-<tool>[/])"
         )
 

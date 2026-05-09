@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -38,5 +38,4 @@ jobs:
         run: pytest --cov=halyard --cov-report=term-missing
 
       - name: Audit dependencies for known CVEs
-        # L-4: catch newly disclosed vulnerabilities in pinned dependencies
         run: pip-audit --requirement <(pip freeze) --skip-editable || true

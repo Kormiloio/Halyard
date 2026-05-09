@@ -1,6 +1,6 @@
 [project]
 name = "halyard"
-version = "0.1.0"
+version = "0.2.0"
 description = "The open AI work ledger — prove what you did, know what you're spending."
 readme = "README.md"
 license = { text = "MIT" }
