@@ -97,8 +97,6 @@ def test_rate_history_no_clients_toml(tmp_path: Path) -> None:
 
 def test_rate_history_no_git_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Simulate git not being available by making subprocess.run raise FileNotFoundError
-    import halyard.config_history as ch_module
-
     original_run = subprocess.run
 
     def _no_git(cmd: list[str], **kwargs: object) -> object:

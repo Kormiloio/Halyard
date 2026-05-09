@@ -5,8 +5,6 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-import pytest
-
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, backfill_window, parse_sessions
 
 

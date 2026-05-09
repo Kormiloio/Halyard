@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import re
 import subprocess
 from dataclasses import dataclass
@@ -206,10 +207,8 @@ def _parse_invoice_meta(
             elif line.startswith("invoice_number:"):
                 invoice_number = line.split(":", 1)[1].strip()
             elif line.startswith("template_version:"):
-                try:
+                with contextlib.suppress(ValueError):
                     template_version = int(line.split(":", 1)[1].strip())
-                except ValueError:
-                    pass
 
     if not client_slug or not invoice_number:
         return None

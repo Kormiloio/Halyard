@@ -2076,7 +2076,9 @@ def projects_list() -> None:
     stale = stale_paths()
 
     if not valid and not stale:
-        console.print("[yellow]No projects registered.[/] Run [bold]halyard init[/] in a project directory.")
+        console.print(
+            "[yellow]No projects registered.[/] Run [bold]halyard init[/] in a project directory."
+        )
         return
 
     console.print(f"[bold]Halyard project registry[/]  [dim]{REGISTRY_PATH}[/]\n")

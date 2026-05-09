@@ -15,7 +15,7 @@ runner = CliRunner()
 
 @pytest.fixture(autouse=True)
 def _isolate_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Redirect the project registry to tmp_path so tests don't read the real ~/.halyard/projects."""
+    """Redirect registry to tmp_path so tests don't read the real ~/.halyard/projects."""
     monkeypatch.setattr("halyard.registry.REGISTRY_PATH", tmp_path / ".halyard" / "projects")
 
 _SESSION_LINE_A = (

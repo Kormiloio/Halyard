@@ -120,7 +120,7 @@ def get_db() -> sqlite3.Connection:
             if sql == "REQUIRES_RESET":
                 conn.close()
                 raise SystemExit(
-                    f"Cache schema changed in v2.18 (session IDs are now content-addressed). "
+                    "Cache schema changed in v2.18 (session IDs are now content-addressed). "
                     "Run `halyard db reset` then `halyard db sync` to rebuild the cache. "
                     "No plain-text data is lost."
                 )
@@ -165,7 +165,8 @@ def sync_all() -> SyncResult:
         _Console().print(
             "[yellow]Warning:[/] "
             + str(len(stale))
-            + " registered project(s) no longer found. Run [bold]halyard projects list[/] to review."
+            + " registered project(s) no longer found."
+            " Run [bold]halyard projects list[/] to review."
         )
 
     conn = get_db()
