@@ -1,36 +1,39 @@
 # PRD: Halyard
 
 **Status:** Current public product PRD
-**Last meaningful update:** May 8, 2026
+**Last meaningful update:** May 9, 2026
 **Companion:** [`current-direction.md`](current-direction.md)
 
 ---
 
-## Status — May 8, 2026
+## Status — May 9, 2026
 
-Halyard has reached a working alpha:
+Halyard has reached a working alpha with a full security hardening track complete
+and is preparing for an OSS community launch (HN / Reddit / Lobsters).
 
-- **Time tracking:** `halyard start/stop` and `halyard invoice` are
-  functional for human time.
-- **AI capture:** Collectors for **Claude Code**, **Cursor**,
-  **Gemini CLI**, and **Codex App** are implemented with ambient project
-  attribution.
+**What is shipped:**
+- **Time tracking:** `halyard start/stop` and `halyard invoice` are functional.
+- **AI capture:** Collectors for **Claude Code**, **Cursor**, **Gemini CLI**,
+  and **Codex App** with ambient project attribution and file locking.
 - **Local visibility:** `halyard report`, `halyard dashboard`, `halyard tui`,
-  and the REPL provide local visibility into human time, AI spend, model mix,
-  and attribution state.
-- **Data integrity:** Canonical serialization, malformed record quarantine,
-  recoverable unattributed sessions, attribution provenance, and security
-  hardening are active or in the current hardening track.
+  and the REPL.
+- **Data integrity:** Append-only correction records, file locking, attribution
+  provenance, and 13 AppSec findings remediated.
 - **Ledger:** `halyard report --ledger` allocates API, seat, and credit plan
   costs by project with trust labels.
+- **Test suite:** 52 test files, green on HEAD, mypy strict + ruff clean.
 
-Current milestones:
+**Current milestones (in order):**
 
-1. Finish security/distribution hardening.
-2. Finish log integrity and shared timer orchestration.
-3. Harden cache, pricing, and invoice audit behavior.
-4. Ship the attestable AI work appendix as the next proof-of-work artifact.
-5. Defer outcome graph and org dashboards until design partners ask for them.
+1. Finish cache, pricing, and invoice audit hardening (v2.18).
+2. OSS community launch — get real users, validate the format.
+3. Outcome-aware metadata uplift: branch as first-class field, commit count,
+   code delta across all collectors, PR linkage (v2.24 — moves score 2/10 → 6/10).
+4. Attestable AI work appendix: signed, verifiable proof-of-work artifact (v2.19).
+5. Outcome graph only when design partners ask for it (v3.0, gated).
+
+**Strategic sequence:** users and trust before paid tiers. No paid features are
+discussed in any OSS-facing surface until the community has validated the format.
 
 ---
 
@@ -85,20 +88,32 @@ The instruments don't exist. Halyard builds them.
 
 ## Strategic Thesis
 
+**OSS-first. Trust before paid tiers.**
+
+The entry point is an individual developer who installs Halyard because they
+want it — not because a manager asked them to. That install happens because
+the developer trusts that Halyard is open, local, and honest. Trust comes
+from the community (HN, Reddit, Lobsters) validating the concept before any
+commercial motion starts.
+
+The sequence is: trust → users → community → then paid. Any attempt to flip
+that order kills bottoms-up adoption. Paid tiers are real and will exist, but
+they must never appear in OSS-facing surfaces — README, CLI help, or any
+community post — until the community has validated the format.
+
 **The trusted local ledger is the moat.**
 
 `ai-sessions.log` and the collectors that write to it are open source (MIT).
-Enterprise buyers can audit exactly what the agent captures. The analytics and
-cloud layers built on top are where the business model lives.
+The analytics and cloud layers built on top are where the business model lives,
+but only after the local product has earned adoption.
 
-The protocol story should be earned by adoption. Halyard can publish stable
-formats, fixtures, and examples, but a public `ai-sessions.log` spec becomes
-strategic only after at least one external emitter exists.
+The protocol story should be earned by adoption. A public `ai-sessions.log`
+spec becomes strategic only after at least one external emitter exists. Specs
+without adoption are vanity docs.
 
-The plaintext files are the durable asset. The CLI, dashboard, and cloud sync
-are views over that asset. A future in which ten tools write compatible
-`ai-sessions.log` entries — and Halyard is the analytics layer — is a better
-outcome than a future in which Halyard is the only tool that can capture.
+The plaintext files are the durable asset. A future in which ten tools write
+compatible `ai-sessions.log` entries — and Halyard is the analytics layer — is
+a better outcome than a future in which Halyard is the only tool that can capture.
 
 ---
 
@@ -130,9 +145,12 @@ Halyard ships in layers, each proving the next:
 | v1 | AI Intelligence | What AI did I use and what did it cost? | Shipped |
 | v1.5 | Multi-Tool Collectors | Capture AI work across Claude, Cursor, Gemini, Codex | Shipped |
 | v2 | AI Work Ledger + Dashboard | What did AI-assisted work cost per project? | Shipped |
-| v2.16-v2.22 | Hardening Track | Can the local ledger survive real use and review? | Active |
-| v2.19 | Attestable Appendix | Can I prove AI-assisted work to someone else safely? | Next |
-| v3.0 | Outcome Graph | Did AI-assisted work connect to outcomes? | Gated |
+| v2.16-v2.23 | Hardening Track | Can the local ledger survive real use and review? | Shipped |
+| v2.18 | Cache + Audit Hardening | Is the local cache stable enough to rely on? | Active |
+| OSS Launch | Community Release | Do real users trust and use the format? | Next |
+| v2.24 | Outcome Metadata | Does each session carry branch, commits, code delta, PR? | After launch |
+| v2.19 | Attestable Appendix | Can I prove AI-assisted work to someone else safely? | Gated on v2.24 |
+| v3.0 | Outcome Graph | Did AI-assisted work connect to outcomes? | Design-partner gated |
 | v3+ | Org Intelligence | What is the org getting from AI investment? | Deferred |
 
 Each layer depends on the previous. The local ledger must be trustworthy before
@@ -279,29 +297,36 @@ These apply to every layer of the product:
 ## Open Questions and Next Bets
 
 These are the open questions as of May 2026 — not committed roadmap, but the
-decisions that shape the current hardening and proof-of-work wedge:
+decisions that shape the current work.
 
-**Attestable appendix.** The next network-effect feature is a signed,
-verifiable AI work appendix. It should let a recipient verify that an invoice
-appendix was not modified, while preserving the privacy contract: no prompts,
-no code, no file contents.
+**OSS community launch.** The gate is `pipx install halyard && halyard init`
+working end-to-end with zero friction in a clean venv. Once that passes smoke
+test, the HN / Reddit / Lobsters post goes out. The goal is not stars — it is
+comments from people who installed it and it worked.
 
-**Pricing table trust.** Dynamic pricing is useful, but it cannot silently
-overwrite a trusted local table. The current question is how to make
-`halyard update-pricing` fail closed on suspicious changes while keeping first
-setup simple.
+**Outcome-aware metadata (v2.24).** The current session model scores 2/10 on
+outcome awareness: branch is stored as a tag (not a first-class field), code
+delta is Gemini-only, and there is no commit count or PR linkage. Moving to
+6/10 requires: branch as a first-class field, commit count at session close,
+code delta across Claude/Cursor/Codex collectors, and a `halyard outcome sync`
+command that resolves PR linkage via `gh`. Spec in
+`openspec/changes/v2.24-outcome-metadata/`. This is the work to do
+immediately after the OSS launch.
 
-**Append-only correction records.** Attribution cleanup currently exists, but
-the durable trust story improves when corrections become explicit amendment
-records instead of in-place rewrites.
+**Attestable appendix (v2.19).** The next network-effect feature is a signed,
+verifiable AI work appendix — a recipient verifies without seeing prompts or
+code. Gated on v2.24 landing so the appendix can include commit and PR signals.
+
+**Pricing table trust.** `halyard update-pricing` should fail closed on
+suspicious changes. Stays open until v2.18 delivers the schema migration
+framework.
 
 **Design-partner pull.** Outcome graph, duplicate-effort detection, org
-dashboards, and redacted sync are not gone. They are gated until design
-partners ask for them and the local proof artifact has been tested in the
-field.
+dashboards, and redacted sync are gated until at least one design partner asks
+for them and the OSS install base has validated the format.
 
-**External emitters.** A public `ai-sessions.log` spec should follow at least
-one external tool emitting the format. Specs without adoption are not enough.
+**External emitters.** The `ai-sessions.log` spec is published only after at
+least one external tool emits the format. Specs without adoption are not enough.
 
 ---
 

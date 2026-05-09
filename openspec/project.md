@@ -6,7 +6,7 @@ conventions so each change proposal doesn't have to re-explain them.
 ## Mission
 
 Halyard is the open AI work ledger. It captures where AI-assisted work happens
-- time, tokens, models, cost, project attribution, and trust metadata - and
+— time, tokens, models, cost, project attribution, and trust metadata — and
 turns that data into proof-of-work artifacts for individuals and AI Work
 Intelligence for teams.
 
@@ -20,6 +20,13 @@ additive and gated on design-partner pull plus security readiness.
 
 The individual experience is the entry point. The enterprise layer is
 optional, additive, and built on the same open data format.
+
+**Strategic posture (May 2026):** OSS-first, trust-first. The product is
+launching to developer communities (HN, Reddit, Lobsters) before any
+commercial motion. Users and community trust come before paid tiers. No
+proposal should introduce paid-tier language, upsell surfaces, or
+enterprise-only gates into any OSS-facing surface (CLI help, README, demo)
+until the community has validated the format.
 
 ## Non-negotiables
 
@@ -82,25 +89,35 @@ layers must read from this local source of truth; they do not replace it.
 
 ## Active focus (May 2026)
 
-- **Security and distribution hardening:** dashboard write safety, packaged
-  templates, dependency audit, launch-readiness checks.
-- **Log integrity:** locking, correction records, shared timer orchestration,
-  and active-file race cleanup.
-- **Cache and audit hardening:** SQLite read-model reliability, pricing table
-  integrity, invoice audit schema, and config-history robustness.
-- **Attestable AI work appendix:** signed, verifiable, client-safe proof of
-  AI-assisted work. This is the current network-effect feature.
-- **Design-partner validation:** outcome graph and org rollups are gated until
-  real users ask for them.
+**Current sequence — do not reorder without explicit justification:**
+
+1. **v2.18 — Cache and audit hardening:** project registry, SQLite schema
+   migrations, content-addressed session IDs, invoice front-matter rate fields,
+   test backfill for v2.11–v2.15.
+2. **OSS launch:** `pipx install halyard && halyard init` must work end-to-end
+   in a clean venv. Gate: zero-friction first-use experience confirmed. Then
+   HN / Reddit / Lobsters post.
+3. **v2.24 — Outcome metadata uplift:** branch as a first-class `AiSession`
+   field (not a tag), commit count at session close, code delta for
+   Claude/Cursor/Codex collectors, `halyard outcome sync` command for PR
+   linkage. Moves outcome-awareness score from 2/10 to 6/10. Spec in
+   `openspec/changes/v2.24-outcome-metadata/`.
+4. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+   proof of AI-assisted work. Gated on v2.24 so the appendix can include
+   commit and PR evidence.
 
 ## Deferred or gated
 
+- **v3.0 outcome graph** — connecting sessions to commits, PRs, tests, and
+  deliverables — waits until at least one design partner explicitly asks for it.
+  v2.24 is the incremental step; v3.0 is the full graph. Do not conflate them.
 - Org admin dashboards, SSO/RBAC, and hosted enterprise reporting wait until
   security posture and design-partner pull justify them.
-- Outcome graph work waits until at least one design partner asks to connect
-  AI sessions to commits, PRs, tests, and delivered outcomes.
-- Calendar scheduling and new collectors beyond the current core set are not
-  current wedge work.
+- New collectors (Copilot, Windsurf) wait until v2.18 hardens the foundation.
+- Calendar scheduling is strategic candy; defer.
+- The public `ai-sessions.log` spec is published only after at least one
+  external tool emits the format. Writing the spec before adoption exists is
+  vanity work.
 
 ## Stack defaults
 

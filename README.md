@@ -6,9 +6,10 @@
 and teams who need to know what they are spending. Time, tokens, models, and
 cost - captured where the work happens, owned by you, readable by anyone.
 
-**Status:** alpha. The local ledger, multi-tool capture, reports, invoices,
-Glass Cockpit, TUI, and REPL are shipped and in daily use. Current work is
-focused on security hardening, log integrity, and attestable AI work evidence.
+**Status:** alpha — open source, MIT licensed, no account required. The local
+ledger, multi-tool capture, reports, invoices, Glass Cockpit, TUI, and REPL
+are shipped and in daily use. Current work: cache hardening (v2.18), then
+outcome-aware metadata and an attestable AI work appendix.
 
 ---
 
@@ -29,24 +30,21 @@ Read more about the product direction in
 
 ---
 
-## Two audiences, one platform
+## Who it is for
 
-**For the individual developer or freelancer:**
+**Individual developers and freelancers** — your primary audience right now.
 Your time, your AI spend, and your invoice evidence live as plain text on your
 laptop. Halyard helps you prove what happened without exposing prompts or code.
-Git it, back it up, sync it however you want. No SaaS subscription required. No
+Git it, back it up, sync it however you want. No account. No SaaS. No
 proprietary format.
 
-**For small AI shops and teams:**
-Shared evidence, project spend, trust-labeled cost allocation, and client-safe
-appendices built from the same local ledgers.
+**Small AI shops** — share the same local ledger format across a team.
+Project spend, trust-labeled cost allocation, and client-safe appendices built
+from individual plain-text logs.
 
-**For future enterprise buyers:**
-Cross-tool AI Work Intelligence without default prompt or code capture:
-governance, cost centers, redacted sync, and effectiveness signals. This layer
-is additive and gated on design-partner pull and security readiness.
-
-The solo developer experience is the entry point. The enterprise layer is optional, additive, and built on the same open data format.
+**Enterprise** — the same format will support governance, cost centers, and
+cross-tool AI Work Intelligence later. That layer is additive, gated on
+design-partner pull, and will not change what local files mean.
 
 ---
 
@@ -134,8 +132,9 @@ halyard invoice acme --period 2026-05 --include-ai-evidence
 halyard update-pricing
 ```
 
-See [`docs/demo.md`](docs/demo.md) for a full 60-second walkthrough. If capture
-does not show up, start with [`docs/troubleshooting.md`](docs/troubleshooting.md).
+See [`docs/demo.md`](docs/demo.md) for a full walkthrough — self-guided and
+live presentation script in one document. If capture does not show up, start
+with [`docs/troubleshooting.md`](docs/troubleshooting.md).
 
 ---
 
@@ -258,11 +257,16 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 
 ## Roadmap
 
-- **Now** — Security hardening, log integrity, pricing/cache/audit reliability.
-- **Next** — Attestable AI work appendix: signed client-safe proof of AI-assisted work.
-- **Then, if design partners ask** — Outcome graph: connect sessions to commits,
-  PRs, tests, and deliverables.
-- **Later** — Redacted sync, org rollups, governance, finance exports, and
+- **Now** — Cache and audit hardening (v2.18): project registry, schema migrations,
+  content-addressed session IDs, invoice front-matter rate fields.
+- **Next** — OSS launch (HN / Reddit / Lobsters), then outcome-aware metadata
+  (v2.24): branch as a first-class field, commit count, code delta for all
+  collectors, PR linkage via `halyard outcome sync`.
+- **Then** — Attestable AI work appendix (v2.19): signed, client-safe proof of
+  AI-assisted work, enriched with commit and PR signals.
+- **Later, if design partners ask** — Outcome graph (v3.0): connect sessions to
+  commits, PRs, tests, and deliverables.
+- **Further out** — Redacted sync, org rollups, governance, finance exports, and
   enterprise reporting.
 
 ---
@@ -284,7 +288,21 @@ These hold at every tier:
 
 ## Contributing
 
-Early but open. See the openspec change folders for what's actively being built. Issues and PRs welcome — start with a proposal.
+Early but open. The project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec)
+for spec-driven development — every feature has a `proposal.md`, `design.md`,
+`specs/`, and `tasks.md` before code is written. See `openspec/changes/` for
+what is actively being built.
+
+**To contribute:**
+- Browse `openspec/changes/` for open changesets.
+- Check the `tasks.md` in any changeset for unchecked items.
+- Open an issue before a PR if you are proposing a new feature — start with a
+  one-paragraph proposal so we can align on fit before you write code.
+- Bug reports and docs improvements need no prior discussion.
+- The test suite is `pytest`; coverage requirements are enforced. Run
+  `python -m pytest` before submitting.
+
+If something is confusing, a docs issue is as valuable as a code PR.
 
 ## License
 
