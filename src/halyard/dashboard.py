@@ -138,13 +138,18 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
                 from halyard.orchestration import stop_timer
 
                 stop_timer(project_dir)
+                self.send_response(HTTPStatus.FOUND)
+                self.send_header("Location", "/?stopped=1")
+                self.end_headers()
+                return
 
             self.send_response(HTTPStatus.FOUND)
             self.send_header("Location", "/")
             self.end_headers()
 
         def _send_dashboard(self, *, include_body: bool) -> None:
-            if self.path not in {"/", "/index.html"}:
+            path = self.path.split("?")[0]
+            if path not in {"/", "/index.html"}:
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
 
@@ -455,6 +460,7 @@ def _render_state(state: DashboardState) -> str:
       Latest session: {_latest_label(latest)} · Generated {_e(state.generated_at.strftime("%Y-%m-%d %H:%M:%S"))}
     </footer>
   </main>
+  {_celebration_script()}
 </body>
 </html>"""
 
@@ -922,6 +928,64 @@ def _panel_status_pill(text: str, state: str) -> str:
     return f"<span class='pill pill-{_e(state)}'>{_e(text)}</span>"
 
 
+def _celebration_script() -> str:
+    return """<script>
+(function(){
+  var q = new URLSearchParams(location.search);
+  if (q.get('stopped') !== '1') return;
+
+  var toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = '🎉 Trail closed — great work!';
+  document.body.appendChild(toast);
+  requestAnimationFrame(function(){ toast.classList.add('show'); });
+  setTimeout(function(){
+    toast.style.transition = 'opacity .5s';
+    toast.style.opacity = '0';
+    setTimeout(function(){ toast.remove(); }, 500);
+  }, 3200);
+
+  var canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:998';
+  document.body.appendChild(canvas);
+  var ctx = canvas.getContext('2d');
+  canvas.width = innerWidth; canvas.height = innerHeight;
+  var colors = ['#45d6d0','#70e18f','#f3bf5b','#b09fe8','#ff6f6f'];
+  var particles = [];
+  for (var i = 0; i < 90; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * -canvas.height * 0.5,
+      w: Math.random() * 8 + 4,
+      h: Math.random() * 5 + 3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      speed: Math.random() * 3 + 2,
+      angle: Math.random() * Math.PI * 2,
+      spin: (Math.random() - 0.5) * 0.15
+    });
+  }
+  var frame = 0;
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = frame < 150 ? 1 : 1 - (frame - 150) / 50;
+    for (var j = 0; j < particles.length; j++) {
+      var p = particles[j];
+      p.y += p.speed; p.angle += p.spin;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+      ctx.restore();
+    }
+    if (++frame < 200) requestAnimationFrame(draw);
+    else canvas.remove();
+  }
+  draw();
+})();
+</script>"""
+
+
 def _trail_heatmap_html(sessions: list[AiSession], period: object) -> str:
     import calendar
     from collections import defaultdict
@@ -1164,6 +1228,18 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .btn-start:hover { background: rgba(112, 225, 143, .25); }
 .btn-stop { background: rgba(255, 111, 111, .12); color: var(--red); width: 100%; }
 .btn-stop:hover { background: rgba(255, 111, 111, .22); }
+
+/* Stop celebration toast */
+.toast {
+  position: fixed; top: 28px; left: 50%;
+  transform: translateX(-50%) translateY(-140%);
+  background: rgba(112,225,143,.12); border: 1px solid rgba(112,225,143,.4);
+  color: #70e18f; padding: 10px 24px; border-radius: 999px;
+  font-weight: 700; font-size: 14px; letter-spacing: .02em;
+  z-index: 999; white-space: nowrap;
+  transition: transform .45s cubic-bezier(.34,1.56,.64,1);
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
 
 /* Trail heatmap calendar */
 .trail-cal { display: inline-block; }
