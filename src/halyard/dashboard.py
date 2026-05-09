@@ -123,12 +123,7 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
 
             if self.path == "/api/start":
                 slug = params.get("project", "").strip()
-                if (
-                    slug
-                    and "/" in slug
-                    and not slug.startswith("/")
-                    and not slug.endswith("/")
-                ):
+                if slug and "/" in slug and not slug.startswith("/") and not slug.endswith("/"):
                     # v2.17 task 5.5: delegate to shared start_timer; ignores
                     # TimerAlreadyRunning (dashboard silently no-ops on duplicate start)
                     from halyard.orchestration import TimerAlreadyRunning, start_timer
@@ -175,7 +170,7 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
             for part in cookie_header.split(";"):
                 part = part.strip()
                 if part.startswith("halyard_token="):
-                    return part[len("halyard_token="):]
+                    return part[len("halyard_token=") :]
             return ""
 
         def _send_json_error(self, status: HTTPStatus, reason: str) -> None:

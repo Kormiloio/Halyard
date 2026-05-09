@@ -444,6 +444,7 @@ def stop() -> None:
     if active.timeclock is None or not active.timeclock.exists():
         console.print("[bold red]Error:[/] Active timer has no valid timeclock path.")
         from halyard.reports import _HALYARD_ACTIVE
+
         _HALYARD_ACTIVE.unlink(missing_ok=True)
         raise typer.Exit(code=1)
 
@@ -1280,6 +1281,7 @@ def import_gemini(
                             )
                     except Exception as e:
                         from halyard.ai_log import _log_error
+
                         _log_error("reading gemini .project_root failed", e)
                         console.print(
                             f"[yellow]Warning:[/] could not read Gemini project root "
@@ -2421,6 +2423,7 @@ def org_purge_user(
         purged_by = getpass.getuser()
     except Exception as e:
         from halyard.ai_log import _log_error
+
         _log_error("getpass.getuser failed in org-purge", e)
         purged_by = "unknown"
 

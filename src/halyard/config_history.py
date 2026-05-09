@@ -247,5 +247,6 @@ def _parse_git_date(date_str: str) -> date | None:
             return date(parsed[0], parsed[1], parsed[2])
     except Exception as e:
         from halyard.ai_log import _log_error
+
         _log_error(f"_parse_git_date failed for {date_str!r}", e)
     return None

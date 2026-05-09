@@ -150,6 +150,7 @@ def stop_timer(project_dir: Path) -> StopResult:
 
     return StopResult(was_running=True, slug=slug, elapsed_seconds=elapsed, backfill_count=count)
 
+
 # ---------------------------------------------------------------------------
 # Default file contents written by `halyard init`
 # ---------------------------------------------------------------------------

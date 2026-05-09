@@ -76,9 +76,7 @@ def test_100_concurrent_appenders_produce_exactly_100_lines(tmp_path: Path) -> N
         list(pool.map(_append, range(100)))
 
     log_path = tmp_path / AI_LOG_FILENAME
-    lines = [
-        line for line in log_path.read_text().splitlines() if line.startswith("s ")
-    ]
+    lines = [line for line in log_path.read_text().splitlines() if line.startswith("s ")]
     assert len(lines) == 100, f"Expected 100 session lines, got {len(lines)}"
 
 
@@ -185,9 +183,7 @@ def test_round_trip_attribution_change_via_amendment(tmp_path: Path) -> None:
     append_session(tmp_path, session)
 
     # Compute the hash of the raw line just written
-    raw_lines = [
-        line for line in log_path.read_text().splitlines() if line.startswith("s ")
-    ]
+    raw_lines = [line for line in log_path.read_text().splitlines() if line.startswith("s ")]
     assert len(raw_lines) == 1
     s_line = raw_lines[0]
     h = session_hash(s_line)
@@ -216,9 +212,7 @@ def test_multiple_amendments_last_write_wins(tmp_path: Path) -> None:
     # Write original session
     append_session(tmp_path, _session(project=None))
 
-    raw_lines = [
-        line for line in log_path.read_text().splitlines() if line.startswith("s ")
-    ]
+    raw_lines = [line for line in log_path.read_text().splitlines() if line.startswith("s ")]
     h = session_hash(raw_lines[0])
 
     # First amendment: project=acme:auth
@@ -244,9 +238,7 @@ def test_multiple_amendments_partial_key_override(tmp_path: Path) -> None:
     log_path = tmp_path / AI_LOG_FILENAME
 
     append_session(tmp_path, _session(project=None))
-    raw_lines = [
-        line for line in log_path.read_text().splitlines() if line.startswith("s ")
-    ]
+    raw_lines = [line for line in log_path.read_text().splitlines() if line.startswith("s ")]
     h = session_hash(raw_lines[0])
 
     # First amendment sets both project and source
