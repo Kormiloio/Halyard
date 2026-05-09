@@ -131,9 +131,7 @@ RANKS: list[RankDef] = [
         short="Captain",
         icon="🎖️",
         flavor="All hands know your name.",
-        description=(
-            "Five hundred attributed sessions. A full calendar month, every session attributed."
-        ),
+        description="Five hundred attributed sessions. The ship runs on your discipline.",
         sessions_required=500,
     ),
     RankDef(
@@ -142,10 +140,7 @@ RANKS: list[RankDef] = [
         short="Commodore",
         icon="🏅",
         flavor="A fleet, not just a ship.",
-        description=(
-            "One thousand attributed sessions across 3+ projects. "
-            "You command a clean, documented fleet."
-        ),
+        description="One thousand attributed sessions. You command a clean, documented fleet.",
         sessions_required=1000,
     ),
 ]
@@ -369,6 +364,8 @@ def _evaluate_medals(
     sessions: list[AiSession],
     watches: list[_Watch],
     clean_days: set[date],
+    *,
+    as_of: date | None = None,
 ) -> list[Medal]:
     earned: list[str] = []
 
@@ -399,7 +396,7 @@ def _evaluate_medals(
         earned.append("harbor_master")
 
     # Fair Winds — 7+ consecutive clean-watch days
-    if _clean_watch_streak(clean_days) >= 7:
+    if _clean_watch_streak(clean_days, as_of=as_of) >= 7:
         earned.append("fair_winds")
 
     # Rescue at Sea — ever had ≥5 adrift, now has 0
@@ -443,7 +440,7 @@ def _evaluate_passport(sessions: list[AiSession]) -> list[PassportStamp]:
 def _compute_proof_score(sessions: list[AiSession]) -> int:
     total = len(sessions)
     if total == 0:
-        return 100
+        return 0
     attributed = sum(1 for s in sessions if s.project)
     with_tokens = sum(1 for s in sessions if s.tokens_available)
     return round((attributed / total * 0.6 + with_tokens / total * 0.4) * 100)
@@ -471,7 +468,7 @@ def build_service_record(
     cw_streak = _clean_watch_streak(clean_days, as_of=as_of)
 
     rank, next_rank, sessions_toward_next = _evaluate_rank(attributed_count)
-    earned_medals = _evaluate_medals(project_dir, sessions, watches, clean_days)
+    earned_medals = _evaluate_medals(project_dir, sessions, watches, clean_days, as_of=as_of)
     passport = _evaluate_passport(sessions)
     proof_score = _compute_proof_score(sessions)
 

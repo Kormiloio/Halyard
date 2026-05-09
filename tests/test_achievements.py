@@ -268,7 +268,7 @@ def test_service_record_civilian_no_data(tmp_path: Path) -> None:
     record = build_service_record(tmp_path, [])
     assert record.rank.name == "Civilian"
     assert record.total_sessions == 0
-    assert record.proof_score == 100  # vacuously perfect
+    assert record.proof_score == 0  # no sessions → no proof
     assert record.earned_medals == []
 
 

@@ -87,9 +87,9 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
 
             server_port = self.server.server_port  # type: ignore[attr-defined]
 
-            # 2.3: Validate Host header — must be 127.0.0.1:<port>
+            # 2.3: Validate Host header — must be 127.0.0.1:<port> or localhost:<port>
             host = self.headers.get("Host", "")
-            if host != f"127.0.0.1:{server_port}":
+            if host not in {f"127.0.0.1:{server_port}", f"localhost:{server_port}"}:
                 self._send_json_error(HTTPStatus.BAD_REQUEST, "invalid Host header")
                 return
 
@@ -726,14 +726,13 @@ def _captains_quarters_panel(project_dir: Path, sessions: list[AiSession]) -> st
 
 def _friends_panel(project_dir: Path, sessions: list[AiSession]) -> str:
     """Friends of the Sea — voyage stage cards for every tracked project."""
-    from halyard.voyages import STAGE_LABELS, build_voyage_summaries, check_auto_complete
+    from halyard.voyages import STAGE_LABELS, build_voyage_summaries
 
     sessions_by_project: dict[str, list[AiSession]] = {}
     for s in sessions:
         if s.project:
             sessions_by_project.setdefault(s.project, []).append(s)
 
-    check_auto_complete(project_dir, sessions_by_project)
     summaries = build_voyage_summaries(project_dir, sessions_by_project)
 
     if not summaries:
