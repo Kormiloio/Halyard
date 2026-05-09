@@ -75,8 +75,30 @@ my-business/
 └── .gitignore
 ```
 
-Per-user agent state (skills, API keys, active timer) lives in
-`~/.halyard/`, not in the project folder.
+Per-user agent state lives in `~/.halyard/`, not in the project folder:
+
+```
+~/.halyard/
+├── projects          # project registry — one absolute path per line (v2.18)
+├── active            # active-timer state (written by start_timer, deleted by stop_timer)
+├── cache.db          # SQLite read-model cache (v2.14); rebuilt from plain-text files on demand
+└── halyard.log       # internal error log
+```
+
+**Project registry (`~/.halyard/projects`):** One absolute path per line. Lines
+starting with `#` are comments. `halyard init` appends the new project path
+idempotently. `halyard db sync` reads the registry as its primary project
+discovery source; it falls back to CWD for unregistered projects. Stale paths
+(directories that no longer exist or no longer contain `halyard.toml`) are
+skipped with a warning and can be removed with `halyard projects forget <path>`.
+
+**SQLite cache schema policy (v2.18):** `cache.db` carries a `PRAGMA user_version`
+integer. Every schema change ships a forward-only migration in the `_MIGRATIONS`
+list in `db.py`. Destructive migrations (those that cannot be expressed as
+`ALTER TABLE … ADD COLUMN`) use the `REQUIRES_RESET` sentinel, which causes
+`get_db()` to exit with a clear message asking the user to run
+`halyard db reset && halyard db sync`. The plain-text files are never modified
+by migrations; reset only deletes the cache.
 
 `ai-sessions.log` is plain text, open format — the same local-first guarantee
 as `time.timeclock`. New sessions are always appended. Since v2.17, attribution
@@ -91,9 +113,9 @@ layers must read from this local source of truth; they do not replace it.
 
 **Current sequence — do not reorder without explicit justification:**
 
-1. **v2.18 — Cache and audit hardening:** project registry, SQLite schema
-   migrations, content-addressed session IDs, invoice front-matter rate fields,
-   test backfill for v2.11–v2.15.
+1. ~~**v2.18 — Cache and audit hardening** (complete)~~ — project registry,
+   SQLite schema migrations, content-addressed session IDs, invoice front-matter
+   rate fields, test backfill for v2.11–v2.15.
 2. **OSS launch:** `pipx install halyard && halyard init` must work end-to-end
    in a clean venv. Gate: zero-friction first-use experience confirmed. Then
    HN / Reddit / Lobsters post.

@@ -12,6 +12,12 @@ from halyard.db import SyncResult, get_db, last_sync, reset, sync_all
 
 runner = CliRunner()
 
+
+@pytest.fixture(autouse=True)
+def _isolate_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Redirect the project registry to tmp_path so tests don't read the real ~/.halyard/projects."""
+    monkeypatch.setattr("halyard.registry.REGISTRY_PATH", tmp_path / ".halyard" / "projects")
+
 _SESSION_LINE_A = (
     "s 2026-01-01T09:00:00 2026-01-01T09:30:00 claude-code claude-sonnet-4-6 "
     "10000 2000 0.0850 project=test:proj"

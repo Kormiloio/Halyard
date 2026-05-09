@@ -15,7 +15,11 @@ from pathlib import Path
 
 _DB_PATH = Path.home() / ".halyard" / "cache.db"
 
-_SCHEMA = """
+# Schema version this code expects. Bump whenever a migration is added.
+_CURRENT_VERSION = 2
+
+# Initial schema for a fresh database (version 1 baseline).
+_CREATE_SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS sessions (
     id          TEXT PRIMARY KEY,
     project     TEXT,
@@ -50,6 +54,16 @@ CREATE TABLE IF NOT EXISTS sync_log (
 );
 """
 
+# Each tuple is (from_version, sql_or_sentinel).
+# Use the sentinel "REQUIRES_RESET" to tell users to run `halyard db reset`.
+_MIGRATIONS: list[tuple[int, str]] = [
+    # v0 → v1: establishes the migration framework; no schema change needed.
+    (0, "-- no-op"),
+    # v1 → v2: session IDs changed from sha256(raw_line) to content-addressed hash.
+    #           Existing rows have stale IDs; user must reset the cache.
+    (1, "REQUIRES_RESET"),
+]
+
 
 @dataclass
 class SyncResult:
@@ -64,26 +78,95 @@ def db_path() -> Path:
 
 
 def get_db() -> sqlite3.Connection:
-    """Open (and initialize if needed) the cache database."""
+    """Open (and migrate if needed) the cache database.
+
+    On a fresh database, creates the schema at _CURRENT_VERSION.
+    On an existing database, runs any pending migrations in order.
+    Raises SystemExit if the database requires a manual reset.
+    """
     _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(_DB_PATH))
     conn.row_factory = sqlite3.Row
-    conn.executescript(_SCHEMA)
+
+    version: int = conn.execute("PRAGMA user_version").fetchone()[0]
+
+    if version == 0:
+        # Check if tables exist (old pre-migration database vs. fresh install).
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "sessions" not in tables:
+            # Fresh database — create schema directly at current version.
+            conn.executescript(_CREATE_SCHEMA_V1)
+            conn.execute(f"PRAGMA user_version = {_CURRENT_VERSION}")
+            conn.commit()
+            return conn
+        # Else: old database without version tracking — treat as v0.
+
+    if version > _CURRENT_VERSION:
+        conn.close()
+        raise SystemExit(
+            f"Cache database is version {version} but this Halyard installation "
+            f"only understands up to version {_CURRENT_VERSION}. "
+            "Upgrade Halyard or run `halyard db reset`."
+        )
+
+    # Run pending migrations.
+    for from_version, sql in _MIGRATIONS:
+        if version <= from_version:
+            if sql == "REQUIRES_RESET":
+                conn.close()
+                raise SystemExit(
+                    f"Cache schema changed in v2.18 (session IDs are now content-addressed). "
+                    "Run `halyard db reset` then `halyard db sync` to rebuild the cache. "
+                    "No plain-text data is lost."
+                )
+            if sql.strip() and sql.strip() != "-- no-op":
+                conn.executescript(sql)
+            conn.execute(f"PRAGMA user_version = {from_version + 1}")
+            conn.commit()
+            version = from_version + 1
+
     return conn
 
 
 def sync_all() -> SyncResult:
-    """Sync all known project and hub log files into the cache."""
+    """Sync all known project and hub log files into the cache.
+
+    Discovery order (per v2.18 spec):
+    1. ~/.halyard/projects registry
+    2. find_hub() if not already covered
+    3. find_project_dir() (CWD walk-up) if not already covered
+    """
     from halyard.ai_log import AI_LOG_FILENAME, find_project_dir
     from halyard.hub import find_hub
+    from halyard.registry import read_registry, stale_paths
 
     sources: set[Path] = set()
-    project_dir = find_project_dir()
-    if project_dir:
-        sources.add(project_dir)
+
+    for p in read_registry():
+        sources.add(p)
+
     hub_dir = find_hub()
     if hub_dir:
         sources.add(hub_dir)
+
+    project_dir = find_project_dir()
+    if project_dir:
+        sources.add(project_dir)
+
+    stale = stale_paths()
+    if stale:
+        from rich.console import Console as _Console
+
+        _Console().print(
+            "[yellow]Warning:[/] "
+            + str(len(stale))
+            + " registered project(s) no longer found. Run [bold]halyard projects list[/] to review."
+        )
 
     conn = get_db()
     sessions_added = timeclock_added = files_read = 0
@@ -135,8 +218,16 @@ def reset() -> None:
         _DB_PATH.unlink()
 
 
-def _session_id(raw_line: str) -> str:
-    return hashlib.sha256(raw_line.strip().encode()).hexdigest()
+def _session_id(
+    start: str, end: str, tool: str, model: str, input_tok: int, output_tok: int
+) -> str:
+    """Content-addressed session ID — stable across attribution amendments.
+
+    Hashes only the immutable identity fields so that `a` amendment records
+    (which change project/branch/etc.) never produce a duplicate cache row.
+    """
+    key = f"{start}|{end}|{tool}|{model}|{input_tok}|{output_tok}"
+    return hashlib.sha256(key.encode()).hexdigest()
 
 
 def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
@@ -153,6 +244,15 @@ def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
         if session is None:
             continue
 
+        sid = _session_id(
+            session.start.isoformat(),
+            session.end.isoformat(),
+            session.tool,
+            session.model,
+            session.input_tokens,
+            session.output_tokens,
+        )
+
         result = conn.execute(
             """
             INSERT OR IGNORE INTO sessions
@@ -162,7 +262,7 @@ def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                _session_id(line),
+                sid,
                 session.project,
                 session.tool,
                 session.model,

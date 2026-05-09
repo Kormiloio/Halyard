@@ -257,6 +257,10 @@ def scaffold_project(target_dir: Path, hub: bool = False) -> None:
     (target_dir / "invoices").mkdir(exist_ok=True)
     _ensure_gitignore(target_dir / ".gitignore")
 
+    from halyard.registry import register_project
+
+    register_project(target_dir)
+
     if hub:
         set_hub(target_dir)
 

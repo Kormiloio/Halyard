@@ -9,6 +9,15 @@ issue_date: {{ invoice.issue_date }}
 due_date: {{ invoice.due_date }}
 currency: {{ invoice.currency }}
 total: {{ "%.2f"|format(invoice.total) }}
+template_version: 2
+rates:
+{%- for item in invoice.line_items %}
+  - description: {{ item.description }}
+    hours: {{ "%.2f"|format(item.hours) }}
+    rate: {{ "%.2f"|format(item.rate) }}
+    currency: {{ invoice.currency }}
+    amount: {{ "%.2f"|format(item.amount) }}
+{%- endfor %}
 ---
 
 # Invoice {{ invoice.invoice_number }}

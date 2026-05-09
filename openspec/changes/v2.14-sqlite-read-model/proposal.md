@@ -42,3 +42,22 @@ replacing the plain-text files as the canonical record.
 - `halyard db sync --status` shows last-sync time and row counts.
 - The SQLite schema matches the session and timeclock data models.
 - Querying the cache with a standard SQLite client returns correct session rows.
+
+## v2.18 amendments
+
+v2.18 (Cache and Audit Hardening) extends this design in three ways:
+
+1. **Project registry** — `halyard db sync` no longer relies solely on CWD
+   discovery. It reads `~/.halyard/projects` (one absolute path per line) as its
+   primary source. `halyard init` registers the project automatically.
+
+2. **Schema migrations** — `cache.db` now carries `PRAGMA user_version`. Every
+   schema change ships a forward migration in `_MIGRATIONS`. Destructive changes
+   use the `REQUIRES_RESET` sentinel and prompt the user to run
+   `halyard db reset && halyard db sync` rather than silently dropping data.
+
+3. **Content-addressed session ID** — The session primary key is now
+   `sha256(start|end|tool|model|input_tok|output_tok)` instead of
+   `sha256(raw_line)`. This makes the ID stable across amendment records: an
+   `a <hash> project=...` attribution correction does not create a second row.
+   The `REQUIRES_RESET` migration path handles the transition from old IDs.

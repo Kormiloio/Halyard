@@ -24,6 +24,7 @@ class AuditMismatch:
     period: str  # YYYY-MM
     expected_rate: float
     actual_rate: float
+    rate_source: str = "structured"  # "structured" (front-matter) or "inferred" (regex)
 
 
 def rate_history_from_toml(project_dir: Path) -> list[RateChange]:
@@ -155,7 +156,7 @@ def audit_invoices(
             continue
 
         expected = _effective_rate(client, period_start)
-        for actual in rates:
+        for actual, rate_source in rates:
             if abs(actual - expected) > 0.005:
                 mismatches.append(
                     AuditMismatch(
@@ -164,14 +165,21 @@ def audit_invoices(
                         period=period,
                         expected_rate=expected,
                         actual_rate=actual,
+                        rate_source=rate_source,
                     )
                 )
 
     return mismatches
 
 
-def _parse_invoice_meta(path: Path) -> tuple[str, str, list[float]] | None:
-    """Return (client_slug, period, non-zero rates) from an invoice .md file."""
+def _parse_invoice_meta(
+    path: Path,
+) -> tuple[str, str, list[tuple[float, str]]] | None:
+    """Return (client_slug, period, [(rate, source), ...]) from an invoice .md file.
+
+    source is "structured" when rates come from front-matter YAML (v2.18+)
+    or "inferred" when parsed from the rendered markdown table (pre-v2.18).
+    """
     try:
         text = path.read_text()
     except OSError:
@@ -180,19 +188,28 @@ def _parse_invoice_meta(path: Path) -> tuple[str, str, list[float]] | None:
     lines = text.splitlines()
     client_slug = ""
     invoice_number = ""
+    template_version = 1
     in_front = False
+    front_matter_lines: list[str] = []
 
     for i, line in enumerate(lines):
         if i == 0 and line.strip() == "---":
             in_front = True
             continue
         if in_front and line.strip() == "---":
+            in_front = False
             break
         if in_front:
+            front_matter_lines.append(line)
             if line.startswith("client_slug:"):
                 client_slug = line.split(":", 1)[1].strip()
             elif line.startswith("invoice_number:"):
                 invoice_number = line.split(":", 1)[1].strip()
+            elif line.startswith("template_version:"):
+                try:
+                    template_version = int(line.split(":", 1)[1].strip())
+                except ValueError:
+                    pass
 
     if not client_slug or not invoice_number:
         return None
@@ -201,7 +218,42 @@ def _parse_invoice_meta(path: Path) -> tuple[str, str, list[float]] | None:
     if not re.match(r"^\d{4}-\d{2}$", period):
         return None
 
-    return client_slug, period, _parse_invoice_rates(text)
+    if template_version >= 2:
+        rates = _parse_rates_from_front_matter(front_matter_lines)
+        if rates:
+            return client_slug, period, [(r, "structured") for r in rates]
+
+    # Fall back to regex over rendered markdown table (pre-v2.18 invoices).
+    return client_slug, period, [(r, "inferred") for r in _parse_invoice_rates(text)]
+
+
+def _parse_rates_from_front_matter(front_matter_lines: list[str]) -> list[float]:
+    """Extract rate values from the rates: block in YAML front-matter."""
+    rates: list[float] = []
+    in_rates = False
+
+    for line in front_matter_lines:
+        stripped = line.strip()
+        if stripped == "rates:":
+            in_rates = True
+            continue
+        if in_rates:
+            if stripped.startswith("- ") or stripped.startswith("rate:"):
+                pass  # continue scanning
+            elif stripped and not stripped.startswith("-") and ":" in stripped:
+                key = stripped.split(":")[0].strip()
+                if key not in ("description", "hours", "rate", "currency", "amount"):
+                    in_rates = False
+                    continue
+            if stripped.startswith("rate:"):
+                try:
+                    val = float(stripped.split(":", 1)[1].strip())
+                    if val > 0:
+                        rates.append(val)
+                except ValueError:
+                    pass
+
+    return rates
 
 
 def _parse_invoice_rates(text: str) -> list[float]:
