@@ -1,12 +1,12 @@
 [project]
 name = "halyard"
 version = "0.1.0"
-description = "Plain-text AI spend tracker and financial OS for freelancers."
+description = "The open AI work ledger — prove what you did, know what you're spending."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [{ name = "Kormilo LLC", email = "mcamaj@gmail.com" }]
-keywords = ["freelance", "invoicing", "time-tracking", "accounting", "plaintext", "agent", "claude", "ai-spend"]
+keywords = ["ai-work-intelligence", "ai-observability", "claude", "cursor", "copilot", "gemini", "plaintext", "agent", "ai-spend", "invoicing"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",

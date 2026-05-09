@@ -2,7 +2,7 @@
 
 > *A halyard is the line that raises the sails. Pull on it, the sails go up. Pull on this one, your AI work comes into focus.*
 
-**AI Work Intelligence Infrastructure.** Time, tokens, models, and cost — captured where the work happens, owned by you, readable by anyone.
+**The open AI work ledger.** For individuals who need to prove what they did, and teams who need to know what they're spending. Time, tokens, models, and cost — captured where the work happens, owned by you, readable by anyone.
 
 **Status:** alpha. v0–v2, v4 TUI, and interactive REPL shipped and in daily use.
 
