@@ -774,8 +774,18 @@ def _do_install_hook_claude(global_: bool = False) -> None:
         resolved = json.loads(json.dumps(entries).replace("halyard ", f"{exe} ", 1))
         current = hooks.setdefault(event, [])
         command = resolved[0]["hooks"][0]["command"]
+
+        # Normalise to subcommand name (e.g. "halyard cc-hook") so that absolute
+        # paths like "/venv/bin/halyard cc-hook" are not registered as duplicates.
+        def _cmd_key(cmd: str) -> str:
+            parts = cmd.split()
+            return f"{Path(parts[0]).name} {' '.join(parts[1:])}" if parts else cmd
+
+        new_key = _cmd_key(command)
         already = any(
-            h.get("command") == command for entry in current for h in entry.get("hooks", [])
+            _cmd_key(h.get("command", "")) == new_key
+            for entry in current
+            for h in entry.get("hooks", [])
         )
         if not already:
             current.extend(resolved)

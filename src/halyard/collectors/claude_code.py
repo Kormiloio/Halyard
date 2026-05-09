@@ -68,22 +68,39 @@ def handle_stop_hook() -> int:
     start = _read_session_start() or now
     _clear_session_start()
 
+    # Try usage from payload first (older Claude Code format)
     usage = payload.get("usage") or payload.get("message", {}).get("usage", {}) or {}
     input_tokens = int(usage.get("input_tokens", 0))
     output_tokens = int(usage.get("output_tokens", 0))
     cache_read = int(usage.get("cache_read_input_tokens", 0) or usage.get("cache_read", 0))
     cache_write = int(usage.get("cache_creation_input_tokens", 0) or usage.get("cache_write", 0))
-    tokens_available = input_tokens > 0 or output_tokens > 0
 
     model = (
         payload.get("model")
         or payload.get("stop_model")
         or (_read_model_from_settings(project_dir) if project_dir else None)
-        or "claude-unknown"
     )
 
-    cost = calculate_cost(model, input_tokens, output_tokens, cache_read, cache_write)
     branch = current_branch(cwd)
+
+    # Fallback: read model + tokens from transcript (Claude Code ≥2.x format)
+    if not (input_tokens or output_tokens):
+        transcript_path = payload.get("transcript_path", "")
+        if transcript_path:
+            t_model, t_in, t_out, t_cr, t_cw, t_branch = _read_from_transcript(transcript_path)
+            if t_in or t_out:
+                input_tokens, output_tokens = t_in, t_out
+                cache_read, cache_write = t_cr, t_cw
+            if not model and t_model:
+                model = t_model
+            if not branch and t_branch:
+                branch = t_branch
+
+    if not model:
+        model = "claude-unknown"
+
+    tokens_available = input_tokens > 0 or output_tokens > 0
+    cost = calculate_cost(model, input_tokens, output_tokens, cache_read, cache_write)
 
     # D-1: resolve attribution source so provenance is recorded in the log.
     _active = read_active_project()
@@ -153,6 +170,55 @@ def _read_session_start() -> datetime | None:
 
 def _clear_session_start() -> None:
     _CC_SESSION_FILE.unlink(missing_ok=True)
+
+
+def _read_from_transcript(
+    transcript_path: str,
+) -> tuple[str | None, int, int, int, int, str | None]:
+    """Aggregate model, token totals, and branch from a Claude Code transcript JSONL.
+
+    Claude Code ≥2.x passes transcript_path in the Stop payload instead of
+    embedding usage directly. Each assistant event looks like:
+      {"type":"assistant","message":{"model":"...","usage":{...}},"gitBranch":"..."}
+
+    Returns (model, input_tokens, output_tokens, cache_read, cache_write, branch).
+    """
+    try:
+        path = Path(transcript_path)
+        if not path.exists():
+            return None, 0, 0, 0, 0, None
+
+        model: str | None = None
+        branch: str | None = None
+        total_in = total_out = total_cr = total_cw = 0
+
+        for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                obj = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            if obj.get("type") != "assistant":
+                continue
+
+            msg = obj.get("message") or {}
+            if msg.get("model"):
+                model = str(msg["model"])
+            if obj.get("gitBranch") and branch is None:
+                branch = str(obj["gitBranch"])
+
+            usage = msg.get("usage") or {}
+            total_in += int(usage.get("input_tokens", 0))
+            total_out += int(usage.get("output_tokens", 0))
+            total_cr += int(usage.get("cache_read_input_tokens", 0))
+            total_cw += int(usage.get("cache_creation_input_tokens", 0))
+
+        return model, total_in, total_out, total_cr, total_cw, branch
+    except Exception:
+        return None, 0, 0, 0, 0, None
 
 
 def _read_model_from_settings(project_dir: Path) -> str | None:
