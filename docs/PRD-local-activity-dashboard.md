@@ -1,5 +1,14 @@
 # PRD: Halyard Local Activity Dashboard
 
+**Status — May 8, 2026:**
+Implemented local surface; maintain and harden. This PRD describes the Glass
+Cockpit/local dashboard direction. It remains part of the OSS core, but hosted
+or team dashboards are deferred until the local ledger, security posture, and
+design-partner demand are stronger. See
+[`current-direction.md`](current-direction.md) for the current sequence.
+
+---
+
 ## Summary
 
 Halyard should include a local web dashboard, similar in spirit to the
@@ -169,8 +178,9 @@ MVP data sources:
 - Attribution correction workflow.
 - Invoice preview and appendix generation.
 - Exportable charts.
-- Team sync mode.
-- Hosted dashboard backed by the same local file protocol.
+- Team sync mode after design-partner validation.
+- Hosted dashboard backed by the same local file protocol, after security and
+  enterprise-readiness work.
 
 ## Success Metrics
 

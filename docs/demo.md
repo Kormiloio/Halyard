@@ -1,6 +1,7 @@
-# 60-Second Demo: Human Time + AI Cost by Project
+# 60-Second Demo: Prove AI-Assisted Work by Project
 
-This walkthrough shows a freelancer setting up Halyard for a client project, capturing AI usage, and generating an invoice with AI evidence.
+This walkthrough shows a freelancer setting up Halyard for a client project,
+capturing AI usage, and generating invoice-safe evidence of AI-assisted work.
 
 ## Prerequisites
 
@@ -200,11 +201,22 @@ and are not direct per-session charges.*
 
 ---
 
+## Coming next — Attestable appendix
+
+The current invoice evidence is local and plain text. The next product step is
+an attestable AI work appendix: a signed, privacy-preserving proof packet that
+a client can verify without seeing prompts, code, or private implementation
+details.
+
+---
+
 ## What you now have
 
-- `ai-sessions.log` — every AI session, append-only, plain text
+- `ai-sessions.log` — every AI session, plain text, with explicit correction
+  records coming in the hardening track
 - `time.timeclock` — human time in hledger-compatible format
 - `invoices/2026-05-001-acme.md` — invoice with AI evidence appendix
 - Full cost breakdown: direct API + allocated seat/credit plans
+- A client-safe proof-of-work packet for the project
 
 For a deeper explanation of what `captured`, `allocated`, and `inferred` mean, see [`docs/trust-model.md`](trust-model.md).

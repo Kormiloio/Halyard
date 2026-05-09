@@ -80,6 +80,14 @@ halyard invoice acme --include-ai-evidence
 
 The AI evidence appendix groups costs by type and includes a footnote explaining what `allocated` and `inferred` mean. Clients receive an honest picture of what is measured directly versus what is estimated.
 
+## In attestable appendices
+
+The planned attestable appendix uses the same trust labels. Signing the appendix
+proves the evidence packet matches the local ledger snapshot; it does not turn
+allocated or inferred values into captured facts. A verified appendix should
+still tell the reader which numbers were measured, calculated, allocated, or
+inferred.
+
 ## Design principle
 
 The trust hierarchy exists because client-facing evidence should be honest about what is known versus estimated. A `captured` cost of $12.34 means exactly that. An `allocated` cost of $45.00 means "we believe roughly $45 of the $200 seat cost belongs here, based on how the time was distributed."

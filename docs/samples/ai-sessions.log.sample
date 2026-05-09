@@ -1,4 +1,4 @@
-; Halyard AI session log — spec: https://halyard.dev/spec/ai-sessions/v1
+; Halyard AI session log — sample local format (public spec pending external emitter)
 ; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd> [key=value ...]
 ;
 ; This is a sample log file for documentation and demo purposes.

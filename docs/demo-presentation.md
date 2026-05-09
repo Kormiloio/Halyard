@@ -26,10 +26,10 @@ the commands. The output speaks for itself.
 > money went. And when it's time to bill the client, there's nothing to show
 > them.
 >
-> We built Halyard. It's like a receipt printer for AI work. Every time you
-> use an AI tool, Halyard writes down what happened — which tool, which model,
-> how long, how much it cost — automatically, in plain text, on your own
-> computer. No cloud required. No subscription. Just a log file you own.
+> We built Halyard. It's an open AI work ledger. Every time you use an AI
+> tool, Halyard writes down what happened — which tool, which model, how long,
+> how much it cost — automatically, in plain text, on your own computer. No
+> cloud required. No subscription. Just a log file you own.
 >
 > Let me show you."
 
@@ -187,7 +187,9 @@ cat invoices/2026-05-001-acme.md
 > for it. The log file is right there. It's like showing receipts.
 >
 > Clients trust this. It turns 'trust me, AI helped' into 'here are the
-> numbers.'"
+> numbers.' The next step is making this appendix signed and verifiable, so a
+> client can check that the evidence came from the ledger without seeing any
+> private prompts or source code."
 
 ---
 
@@ -236,28 +238,19 @@ halyard tui
 
 ---
 
-## Part 7 — For teams (1 min, talk only or show if org.db is populated)
+## Part 7 — Where teams come in (1 min, talk only)
 
-> "Everything we just saw is for one person. But what if you're a manager
-> at a company with 50 developers, all using AI tools? Who's using what?
-> How much is it costing? Which projects are AI-heavy?
+> "Everything we just saw is useful for one person today. That's the wedge:
+> an individual freelancer or small AI shop gets a ledger they can actually use
+> before any company buys anything.
 >
-> We built an org layer. Each developer runs `halyard sync`. Their sessions —
-> just the metadata, never the actual content of what they asked the AI —
-> go into a shared database. Then a manager can run:"
-
-```bash
-halyard org-report summary --period 2026-05
-halyard org-report teams
-halyard org-report finance --csv exports/2026-05.csv
-```
-
-> "And they get the full picture across the whole organization. Team by team.
-> Project by project. It's the same data, just rolled up.
+> For teams, the path is not surveillance dashboards. The path is voluntary
+> proof artifacts first: a developer, freelancer, or small shop chooses what
+> evidence to share. Then, after design partners ask for it and the security
+> posture is ready, those same local ledgers can support redacted team rollups.
 >
-> That last command exports a CSV file for the finance team — with cost
-> centers, trust labels, everything they need to actually do chargeback
-> accounting."
+> Same source of truth, higher altitude: first proof for the person doing the
+> work, later governance and cost allocation for the organization."
 
 ---
 
@@ -268,9 +261,11 @@ halyard org-report finance --csv exports/2026-05.csv
 > For a freelancer: automatic AI session capture, human time tracking,
 > cost allocation across projects, and invoices with receipts attached.
 >
-> For a company: a rollup layer that tells managers and finance exactly
-> what AI is costing, which teams are using it, and where the money is
-> going — without ever seeing what anyone actually typed into the AI.
+> For a small AI shop: a shared habit of producing proof-of-work packets that
+> make client conversations easier.
+>
+> For a company later: redacted rollups, governance, and finance reporting —
+> without ever seeing what anyone actually typed into the AI.
 >
 > Everything is plain text. You own all of it. There's no Halyard account.
 > No cloud. No vendor lock-in. If we disappear tomorrow, your files still
@@ -295,8 +290,8 @@ the real cost?"**
 
 **"Does Halyard see my prompts? What I actually said to the AI?"**
 > No. Never. It only captures metadata: timestamps, model, token counts,
-> cost. The actual words you typed stay on your computer. Even in the org
-> dashboard, managers only see metadata.
+> cost. The actual words you typed stay on your computer. Future team and org
+> layers must preserve that privacy boundary.
 
 **"Why plain text? Why not a proper database?"**
 > Because you can read plain text in 10 years without any software. You

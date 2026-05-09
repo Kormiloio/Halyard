@@ -1,11 +1,26 @@
 # PRD: Halyard Org Admin Dashboard
 
+**Status:** Deferred / design-partner gated.
+**Current direction:** See [`current-direction.md`](current-direction.md).
+
+This PRD captures the intended enterprise/org rollup surface, but it is not the
+current build priority. Org dashboards should wait until the local ledger is
+hardened, the attestable appendix has been tested with design partners, and
+enterprise pull is real.
+
 ## Summary
 
 Halyard needs an organization dashboard for managers, directors, and CIO/CTO
 buyers who want to understand AI work across teams. The solo Glass Cockpit
 proves local capture. The org admin dashboard rolls up many local ledgers into
 portfolio-level intelligence.
+
+The current sequencing is:
+
+1. Local ledger hardening.
+2. Attestable proof artifact for individuals and small AI shops.
+3. Outcome graph only if design partners ask.
+4. Org dashboard after security readiness and enterprise pull.
 
 The core question changes from:
 

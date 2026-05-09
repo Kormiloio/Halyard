@@ -5,18 +5,21 @@ conventions so each change proposal doesn't have to re-explain them.
 
 ## Mission
 
-Halyard is AI work intelligence infrastructure. It captures where AI work
-happens — time, tokens, models, cost, project attribution — and turns that
-data into actionable intelligence for individuals and organizations alike.
+Halyard is the open AI work ledger. It captures where AI-assisted work happens
+- time, tokens, models, cost, project attribution, and trust metadata - and
+turns that data into proof-of-work artifacts for individuals and AI Work
+Intelligence for teams.
 
-For the solo developer or freelancer: time, AI spend, and invoices as plain
-text on your machine, operated by Claude. For engineering teams and
-enterprises: unified visibility into AI investment, productivity, and cost
-allocation across the organization.
+For the solo developer, freelancer, or small AI shop: time, AI spend, project
+attribution, and invoice evidence as plain text on your machine. The near-term
+wedge is proving AI-assisted work without exposing prompts or source code.
+
+For teams and enterprises: the same ledger can later support redacted sync,
+governance, cost centers, and cross-tool AI Work Intelligence. That layer is
+additive and gated on design-partner pull plus security readiness.
 
 The individual experience is the entry point. The enterprise layer is
-optional, additive, and built on the same open data format. An AI agent
-(Claude) reads and writes the files on the user's behalf at every tier.
+optional, additive, and built on the same open data format.
 
 ## Non-negotiables
 
@@ -27,7 +30,9 @@ to explicitly justify the exception.
    later for sync or e-filing, but the core product runs offline against a
    local folder.
 2. **Plain text forever.** All user data is stored in human-readable,
-   diff-friendly text formats with public specs:
+   diff-friendly text formats. Use existing public specs where they already
+   exist; publish Halyard-owned specs after the local format has proven useful
+   and at least one external emitter exists:
    - Time → [hledger timeclock](https://hledger.org/timeclock.html)
    - Ledger → [Beancount](https://beancount.github.io/)
    - Invoices → markdown with YAML frontmatter
@@ -38,7 +43,11 @@ to explicitly justify the exception.
 4. **No silent writes.** Any modification to user data is proposed to the
    user with a diff and waits for approval. Read-only operations need no
    approval.
-5. **MIT licensed.** Permissively. Forever.
+5. **No prompt or source-code capture by default.** Halyard captures metadata,
+   not transcripts, prompts, file contents, or code context.
+6. **Trust labels over fake certainty.** Reports distinguish captured,
+   calculated, allocated, inferred, missing, and mixed data.
+7. **MIT licensed.** Permissively. Forever.
 
 ## Project layout (per Halyard project)
 
@@ -63,21 +72,32 @@ Per-user agent state (skills, API keys, active timer) lives in
 `~/.halyard/`, not in the project folder.
 
 `ai-sessions.log` is plain text, open format — the same local-first guarantee
-as `time.timeclock`. New sessions are always appended. The one permitted
-exception is attribution correction: when a user runs `halyard assign-unattributed`,
-the file is atomically rewritten to update the `project=` field on previously
-unattributed lines. No captured data is discarded; only the metadata is corrected.
-The cloud sync and enterprise layers read from this file; they do not replace it.
+as `time.timeclock`. New sessions are always appended. The current hardening
+track is moving attribution corrections toward explicit correction records so
+the open log can become genuinely append-only. Cloud sync and enterprise layers
+must read from this local source of truth; they do not replace it.
 
 ## Active focus (May 2026)
 
-- **v0.1 — Log and Invoice:** Closing the loop on human time reporting and
-  log querying via local metadata. Next: SDK-backed agent REPL.
-- **v2.4 — Data Integrity:** Ensuring no AI sessions are lost or dropped.
-  Quarantine for malformed logs and interactive recovery for unattributed
-  sessions are live.
-- **v2 — AI Work Ledger:** Architecting the Beancount ledger and plan-based
-  cost allocation (seats vs credits vs API).
+- **Security and distribution hardening:** dashboard write safety, packaged
+  templates, dependency audit, launch-readiness checks.
+- **Log integrity:** locking, correction records, shared timer orchestration,
+  and active-file race cleanup.
+- **Cache and audit hardening:** SQLite read-model reliability, pricing table
+  integrity, invoice audit schema, and config-history robustness.
+- **Attestable AI work appendix:** signed, verifiable, client-safe proof of
+  AI-assisted work. This is the current network-effect feature.
+- **Design-partner validation:** outcome graph and org rollups are gated until
+  real users ask for them.
+
+## Deferred or gated
+
+- Org admin dashboards, SSO/RBAC, and hosted enterprise reporting wait until
+  security posture and design-partner pull justify them.
+- Outcome graph work waits until at least one design partner asks to connect
+  AI sessions to commits, PRs, tests, and delivered outcomes.
+- Calendar scheduling and new collectors beyond the current core set are not
+  current wedge work.
 
 ## Stack defaults
 

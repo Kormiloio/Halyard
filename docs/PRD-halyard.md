@@ -1,44 +1,56 @@
 # PRD: Halyard
 
-**Status:** Living document — update as the product direction evolves.  
-**Last meaningful update:** May 7, 2026
+**Status:** Current public product PRD
+**Last meaningful update:** May 8, 2026
+**Companion:** [`current-direction.md`](current-direction.md)
 
 ---
 
-## Status — May 7, 2026
+## Status — May 8, 2026
 
-Halyard has reached **v0.1 / v1.5 maturity**.
+Halyard has reached a working alpha:
 
-- **Time Tracking**: `halyard start/stop` and `halyard invoice` are fully
+- **Time tracking:** `halyard start/stop` and `halyard invoice` are
   functional for human time.
-- **AI Capture**: Production-ready collectors for **Claude Code**, **Cursor**,
+- **AI capture:** Collectors for **Claude Code**, **Cursor**,
   **Gemini CLI**, and **Codex App** are implemented with ambient project
   attribution.
-- **Analytics**: `halyard report` and `halyard dashboard` provide local
-  visibility into human time and AI spend.
-- **Data Integrity**: Canonical serialization, malformed record quarantine,
-  and recovery of unattributed sessions are active.
-- **Log Querying**: `halyard log` provides a provider-neutral local query
-  agent for work metadata.
+- **Local visibility:** `halyard report`, `halyard dashboard`, `halyard tui`,
+  and the REPL provide local visibility into human time, AI spend, model mix,
+  and attribution state.
+- **Data integrity:** Canonical serialization, malformed record quarantine,
+  recoverable unattributed sessions, attribution provenance, and security
+  hardening are active or in the current hardening track.
+- **Ledger:** `halyard report --ledger` allocates API, seat, and credit plan
+  costs by project with trust labels.
 
-Next milestones: Full SDK-backed AI agent (Claude tool-use loop), and the
-transition to the Beancount-backed AI Work Ledger (v2).
+Current milestones:
+
+1. Finish security/distribution hardening.
+2. Finish log integrity and shared timer orchestration.
+3. Harden cache, pricing, and invoice audit behavior.
+4. Ship the attestable AI work appendix as the next proof-of-work artifact.
+5. Defer outcome graph and org dashboards until design partners ask for them.
 
 ---
 
 ## What Halyard Is
 
-Halyard is AI work intelligence infrastructure. It captures where AI-assisted work
-happens — time, tokens, models, cost, project attribution — and turns that data
-into actionable intelligence for individuals and organizations alike.
+Halyard is the open AI work ledger. It captures where AI-assisted work happens
+- time, tokens, models, cost, project attribution, and trust metadata - and
+turns that data into proof-of-work artifacts for individuals and AI Work
+Intelligence for teams.
 
 For the **solo developer or freelancer**: human time, AI spend, and invoice
 evidence as plain text on your machine, operated by CLI. No account required.
 Works offline. Data is yours, in your folder, forever.
 
-For **engineering teams and enterprises**: unified visibility into AI investment,
-productivity, and cost allocation across the organization — built on the same
-open data format, extended with a cloud sync and reporting layer.
+For **small AI shops and teams**: shared evidence, client-safe appendices,
+project spend, and trust-labeled cost allocation across multiple engineers.
+
+For **future enterprise buyers**: governance, cost centers, redacted sync, and
+effectiveness analytics across tools - built on the same local data format, but
+only after the local proof artifact and security posture are credible.
 
 The individual experience is the entry point. The enterprise layer is optional,
 additive, and never changes what the local files mean.
@@ -73,14 +85,15 @@ The instruments don't exist. Halyard builds them.
 
 ## Strategic Thesis
 
-**The collection protocol is the moat.**
+**The trusted local ledger is the moat.**
 
 `ai-sessions.log` and the collectors that write to it are open source (MIT).
 Enterprise buyers can audit exactly what the agent captures. The analytics and
 cloud layers built on top are where the business model lives.
 
-This mirrors the OpenTelemetry model: open instrumentation standard, proprietary
-analytics on top. The difference is Halyard owns both sides.
+The protocol story should be earned by adoption. Halyard can publish stable
+formats, fixtures, and examples, but a public `ai-sessions.log` spec becomes
+strategic only after at least one external emitter exists.
 
 The plaintext files are the durable asset. The CLI, dashboard, and cloud sync
 are views over that asset. A future in which ten tools write compatible
@@ -115,13 +128,16 @@ Halyard ships in layers, each proving the next:
 |-------|------|-------------------|--------|
 | v0 | Time and Invoice | How much human time did this cost? | Shipped |
 | v1 | AI Intelligence | What AI did I use and what did it cost? | Shipped |
-| v1.5 | Multi-Tool Collectors | Capture AI work across all tools, everywhere | Shipped |
+| v1.5 | Multi-Tool Collectors | Capture AI work across Claude, Cursor, Gemini, Codex | Shipped |
 | v2 | AI Work Ledger + Dashboard | What did AI-assisted work cost per project? | Shipped |
-| v3 | Org Admin Dashboard | What is our organization getting for its AI investment? | Specced |
+| v2.16-v2.22 | Hardening Track | Can the local ledger survive real use and review? | Active |
+| v2.19 | Attestable Appendix | Can I prove AI-assisted work to someone else safely? | Next |
+| v3.0 | Outcome Graph | Did AI-assisted work connect to outcomes? | Gated |
+| v3+ | Org Intelligence | What is the org getting from AI investment? | Deferred |
 
-Each layer depends on the previous. The local instrument panel must work before
-building the org rollup. The open collection protocol must exist before the
-analytics layer has anything to analyze.
+Each layer depends on the previous. The local ledger must be trustworthy before
+it can become a shareable proof artifact. The proof artifact must create user
+pull before org rollups or outcome analytics deserve more surface area.
 
 ---
 
@@ -217,11 +233,12 @@ These apply to every layer of the product:
 2. **Plain text forever.** `time.timeclock`, `ai-sessions.log`, TOML configs.
    No SQLite as source of truth. No proprietary formats.
 3. **Files are the source of truth.** Any UI is a view onto the files.
-4. **Append-only logs, with one carve-out.** New sessions are always appended.
-   Attribution corrections (assigning an unattributed session to a project via
-   `halyard assign-unattributed`) may atomically rewrite the log to update the
-   `project=` field. No captured data is discarded; only metadata is corrected.
-   All other modifications happen in the analytics layer only.
+4. **Append-only direction, with today's carve-out documented.** New sessions
+   are always appended. Attribution corrections (assigning an unattributed
+   session to a project via `halyard assign-unattributed`) may currently
+   atomically rewrite the log to update the `project=` field. No captured data
+   is discarded; only metadata is corrected. The active hardening track moves
+   this toward explicit correction records.
 5. **MIT licensed.** The collection protocol and CLI are open source, permanently.
 6. **No silent writes.** Modifications to user data are proposed, not applied
    automatically.
@@ -262,29 +279,29 @@ These apply to every layer of the product:
 ## Open Questions and Next Bets
 
 These are the open questions as of May 2026 — not committed roadmap, but the
-decisions that will shape v3 and beyond:
+decisions that shape the current hardening and proof-of-work wedge:
 
-**Dynamic pricing sync.** The pricing table is snapshotted per release. Models
-drop their prices constantly. A `halyard update-pricing` command that fetches
-from a community-maintained source would keep costs accurate between releases.
-The question is which source to trust and how to validate it.
+**Attestable appendix.** The next network-effect feature is a signed,
+verifiable AI work appendix. It should let a recipient verify that an invoice
+appendix was not modified, while preserving the privacy contract: no prompts,
+no code, no file contents.
 
-**Budget alerts.** A per-project `daily_limit_usd` in `halyard.toml` with a
-hook that warns when the limit is reached. The mechanism exists (hooks run
-synchronously); the UX for "what happens when you hit the limit mid-session"
-needs a spec.
+**Pricing table trust.** Dynamic pricing is useful, but it cannot silently
+overwrite a trusted local table. The current question is how to make
+`halyard update-pricing` fail closed on suspicious changes while keeping first
+setup simple.
 
-**Git branch cost queries.** All sessions now carry `tags=branch:<name>`. The
-data exists to answer "what did the auth-migration branch cost?" — but there's
-no `halyard report --branch` command yet.
+**Append-only correction records.** Attribution cleanup currently exists, but
+the durable trust story improves when corrections become explicit amendment
+records instead of in-place rewrites.
 
-**Outcome attribution.** The next frontier after cost attribution is connecting
-AI spend to delivered outcomes: features shipped, bugs fixed, PRs merged. This
-requires either user-defined tagging or git integration deeper than branch names.
+**Design-partner pull.** Outcome graph, duplicate-effort detection, org
+dashboards, and redacted sync are not gone. They are gated until design
+partners ask for them and the local proof artifact has been tested in the
+field.
 
-**Cloud sync and the enterprise path.** The org admin dashboard (v3) needs
-cloud infrastructure for multi-user aggregation. The file format is ready. The
-question is: managed service, self-hosted, or both?
+**External emitters.** A public `ai-sessions.log` spec should follow at least
+one external tool emitting the format. Specs without adoption are not enough.
 
 ---
 
@@ -292,13 +309,15 @@ question is: managed service, self-hosted, or both?
 
 Detailed per-feature context lives in:
 
+- [`current-direction.md`](current-direction.md) — current public product
+  direction and build sequence
 - [`PRD-ai-work-ledger.md`](PRD-ai-work-ledger.md) — the AI session ledger,
-  plan costs, and attribution model (v1 / v2)
+  plan costs, and attribution model (implemented baseline)
 - [`PRD-local-activity-dashboard.md`](PRD-local-activity-dashboard.md) — the
-  Glass Cockpit local dashboard (v2)
+  Glass Cockpit local dashboard (implemented local surface)
 - [`PRD-org-admin-dashboard.md`](PRD-org-admin-dashboard.md) — org rollup,
-  governance, and enterprise reporting (v3)
+  governance, and enterprise reporting (deferred / design-partner gated)
 
 Feature PRDs are snapshots of the thinking at the time each capability was
-conceived. They are not updated retroactively — the openspec change history is
-the authoritative record of what was built and why.
+conceived. When they disagree with `current-direction.md`, the current
+direction doc and active OpenSpec changes win.

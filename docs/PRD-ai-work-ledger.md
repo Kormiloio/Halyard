@@ -1,10 +1,11 @@
 # PRD: Halyard AI Work Ledger
 
-**Status — May 7, 2026:**
-The AI session infrastructure (v1) and multi-tool collectors (v1.5) are fully
-implemented. The product is now moving into the ledger phase (v2), including
-the `ai-plans.toml` configuration and the transition to a Beancount-backed
-accounting engine.
+**Status — May 8, 2026:**
+Implemented baseline. This PRD describes the ledger wedge that is now largely
+shipped: AI session capture, plan allocation, reports, dashboard visibility,
+invoice evidence, and trust labels. It remains useful background, but it is not
+the active roadmap. See [`current-direction.md`](current-direction.md) for the
+current hardening and attestable-appendix sequence.
 
 ---
 
@@ -46,10 +47,10 @@ it at all. Nobody can answer, with local evidence:
 The cool part of Halyard is not the invoice CLI. The cool part is a
 user-owned ledger of AI labor and AI spend.
 
-Halyard should define the open local protocol first, then build product
-experiences and business layers on top. The plaintext files are the durable
-asset. The CLI, reports, local activity dashboard, and future cloud sync are
-views over that asset.
+Halyard should make the local product useful first, then earn the right to
+publish broader specs and business layers on top. The plaintext files are the
+durable asset. The CLI, reports, local activity dashboard, attestable appendix,
+and future sync are views over that asset.
 
 ## Goals
 
@@ -145,7 +146,8 @@ Required capabilities:
 
 ## Later Scope
 
-- API proxy collector for Anthropic, OpenAI, Gemini, and OpenRouter.
+- API proxy collector for Anthropic, OpenAI, Gemini, and OpenRouter (deferred;
+  no new collectors until the current hardening track is complete).
 - SDK wrappers for scripts and internal tools.
 - ~~Tool-specific collectors for Codex, Cursor, Copilot, Devin, Factory, and
   other AI work surfaces.~~ **Shipped (v1.5):** Codex, Cursor, and Gemini CLI
@@ -154,9 +156,10 @@ Required capabilities:
   manual allocation.~~ **Shipped (v2):** `ai-plans.toml` + `halyard report --ledger`.
 - ~~Deduplication across tool-wraps-tool scenarios.~~ **Shipped (v1.5):** The
   `cursor_version` guard in the Claude Code collector prevents double-recording.
-- Team sync and dashboard.
+- Team sync and dashboard (deferred until design-partner pull and security
+  readiness).
 - Compliance/audit exports.
-- Outcome-based billing support.
+- Outcome-based billing support (gated on outcome-graph demand).
 
 ## Key User Stories
 
@@ -174,7 +177,9 @@ Required capabilities:
 ## Data Principles
 
 - Plain text is the source of truth.
-- Usage records are append-only. Attribution corrections (via `halyard assign-unattributed`) are the one permitted atomic rewrite — no captured data is discarded.
+- Usage records should move toward append-only correction records. Today,
+  attribution corrections via `halyard assign-unattributed` are the one
+  permitted atomic rewrite; no captured data is discarded.
 - Unknown fields are ignored by old parsers.
 - Captured cost is snapshotted at the time of capture.
 - Sensitive content is opt-in, not default.
@@ -205,6 +210,9 @@ Required capabilities:
 - The README demo makes the AI work ledger obvious within the first minute.
 
 ## Open Questions
+
+Some of these questions have since been answered by implementation. Remaining
+questions should be interpreted through the current direction doc.
 
 - Should plan/seat costs live in `halyard.toml`, `plans.toml`, or per-user
   `~/.halyard/config.toml`?

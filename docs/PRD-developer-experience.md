@@ -1,9 +1,15 @@
 # PRD: Developer Experience Wave
 
-**Status:** In progress  
+**Status:** Historical wave, partially implemented
 **Covers:** v0.1 (log + invoice), v0.2/v0.3 (`halyard log` agents),
-v2.4 (data integrity), v4 (TUI)  
+v2.4 (data integrity), v4 (TUI)
 **Last meaningful update:** May 2026
+**Current direction:** See [`current-direction.md`](current-direction.md).
+
+This document records the developer-experience wave that closed early product
+gaps. It is not the current roadmap. Current work is security/distribution
+hardening, log integrity, cache/audit hardening, and the attestable AI work
+appendix.
 
 ---
 
@@ -18,10 +24,9 @@ Three AI tools — Claude CLI, Cursor, and Antigravity (Gemini CLI) — were ask
 independently to evaluate the project and recommend improvements. Their
 feedback converged on the same four gaps:
 
-1. **v0 stubs block real-world use.** `halyard log` and `halyard invoice` both
-   raise `NotImplementedError`. They are the two most user-visible commands in
-   the product, and neither works. Every other capability is being captured into
-   a log that can't be read by an agent or invoiced.
+1. **v0 stubs blocked real-world use.** `halyard log` and `halyard invoice`
+   were originally stubs. They are now implemented, and this section is
+   historical context for why the wave existed.
 
 2. **Silent drops erode trust.** When a session can't be attributed to a project
    (no active timer, no matching git remote, hub not configured) the collector
@@ -35,10 +40,9 @@ feedback converged on the same four gaps:
    implicit and fragile — this will become a maintenance problem as the log
    format evolves.
 
-4. **`halyard log` is the wrong shape.** The command is a REPL stub. The right
-   shape is a structured Claude SDK call that: reads the log, runs tool use
-   against the local files, and returns a typed response. This is Antigravity's
-   best observation and the most technically interesting item in the wave.
+4. **`halyard log` needed an agent-backed shape.** The original command was a
+   stub. The product now has local, Claude, and OpenAI-compatible query paths,
+   with more structured-output hardening still possible later.
 
 This PRD covers the changes that address these four gaps, plus the directional
 decision on a Textual TUI that was surfaced by Antigravity and endorsed by the
@@ -80,16 +84,18 @@ against ledger/budget data. The current agent loop answers through a typed
 `LogQueryResponse` wrapper and captures structured summaries from tool calls,
 but final model text is still provider-native prose.
 
-### The gap
+### The historical gap
 
 `halyard log` is the primary way a user is supposed to interact with their
 captured data through natural language. It was always intended as an AI agent
 loop that reads `ai-sessions.log`, `time.timeclock`, and the ledger files, and
-answers questions. Today it is a `raise NotImplementedError`.
+answers questions. At the time this PRD was written it raised
+`NotImplementedError`; that is no longer true.
 
 `halyard invoice` is the output stage of the v0 time-and-invoice loop: read the
 timeclock, pull project/client metadata, render an invoice markdown file, and
-optionally generate a PDF. Also a stub.
+optionally generate a PDF. At the time this PRD was written it was also a
+stub; that is no longer true.
 
 ### What we're building
 

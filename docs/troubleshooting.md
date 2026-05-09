@@ -29,7 +29,7 @@ If you want Halyard to capture sessions from many repos into one place, configur
 a hub:
 
 ```bash
-halyard hub set /path/to/halyard-project
+halyard hub /path/to/halyard-project
 ```
 
 ## Hooks Missing

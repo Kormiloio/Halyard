@@ -1,5 +1,8 @@
 # AI Work Intelligence
 
+**Status:** Current strategic framing. For the near-term build sequence, see
+[`current-direction.md`](current-direction.md).
+
 Halyard is local-first infrastructure for understanding AI-assisted work.
 
 The first version of Halyard captures human time, AI sessions, model usage,
@@ -97,6 +100,8 @@ For individuals and freelancers, AI work intelligence should answer:
 - What did those AI sessions cost?
 - Which client or project should the work be attributed to?
 - What evidence can I safely include with an invoice?
+- Can I produce a signed, verifiable proof artifact without exposing prompts
+  or source code?
 
 ## Team And Organization Workflows
 
@@ -115,11 +120,32 @@ projection of local metadata without changing what the local files mean.
 
 ## Future Directions
 
+### Attestable AI Work Appendix
+
+The current next proof-of-work feature is a signed, verifiable appendix that a
+freelancer, consultant, or small AI shop can attach to an invoice or
+deliverable. The recipient can verify the artifact was not modified, while the
+artifact preserves Halyard's privacy contract: no prompts, no transcripts, no
+source code, and no file contents.
+
+This is the near-term bridge from individual value to team pull. A recipient
+who trusts one appendix may ask other contractors or teams to provide the same
+kind of evidence.
+
+### Security And Integrity Hardening
+
+Before broad sharing or enterprise aggregation, Halyard must make the local
+ledger more defensible: dashboard write safety, log locking, correction
+records, pricing-table integrity, cache migrations, and clearer audit trails.
+
 ### Calendar Blocks
 
 Users may want to reserve focused time for AI collaboration, just as they reserve
 time for meetings or deep work. Halyard could create local calendar events for
 planned AI work and later compare planned time with captured sessions.
+
+Calendar scheduling is not the current wedge. It is deferred until the proof
+and integrity surfaces are stronger.
 
 ### Work Quality Signals
 
@@ -134,6 +160,9 @@ surface quality and effectiveness signals such as:
 - heavy AI usage with no associated pull request or deliverable.
 
 These signals are not judgments by themselves. They are prompts for review.
+
+Outcome/work-quality analytics are gated on design-partner pull. They should
+not become the next build priority until real users ask for them.
 
 ### Duplicate Effort Detection
 
@@ -155,4 +184,3 @@ and organization reporting.
 The local product earns trust by staying simple, inspectable, and owned by the
 user. Larger reporting layers should build on that foundation rather than
 replacing it.
-
