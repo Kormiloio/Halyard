@@ -426,6 +426,7 @@ def start(
         raise typer.Exit(code=1) from e
 
     console.print(f"[bold green]Started[/] [bold]{timer.slug}[/] at {timer.started}.")
+    console.print("[dim]AI sessions captured automatically — [bold]halyard stop[/] when done.[/]")
 
 
 @app.command()

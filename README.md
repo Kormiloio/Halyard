@@ -2,31 +2,35 @@
 
 > *A halyard is the line that raises the sails. Pull on it, the sails go up. Pull on this one, your AI work comes into focus.*
 
-**The open AI work ledger.** For individuals who need to prove what they did,
-and teams who need to know what they are spending. Time, tokens, models, and
-cost - captured where the work happens, owned by you, readable by anyone.
+**Your AI work leaves a trail. Halyard makes that trail legible, auditable, and client-safe.**
 
-**Status:** alpha — open source, MIT licensed, no account required. The local
-ledger, multi-tool capture, reports, invoices, Glass Cockpit, TUI, and REPL
-are shipped and in daily use. Current work: cache hardening (v2.18), then
-outcome-aware metadata and an attestable AI work appendix.
+Every AI session — time, tokens, model, cost, project — captured where the work happens,
+stored as plain text on your machine, owned by you. No account. No cloud service. No
+prompt or code capture. Ever. MIT licensed.
+
+**Status:** alpha, open source — capture loop, reports, invoices, Glass Cockpit, and TUI
+in daily use. v0.2.0 just shipped.
 
 ---
 
 ## The problem
 
-You're doing AI-assisted work. So is your team. So is every engineering department at every company that's serious about staying competitive.
+You're doing AI-assisted work. At the end of a sprint, a month, or a client engagement,
+you can't answer three basic questions:
 
-Nobody knows what it is actually costing. Nobody has clean proof of what AI
-helped produce. Time tracking tools do not know about tokens. Finance
-dashboards do not know which model you used. Productivity tools do not capture
-the mix of human judgment and AI execution that makes modern work happen.
+- What did AI actually cost on this project?
+- What did AI help produce — and can you prove it?
+- Is your AI spend going in the right direction?
 
-The instruments don't exist yet. Halyard builds them.
+Your tools don't record this. Halyard does.
 
-Read more about the product direction in
-[`Current Direction`](docs/current-direction.md) and
-[`AI Work Intelligence`](docs/AI-work-intelligence.md).
+It runs as lightweight hooks inside Claude Code, Cursor, and Gemini CLI. Every session
+end writes one line to a plain-text log you own. From that log: cost breakdowns,
+project attribution, invoice evidence, and eventually a signed, verifiable AI work
+appendix you can hand to a client.
+
+The privacy promise is unconditional: Halyard captures session metadata, never prompt
+content, code context, file contents, or transcripts.
 
 ---
 
