@@ -18,6 +18,9 @@ Screen {
 
 #session-feed,
 #project-pane,
+#watch-pane,
+#captain-pane,
+#voyage-pane,
 #usage-pane,
 #budget-pane,
 #model-pane {

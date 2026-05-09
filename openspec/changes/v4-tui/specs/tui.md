@@ -25,15 +25,23 @@ THEN the TUI exits cleanly and the terminal is restored.
 
 ---
 
-## Main layout
+## Main Layout
 
-The TUI has three panes arranged vertically:
+The TUI uses a main column plus a stacked side rail:
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │ HALYARD  [hub: ~/kormilo]  [May 2026]  [d w m a]    │  ← Header
 ├──────────────────────────┬──────────────────────────┤
-│ Session Feed             │ Budget Status            │  ← Main
+│ Session Feed             │ Current Watch            │
+│ Project Detail           ├──────────────────────────┤
+│                          │ Captain's Quarters       │
+│                          ├──────────────────────────┤
+│                          │ Voyage Roster            │
+│                          ├──────────────────────────┤
+│                          │ Voyage Stats             │
+│                          ├──────────────────────────┤
+│                          │ Budget Status            │
 │                          ├──────────────────────────┤
 │                          │ Model Breakdown          │
 ├──────────────────────────┴──────────────────────────┤
@@ -119,12 +127,51 @@ percentage of total cost.
 
 ---
 
+## Current Watch Panel
+
+### WHEN no timer is active for the current project directory
+THEN the panel shows `At anchor`, total sessions, proof state, and either
+`Manifest clean` or an SOS/adrift line for sessions without project attribution.
+
+### WHEN a timer is active for the current project directory
+THEN the panel shows `Making way · <slug>`, elapsed watch time, sessions since
+the timer started, manifest coverage, proof state, cost, and an SOS/adrift line
+when any current-watch sessions are unattributed.
+
+---
+
+## Captain's Quarters Panel
+
+### WHEN the panel is visible
+THEN it shows the user's current rank, progress toward the next rank, stripe
+state, proof score, manifest coverage, Passport stamps by AI tool, and earned
+medals.
+
+### WHEN the TUI's session feed is filtered by time window, project scope, or branch
+THEN Captain's Quarters still uses the full loaded log so ranks, medals, and
+Passport stamps do not appear to disappear during navigation.
+
+---
+
+## Voyage Roster Panel
+
+### WHEN the panel is visible
+THEN it shows the Friends of the Sea project roster with stage labels,
+session-count progress, moored counts, and completed-project creature traits
+when available.
+
+### WHEN the TUI's session feed is filtered by time window, project scope, or branch
+THEN the Voyage Roster still uses the full loaded log so project voyage state
+remains stable while the user explores filtered views.
+
+---
+
 ## Time window
 
 ### WHEN the user presses `d`, `w`, `m`, or `a`
-THEN the session feed, project drill-down, budget panel, and model breakdown
-all update to reflect the new time window. The active window key is highlighted
-in the footer.
+THEN the session feed, project drill-down, Voyage Stats panel, and model
+breakdown update to reflect the new time window. Current Watch, Captain's
+Quarters, and Voyage Roster continue to use the full loaded log.
 
 ---
 

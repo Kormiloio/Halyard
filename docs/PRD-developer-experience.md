@@ -224,8 +224,11 @@ First vertical slice implemented.
 - `halyard tui` launches a Textual application when installed with
   `halyard[tui]`; the base install remains lean and prints a clear install
   instruction when Textual is missing.
-- The first layout renders a session feed, budget status panel, model breakdown
-  panel, header/status line, and footer key hints.
+- The first layout renders a session feed, nautical side rail, budget status
+  panel, model breakdown panel, header/status line, and footer key hints.
+- The side rail now mirrors the Glass Cockpit's nautical UX: Current Watch
+  proof state, Captain's Quarters service record, and Voyage Roster project
+  progress.
 - `SessionStore` loads `ai-sessions.log`, tails appended lines with
   `watchfiles`, and filters by time window, project scope, and branch tag.
 - Keyboard shortcuts for `d`/`w`/`m`/`a` time windows, `p` project scope, and
@@ -237,8 +240,8 @@ First vertical slice implemented.
   with project sessions, model mix, today/month spend vs budget limits, and
   Escape returns to the feed.
 
-Still pending: new-row highlighting, richer project detail visuals, and
-explicit log rotation re-open behavior.
+Still pending: richer project detail visuals and any future write actions; the
+current v4 TUI remains read-only by design.
 
 ### The gap
 
@@ -266,6 +269,9 @@ the static Rich dashboard with an interactive terminal UI:
   projects, color-coded by proximity to limit.
 - **Model breakdown** — a sparkline or bar chart showing token/cost distribution
   across models used in the current period.
+- **Nautical side rail** — Current Watch, Captain's Quarters, and Voyage Roster
+  keep rank, medals, Passport stamps, proof state, and Friends of the Sea visible
+  in the terminal.
 - **Time window** — configurable to today / this week / this month / all time,
   switchable with keyboard shortcuts.
 

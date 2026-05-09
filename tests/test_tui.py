@@ -23,17 +23,23 @@ def _session(
     project: str = "acme:auth",
     tags: list[str] | None = None,
     cost_usd: float = 1.25,
+    tool: str = "claude-code",
+    model: str = "claude-sonnet-4-6",
+    input_tokens: int = 100,
+    output_tokens: int = 50,
+    tokens_available: bool = True,
 ) -> AiSession:
     start_time = start or datetime(2026, 5, 7, 10)
     return AiSession(
         start=start_time,
         end=start_time + timedelta(minutes=5),
-        tool="claude-code",
-        model="claude-sonnet-4-6",
-        input_tokens=100,
-        output_tokens=50,
+        tool=tool,
+        model=model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
         cost_usd=cost_usd,
         project=project,
+        tokens_available=tokens_available,
         tags=tags or [],
     )
 
@@ -145,6 +151,114 @@ def test_usage_pane_shows_summary(tmp_path: Path) -> None:
             pane = pilot.app.query_one(UsagePane)
             assert "Voyage Stats" in pane.last_rendered_text
             assert "claude-sonnet-4-6" in pane.last_rendered_text
+
+    asyncio.run(run())
+
+
+def test_watch_pane_idle_shows_anchor_and_adrift(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.widgets.watch_pane import WatchPane
+
+    pane = WatchPane()
+    pane.render_watch(
+        tmp_path,
+        [
+            _session(project="acme:auth"),
+            _session(project=None, tokens_available=False),
+        ],
+    )
+
+    assert "At anchor" in pane.last_rendered_text
+    assert "Adrift    1" in pane.last_rendered_text
+    assert "· · · — — — · · ·" in pane.last_rendered_text
+
+
+def test_watch_pane_active_shows_current_watch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("textual")
+    from halyard import reports
+    from halyard.tui.widgets.watch_pane import WatchPane
+
+    active_path = tmp_path / "active"
+    timeclock = tmp_path / "time.timeclock"
+    timeclock.write_text("")
+    active_path.write_text(f"slug=acme:auth\ntimeclock={timeclock}\nstarted=2026-05-07 10:00:00\n")
+    monkeypatch.setattr(reports, "_HALYARD_ACTIVE", active_path)
+
+    pane = WatchPane()
+    pane.render_watch(
+        tmp_path,
+        [
+            _session(start=datetime(2026, 5, 7, 10, 5), project="acme:auth"),
+            _session(start=datetime(2026, 5, 7, 10, 8), project=None),
+        ],
+    )
+
+    assert "Making way · acme:auth" in pane.last_rendered_text
+    assert "Sessions  2  1/2 in manifest" in pane.last_rendered_text
+
+
+def test_captain_pane_shows_rank_passport_and_medals(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.widgets.captain_pane import CaptainPane
+
+    (tmp_path / "time.timeclock").write_text(
+        "i 2026-05-07 10:00:00 acme:auth\no 2026-05-07 11:45:00\n"
+    )
+    pane = CaptainPane()
+    pane.render_record(
+        tmp_path,
+        [
+            _session(tool="claude-code"),
+            _session(tool="vscode", model="manual-task"),
+        ],
+    )
+
+    assert "Captain's Quarters" in pane.last_rendered_text
+    assert "Deckhand" in pane.last_rendered_text
+    assert "VS Code" in pane.last_rendered_text
+    assert "Eight Bells" in pane.last_rendered_text
+
+
+def test_voyage_pane_shows_project_stage(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.widgets.voyage_pane import VoyagePane
+
+    pane = VoyagePane()
+    pane.render_voyages(
+        tmp_path,
+        [
+            _session(start=datetime(2026, 5, 7, 9, minute), project="acme:auth")
+            for minute in range(5)
+        ],
+    )
+
+    assert "Voyage Roster" in pane.last_rendered_text
+    assert "acme:auth" in pane.last_rendered_text
+    assert "Making Headway" in pane.last_rendered_text
+
+
+def test_tui_renders_nautical_side_rail(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    from halyard.tui.app import HalyardApp
+    from halyard.tui.store import SessionStore
+    from halyard.tui.widgets.captain_pane import CaptainPane
+    from halyard.tui.widgets.voyage_pane import VoyagePane
+    from halyard.tui.widgets.watch_pane import WatchPane
+
+    async def run() -> None:
+        store = SessionStore(tmp_path / "ai-sessions.log")
+        store.sessions = [
+            _session(tool="claude-code"),
+            _session(tool="vscode", model="manual-task"),
+        ]
+        store.load = lambda: None  # type: ignore[method-assign]
+        app_instance = HalyardApp(store=store)
+        async with app_instance.run_test() as pilot:
+            assert "Current Watch" in pilot.app.query_one(WatchPane).last_rendered_text
+            assert "Captain's Quarters" in pilot.app.query_one(CaptainPane).last_rendered_text
+            assert "Voyage Roster" in pilot.app.query_one(VoyagePane).last_rendered_text
 
     asyncio.run(run())
 

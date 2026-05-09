@@ -31,6 +31,12 @@ rather than a report generator.
   configured projects. Color-coded green → yellow → red → blinking red.
 - **Model breakdown** — bar chart of token/cost distribution across models for
   the selected time window.
+- **Current Watch** — live nautical proof state for the active timer: making way
+  vs at anchor, manifest coverage, SOS/adrift warning, and watch cost.
+- **Captain's Quarters** — terminal service record with rank, stripes, proof
+  score, Passport stamps, and earned medals.
+- **Voyage Roster** — Friends of the Sea project stages and progress bars,
+  including moored projects and assigned sea-creature traits.
 - **Time window** — `d` today, `w` week, `m` month, `a` all time.
 - **Keyboard-first** — all navigation by keyboard. `?` opens the help panel.
 
@@ -62,6 +68,8 @@ All five open questions from the proposal phase have been resolved:
 - Sessions appended to the log appear in the feed within 1 second.
 - Project drill-down and branch filter work with keyboard navigation alone.
 - Budget status panel shows correct spend-vs-limit for all configured projects.
+- Current Watch, Captain's Quarters, and Voyage Roster mirror the nautical
+  state language from the Glass Cockpit without adding write actions.
 - `pip install halyard[tui]` installs the optional dependency.
 - Running `halyard tui` without Textual installed prints a clear install instruction
   and exits 1.

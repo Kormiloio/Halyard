@@ -58,6 +58,26 @@
 - [x] Refreshes from store + active time window
 - [x] Each row: model name, session count, cost, % of total
 
+### `src/halyard/tui/widgets/watch_pane.py`
+- [x] `WatchPane(Widget)` — active watch and proof state
+- [x] Shows `At anchor` when no project-local timer is active
+- [x] Shows `Making way · <slug>`, elapsed time, manifest coverage, cost, and
+  SOS/adrift warning when a project-local timer is active
+
+### `src/halyard/tui/widgets/captain_pane.py`
+- [x] `CaptainPane(Widget)` — terminal Captain's Quarters
+- [x] Reuses `build_service_record()` for rank, stripes, medals, Passport, and
+  proof score
+- [x] Uses the full loaded log so achievements stay stable while the session
+  feed is filtered
+
+### `src/halyard/tui/widgets/voyage_pane.py`
+- [x] `VoyagePane(Widget)` — Friends of the Sea voyage roster
+- [x] Reuses `build_voyage_summaries()` for stage labels, progress bars, moored
+  counts, and sea-creature traits
+- [x] Uses the full loaded log so voyage state stays stable while the session
+  feed is filtered
+
 ### `src/halyard/tui/widgets/branch_modal.py`
 - [x] `BranchModal(ModalScreen)` — branch selector overlay
 - [x] Lists all unique branch names from `branch:` tags in active sessions,
@@ -70,6 +90,8 @@
 - [x] `on_mount()`: start log watcher as background worker
 - [x] Layout: Header/status, SessionFeed, BudgetPane + ModelPane side panel,
   Footer with key hints
+- [x] Side rail includes Current Watch, Captain's Quarters, Voyage Roster,
+  Voyage Stats, BudgetPane, and ModelPane
 - [x] Key bindings: `d`, `w`, `m`, `a` (time window); `p` (project toggle);
   `q` (quit)
 - [x] Key binding: `b` (branch modal)
@@ -104,6 +126,10 @@
 - [x] `test_escape_returns_from_project_detail` — Escape restores feed
 - [x] `test_budget_pane_renders_limits` — BudgetPane shows correct spend/limit
   for mocked budget data
+- [x] WatchPane idle + active timer rendering
+- [x] CaptainPane rank, Passport, and medal rendering
+- [x] VoyagePane project stage rendering
+- [x] App integration renders the nautical side rail
 
 ## Quality
 - [x] Run full test suite — all passing

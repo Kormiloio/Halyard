@@ -15,10 +15,13 @@ from textual.widgets import Footer, Header, Static
 from halyard.ai_log import AI_LOG_FILENAME, AiSession
 from halyard.tui.store import SessionStore, TimeWindow
 from halyard.tui.widgets.budget_pane import BudgetPane
+from halyard.tui.widgets.captain_pane import CaptainPane
 from halyard.tui.widgets.model_pane import ModelPane
 from halyard.tui.widgets.project_pane import ProjectPane
 from halyard.tui.widgets.session_feed import SessionFeed
 from halyard.tui.widgets.usage_pane import UsagePane
+from halyard.tui.widgets.voyage_pane import VoyagePane
+from halyard.tui.widgets.watch_pane import WatchPane
 
 if TYPE_CHECKING:
     from halyard.tui.widgets.branch_modal import BranchModal
@@ -75,6 +78,9 @@ class HalyardApp(App[None]):
                 yield SessionFeed(id="session-feed")
                 yield ProjectPane(id="project-pane")
             with Vertical(id="side-pane"):
+                yield WatchPane(id="watch-pane")
+                yield CaptainPane(id="captain-pane")
+                yield VoyagePane(id="voyage-pane")
                 yield UsagePane(id="usage-pane")
                 yield BudgetPane(id="budget-pane")
                 yield ModelPane(id="model-pane")
@@ -158,6 +164,8 @@ class HalyardApp(App[None]):
         status = self.query_one("#status", Static)
         status.update(self._status_text())
         sessions = self.active_sessions()
+        all_sessions = self.store.sessions
+        project_dir = self.store.log_path.parent
         self._clamp_selection(sessions)
         feed = self.query_one(SessionFeed)
         detail = self.query_one(ProjectPane)
@@ -172,6 +180,9 @@ class HalyardApp(App[None]):
             project_sessions = [s for s in sessions if s.project == self.detail_project]
             detail.render_project(self.detail_project, project_sessions)
             pane_sessions = project_sessions
+        self.query_one(WatchPane).render_watch(project_dir, all_sessions)
+        self.query_one(CaptainPane).render_record(project_dir, all_sessions)
+        self.query_one(VoyagePane).render_voyages(project_dir, all_sessions)
         self.query_one(ModelPane).render_sessions(pane_sessions)
         self.query_one(UsagePane).render_sessions(pane_sessions)
         self.query_one(BudgetPane).render_budgets()
