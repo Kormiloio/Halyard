@@ -9,6 +9,8 @@ from datetime import date, datetime
 from rich.panel import Panel
 from rich.text import Text
 
+from halyard.ai_log import AiSession
+
 # ---------------------------------------------------------------------------
 # Trail bar — horizontal progress fill used in the stop card
 # ---------------------------------------------------------------------------
@@ -104,9 +106,8 @@ def _day_char(total: int, attributed: int) -> tuple[str, str]:
     return _HEAT[3]
 
 
-def trail_heatmap(sessions: list, period: datetime) -> Panel:
+def trail_heatmap(sessions: list[AiSession], period: datetime) -> Panel:
     """Rich Panel showing a GitHub-style attribution heatmap for the month."""
-    from halyard.ai_log import AiSession
 
     year, month = period.year, period.month
 
