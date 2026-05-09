@@ -47,6 +47,8 @@ def stop_card(slug: str, elapsed_minutes: float, elapsed_str: str, backfill_coun
         body.append(f"  {backfill_count} AI {noun} attributed\n", style="green")
     else:
         body.append("  AI sessions captured automatically\n", style="dim")
+    body.append("\n")
+    body.append_text(_celebration_line(elapsed_minutes))
     return Panel(
         body,
         title="[bold green]trail closed[/]",
@@ -54,6 +56,29 @@ def stop_card(slug: str, elapsed_minutes: float, elapsed_str: str, backfill_coun
         padding=(0, 1),
         expand=False,
     )
+
+
+def _celebration_line(elapsed_minutes: float) -> Text:
+    t = Text()
+    t.append("  ")
+    if elapsed_minutes >= 90:
+        t.append("🎊 ", style="bold")
+        t.append("✦ ", style="bold yellow")
+        t.append("full sail!", style="bold green")
+        t.append(" ✦ ", style="bold cyan")
+        t.append("🎊", style="bold")
+    elif elapsed_minutes >= 45:
+        t.append("🎉 ", style="bold")
+        t.append("great work!", style="bold green")
+        t.append(" 🎉", style="bold")
+    elif elapsed_minutes >= 15:
+        t.append("✦ ", style="bold yellow")
+        t.append("good run.", style="green")
+        t.append(" ✦", style="bold cyan")
+    else:
+        t.append("· trail noted. ·", style="dim")
+    t.append("\n")
+    return t
 
 
 # ---------------------------------------------------------------------------
