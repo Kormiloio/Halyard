@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
 from halyard.reports import (
@@ -64,7 +65,8 @@ def test_build_ai_report_counts_unattributed_sessions(tmp_path: Path) -> None:
 def test_health_checks_report_missing_hook(tmp_path: Path) -> None:
     _init_project(tmp_path)
 
-    checks = build_health_checks(tmp_path)
+    with patch("halyard.reports.Path.home", return_value=tmp_path / "home"):
+        checks = build_health_checks(tmp_path)
 
     hook = next(check for check in checks if check.label == "Claude Code hook")
     assert hook.status == "warning"
@@ -88,7 +90,50 @@ def test_health_checks_detect_project_hook(tmp_path: Path) -> None:
         )
     )
 
-    checks = build_health_checks(tmp_path)
+    with patch("halyard.reports.Path.home", return_value=tmp_path / "home"):
+        checks = build_health_checks(tmp_path)
+
+    hook = next(check for check in checks if check.label == "Claude Code hook")
+    assert hook.status == "healthy"
+
+
+def test_health_checks_detect_hook_with_full_binary_path(tmp_path: Path) -> None:
+    """Full absolute binary paths (uv tool installs) should be recognized as installed."""
+    _init_project(tmp_path)
+    home = tmp_path / "home"
+    settings_dir = home / ".claude"
+    settings_dir.mkdir(parents=True)
+    (settings_dir / "settings.json").write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "UserPromptSubmit": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "/Users/camaj/.local/share/uv/tools/halyard/bin/halyard cc-session",
+                                }
+                            ]
+                        }
+                    ],
+                    "Stop": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "/Users/camaj/.local/share/uv/tools/halyard/bin/halyard cc-hook",
+                                }
+                            ]
+                        }
+                    ],
+                }
+            }
+        )
+    )
+
+    with patch("halyard.reports.Path.home", return_value=home):
+        checks = build_health_checks(tmp_path)
 
     hook = next(check for check in checks if check.label == "Claude Code hook")
     assert hook.status == "healthy"
