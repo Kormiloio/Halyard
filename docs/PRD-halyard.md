@@ -14,7 +14,8 @@ and is preparing for an OSS community launch (HN / Reddit / Lobsters).
 **What is shipped:**
 - **Time tracking:** `halyard start/stop` and `halyard invoice` are functional.
 - **AI capture:** Collectors for **Claude Code**, **Cursor**, **Gemini CLI**,
-  and **Codex App** with ambient project attribution and file locking.
+  and **Codex App** with ambient project attribution and file locking, plus
+  **VS Code/Copilot** manual capture through a local VS Code task.
 - **Local visibility:** `halyard report`, `halyard dashboard`, `halyard tui`,
   and the REPL.
 - **Data integrity:** Append-only correction records, file locking, attribution
@@ -64,7 +65,7 @@ additive, and never changes what the local files mean.
 
 Developers and teams are hired to produce outcomes with AI. The real work is a
 mix of human judgment and AI tool sessions across Claude Code, Cursor, Codex,
-Gemini CLI, and API calls. But:
+Gemini CLI, VS Code/Copilot, and API calls. But:
 
 - **Time trackers** only capture the human clock.
 - **Finance tools** only see monthly vendor bills.
@@ -144,6 +145,7 @@ Halyard ships in layers, each proving the next:
 | v0 | Time and Invoice | How much human time did this cost? | Shipped |
 | v1 | AI Intelligence | What AI did I use and what did it cost? | Shipped |
 | v1.5 | Multi-Tool Collectors | Capture AI work across Claude, Cursor, Gemini, Codex | Shipped |
+| v2.27 | VS Code Manual Capture | Track VS Code/Copilot work through editor tasks | Shipped |
 | v2 | AI Work Ledger + Dashboard | What did AI-assisted work cost per project? | Shipped |
 | v2.16-v2.23 | Hardening Track | Can the local ledger survive real use and review? | Shipped |
 | v2.18 | Cache + Audit Hardening | Is the local cache stable enough to rely on? | Active |
@@ -168,10 +170,10 @@ format). Tracked with `halyard start / stop`.
 
 ### AI session
 A bounded unit of AI tool activity: a Claude Code session, a Cursor stop event,
-a Gemini CLI turn, a Codex Desktop session, or a direct API call. Stored as one
-line in `ai-sessions.log`. Fields: start, end, tool, model, input tokens, output
-tokens, cost, and optional key=value pairs for project, branch, cache, billing
-model, and more.
+a Gemini CLI turn, a Codex Desktop session, a VS Code/Copilot manual capture, or
+a direct API call. Stored as one line in `ai-sessions.log`. Fields: start, end,
+tool, model, input tokens, output tokens, cost, and optional key=value pairs for
+project, branch, cache, billing model, and more.
 
 ### Ambient capture
 Sessions are captured automatically wherever the developer is working — not only
@@ -204,7 +206,7 @@ so users understand what they're looking at.
 
 Per session:
 - Start and end time (local, to the second)
-- Tool slug (`claude-code`, `cursor`, `gemini-cli`, `codex`, etc.)
+- Tool slug (`claude-code`, `cursor`, `gemini-cli`, `codex`, `vscode`, etc.)
 - Model identifier
 - Input tokens, output tokens (and cache read/write where available)
 - Cost in USD (snapshotted at capture time from the pricing table)
@@ -231,7 +233,7 @@ explicit opt-in feature with its own spec.
 | Cursor | `stop` hook | Shipped |
 | Gemini CLI | `SessionStart` / `AfterModel` / `AfterAgent` hooks | Shipped |
 | Codex Desktop | JSONL session file importer | Shipped |
-| GitHub Copilot | TBD (no public hook API) | Future |
+| VS Code / GitHub Copilot | VS Code task + `record-session --tool vscode`; no public Copilot hook yet | Manual capture shipped |
 | Windsurf | TBD | Future |
 | OpenAI API | Proxy or SDK wrapper | Future |
 | Anthropic API (direct) | Already via Claude Code hook | Partial |

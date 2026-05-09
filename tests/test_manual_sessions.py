@@ -73,6 +73,39 @@ def test_record_session_appends_manual_session(
     assert session.source == "manual"
 
 
+def test_record_session_vscode_tool_gets_preserved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _init_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "record-session",
+            "--project",
+            "acme:auth",
+            "--tool",
+            "vscode",
+            "--model",
+            "github-copilot",
+            "--minutes",
+            "12",
+            "--note",
+            "Copilot chat",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    session = parse_sessions(tmp_path)[0]
+    assert session.tool == "vscode"
+    assert session.model == "github-copilot"
+    assert session.project == "acme:auth"
+    assert session.tokens_available is False
+    assert session.note == "Copilot chat"
+
+
 def test_sample_session_appends_realistic_session(
     tmp_path: Path,
     monkeypatch: object,

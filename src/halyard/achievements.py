@@ -418,6 +418,7 @@ PASSPORT_STAMPS: dict[str, tuple[str, str]] = {
     "cursor": ("Cursor", "🖱️"),
     "gemini-cli": ("Gemini CLI", "♊"),
     "codex": ("Codex", "📦"),
+    "vscode": ("VS Code", "🧩"),
     "manual": ("Manual", "✏️"),
 }
 _PASSPORT_DEFAULT_ICON = "🔧"

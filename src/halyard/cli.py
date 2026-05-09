@@ -51,6 +51,28 @@ _CURSOR_HOOKS: dict[str, str] = {
     "stop": "halyard cursor-hook",
 }
 
+_VSCODE_TASK_LABEL = "Halyard: Record VS Code AI session"
+_VSCODE_TASK_INPUTS: tuple[dict[str, str], ...] = (
+    {
+        "id": "halyardModel",
+        "type": "promptString",
+        "description": "Model or assistant label",
+        "default": "github-copilot",
+    },
+    {
+        "id": "halyardMinutes",
+        "type": "promptString",
+        "description": "Minutes to record",
+        "default": "15",
+    },
+    {
+        "id": "halyardNote",
+        "type": "promptString",
+        "description": "Short note",
+        "default": "VS Code AI work",
+    },
+)
+
 
 # ---------------------------------------------------------------------------
 # App
@@ -905,6 +927,67 @@ def _do_install_hook_cursor() -> None:
         console.print(f"[yellow]Cursor hooks already present[/] in [bold]{settings_path}[/]")
 
 
+def _vscode_record_task(command: str) -> dict[str, Any]:
+    return {
+        "label": _VSCODE_TASK_LABEL,
+        "type": "process",
+        "command": command,
+        "args": [
+            "record-session",
+            "--tool",
+            "vscode",
+            "--model",
+            "${input:halyardModel}",
+            "--minutes",
+            "${input:halyardMinutes}",
+            "--note",
+            "${input:halyardNote}",
+        ],
+        "problemMatcher": [],
+        "presentation": {"reveal": "always", "panel": "dedicated"},
+    }
+
+
+def _merge_vscode_inputs(existing_inputs: object) -> list[dict[str, Any]]:
+    inputs = (
+        [dict(item) for item in existing_inputs if isinstance(item, dict)]
+        if isinstance(existing_inputs, list)
+        else []
+    )
+    existing_ids = {item.get("id") for item in inputs}
+    for item in _VSCODE_TASK_INPUTS:
+        if item["id"] not in existing_ids:
+            inputs.append(dict(item))
+    return inputs
+
+
+def _do_install_vscode_tasks() -> Path:
+    settings_path = Path.cwd() / ".vscode" / "tasks.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: dict[str, Any] = {}
+    if settings_path.exists():
+        try:
+            existing = json.loads(settings_path.read_text())
+        except (json.JSONDecodeError, ValueError):
+            existing = {}
+
+    existing.setdefault("version", "2.0.0")
+    tasks = existing.setdefault("tasks", [])
+    if not isinstance(tasks, list):
+        tasks = []
+        existing["tasks"] = tasks
+
+    command = _halyard_exe()
+    labels = {task.get("label") for task in tasks if isinstance(task, dict)}
+    if _VSCODE_TASK_LABEL not in labels:
+        tasks.append(_vscode_record_task(command))
+
+    existing["inputs"] = _merge_vscode_inputs(existing.get("inputs"))
+    settings_path.write_text(json.dumps(existing, indent=2) + "\n")
+    return settings_path
+
+
 @app.command(name="install-hook-cursor")
 def install_hook_cursor() -> None:
     """Install Cursor hooks to auto-capture AI sessions."""
@@ -917,6 +1000,23 @@ def install_cursor_hook() -> None:
     _do_install_hook_cursor()
 
 
+@app.command(name="install-vscode-tasks")
+def install_vscode_tasks() -> None:
+    """Install VS Code tasks for manual AI session capture."""
+    settings_path = _do_install_vscode_tasks()
+    console.print(f"[bold green]VS Code Halyard task installed[/] in [bold]{settings_path}[/]")
+    console.print(
+        "[dim]Run the task from VS Code: "
+        "Terminal → Run Task → Halyard: Record VS Code AI session[/]"
+    )
+
+
+@app.command(name="install-hook-vscode", hidden=True)
+def install_hook_vscode() -> None:
+    """Deprecated alias for install-vscode-tasks."""
+    install_vscode_tasks()
+
+
 @app.command(name="record-session")
 def record_session(
     project: str | None = typer.Option(
@@ -924,7 +1024,11 @@ def record_session(
         "--project",
         help="Project slug as client:project. Defaults to the active timer project.",
     ),
-    tool: str = typer.Option("manual", "--tool", help="AI tool slug (e.g. claude-code, cursor)."),
+    tool: str = typer.Option(
+        "manual",
+        "--tool",
+        help="AI tool slug (e.g. claude-code, cursor, vscode).",
+    ),
     model: str = typer.Option("unspecified", "--model", help="Model label."),
     input_tokens: int = typer.Option(0, "--input-tokens", help="Input token count."),
     output_tokens: int = typer.Option(0, "--output-tokens", help="Output token count."),

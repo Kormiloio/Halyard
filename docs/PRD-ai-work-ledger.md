@@ -26,7 +26,8 @@ hire Mario to build an auth migration, a prototype, or an internal automation,
 and the real work is a mix of:
 
 - human judgment and project direction;
-- Claude Code, Codex, Cursor, API calls, and other AI tool sessions;
+- Claude Code, Codex, Cursor, Gemini CLI, VS Code/Copilot, API calls, and other
+  AI tool sessions;
 - token consumption and model selection;
 - subscription seats, credits, and API invoices;
 - project-specific artifacts, plans, prompts, and implementation sessions.
@@ -106,8 +107,8 @@ and making decisions. Stored in `time.timeclock`.
 ### AI session
 
 A bounded unit of AI tool activity: a Claude Code session, Codex session, API
-proxy window, Cursor operation, or agentic job segment. Stored in
-`ai-sessions.log`.
+proxy window, Cursor operation, Gemini CLI turn, VS Code/Copilot manual entry,
+or agentic job segment. Stored in `ai-sessions.log`.
 
 ### AI work unit
 
@@ -149,9 +150,12 @@ Required capabilities:
 - API proxy collector for Anthropic, OpenAI, Gemini, and OpenRouter (deferred;
   no new collectors until the current hardening track is complete).
 - SDK wrappers for scripts and internal tools.
-- ~~Tool-specific collectors for Codex, Cursor, Copilot, Devin, Factory, and
-  other AI work surfaces.~~ **Shipped (v1.5):** Codex, Cursor, and Gemini CLI
-  collectors are live. Copilot, Devin, Factory remain future work.
+- ~~Tool-specific collectors for Codex, Cursor, Devin, Factory, and other AI
+  work surfaces.~~ **Shipped (v1.5):** Codex, Cursor, and Gemini CLI collectors
+  are live. **Shipped (v2.27):** VS Code/Copilot can be tracked through
+  `halyard install-vscode-tasks` and `record-session --tool vscode` as manual
+  capture because Copilot does not expose a public session-end hook or token
+  payload. Native Copilot, Devin, Factory collectors remain future work.
 - ~~Plan allocation rules: by session count, active minutes, project weight, or
   manual allocation.~~ **Shipped (v2):** `ai-plans.toml` + `halyard report --ledger`.
 - ~~Deduplication across tool-wraps-tool scenarios.~~ **Shipped (v1.5):** The
@@ -167,6 +171,9 @@ Required capabilities:
   stop work, and see both my human time and AI cost attributed to ACME.
 - As a freelancer, I can configure my Claude Max, ChatGPT, Cursor, or Copilot
   plan cost and have Halyard allocate a reasonable project share.
+- As a VS Code/Copilot user, I can run a local VS Code task after an AI-assisted
+  work block and have that session appear in reports, dashboard usage, and my
+  Passport without exposing prompt or code content.
 - As a consultant, I can show a client a concise invoice appendix listing AI
   tools, models, sessions, and cost without exposing private prompts.
 - As an engineering lead, I can summarize AI spend by project and model for a
@@ -201,6 +208,8 @@ Required capabilities:
 
 - A new user can initialize Halyard, install the Claude Code hook, and capture
   the first AI session in under two minutes.
+- A VS Code/Copilot user can install the local VS Code task and manually capture
+  a Copilot work block without learning the raw `ai-sessions.log` format.
 - `halyard report` can answer human hours plus AI spend by project in under
   100ms for a one-year local log.
 - A freelancer can generate an invoice appendix with human hours, AI sessions,
@@ -220,7 +229,10 @@ questions should be interpreted through the current direction doc.
   active minutes, token-equivalent weight, or manual allocation?
 - Should invoice appendices include AI cost as pass-through, markup, internal
   margin evidence, or all three?
-- How should Halyard capture AI work from Codex specifically?
+- How should Halyard capture AI work from Codex specifically? **Answered:**
+  Codex Desktop imports JSONL sessions.
+- What public API or extension hook, if any, should upgrade VS Code/Copilot from
+  manual task capture to automatic per-session/token capture?
 - When should a sequence of AI sessions become one higher-level AI work unit?
 - How much project/task context should be captured without risking sensitive
   content exposure?

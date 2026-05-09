@@ -403,3 +403,15 @@ def test_passport_unknown_tool_gets_default_icon(tmp_path: Path) -> None:
     stamp = record.passport[0]
     assert stamp.tool == "some-new-tool"
     assert stamp.icon == "🔧"
+
+
+def test_passport_vscode_stamp(tmp_path: Path) -> None:
+    _make_project(tmp_path)
+    (tmp_path / "time.timeclock").write_text("; empty\n")
+    sessions = [_session(start=datetime(2026, 5, 1, 10, 0), tool="vscode")]
+    record = build_service_record(tmp_path, sessions)
+
+    assert len(record.passport) == 1
+    stamp = record.passport[0]
+    assert stamp.name == "VS Code"
+    assert stamp.icon == "🧩"

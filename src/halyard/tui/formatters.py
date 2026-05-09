@@ -12,6 +12,8 @@ def tool_icon(tool: str) -> str:
         return "C"
     if "cursor" in normalized:
         return "X"
+    if "vscode" in normalized or "vs-code" in normalized or "visual-studio-code" in normalized:
+        return "V"
     if "gemini" in normalized:
         return "G"
     if "codex" in normalized:

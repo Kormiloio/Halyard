@@ -24,10 +24,11 @@ you can't answer three basic questions:
 
 Your tools don't record this. Halyard does.
 
-It runs as lightweight hooks inside Claude Code, Cursor, and Gemini CLI. Every session
-end writes one line to a plain-text log you own. From that log: cost breakdowns,
-project attribution, invoice evidence, and eventually a signed, verifiable AI work
-appendix you can hand to a client.
+It runs as lightweight hooks inside Claude Code, Cursor, and Gemini CLI, with
+manual/editor-task capture for tools like VS Code where no public AI-session hook
+exists. Every session writes one line to a plain-text log you own. From that log:
+cost breakdowns, project attribution, invoice evidence, and eventually a signed,
+verifiable AI work appendix you can hand to a client.
 
 The privacy promise is unconditional: Halyard captures session metadata, never prompt
 content, code context, file contents, or transcripts.
@@ -57,8 +58,10 @@ design-partner pull, and will not change what local files mean.
 Halyard has three layers:
 
 **Collection** — Lightweight hooks that run where AI work happens. Claude Code,
-Cursor, and Gemini CLI hooks capture every session: time, tokens, model, cost,
-project, branch. Written to a plain-text log you own. New sessions are
+Cursor, and Gemini CLI hooks capture sessions automatically; VS Code can install
+a local task for manual AI-session logging until VS Code/Copilot exposes a
+public hook. Captured fields include time, tokens when available, model, cost,
+project, and branch. Written to a plain-text log you own. New sessions are
 appended, and the current hardening track is making corrections explicit and
 auditable. Nothing is lost silently.
 
@@ -112,6 +115,10 @@ halyard setup
 halyard install-hook          # Claude Code
 halyard install-cursor-hook   # Cursor
 halyard install-gemini-hook   # Gemini CLI
+halyard install-vscode-tasks  # VS Code manual capture task
+
+# Record VS Code/Copilot work from the terminal or VS Code task
+halyard record-session --tool vscode --model github-copilot --minutes 15 --note "Copilot chat"
 
 # Diagnose setup and verify first capture
 halyard doctor
@@ -162,7 +169,7 @@ with [`docs/troubleshooting.md`](docs/troubleshooting.md).
 | Cursor | `stop` hook — fires when agent completes | Shipped |
 | Gemini CLI | `SessionStart` / `AfterModel` / `AfterAgent` hooks + history file enrichment | Shipped |
 | Codex Desktop | JSONL session importer | Shipped |
-| GitHub Copilot | No public hook API | Future |
+| VS Code / GitHub Copilot | VS Code task + `record-session --tool vscode`; no public Copilot hook yet | Manual capture |
 | Windsurf | TBD | Future |
 | OpenAI API direct | SDK wrapper or proxy | Future |
 
@@ -175,7 +182,7 @@ Gemini CLI sessions include per-model token breakdowns (flash vs. pro vs. thinki
 Per session (one line in `ai-sessions.log`):
 
 - Start and end time
-- Tool (`claude-code`, `cursor`, `gemini-cli`, …)
+- Tool (`claude-code`, `cursor`, `gemini-cli`, `vscode`, …)
 - Model identifier
 - Input tokens, output tokens, cache read/write
 - Cost in USD (from local pricing table, snapshotted at capture)

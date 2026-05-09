@@ -8,6 +8,9 @@ THEN the Claude Code stamp is earned
 WHEN a session with tool="cursor" exists
 THEN the Cursor stamp is earned
 
+WHEN a session with tool="vscode" exists
+THEN the VS Code stamp is earned
+
 WHEN a session with an unrecognized tool key exists
 THEN a generic stamp is earned with the raw tool name and 🔧 icon
 

@@ -29,6 +29,7 @@ def test_v0_commands_registered() -> None:
         "invoice",
         "dashboard",
         "doctor",
+        "install-vscode-tasks",
         "record-session",
         "sample-session",
         "assign-unattributed",

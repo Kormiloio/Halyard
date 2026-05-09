@@ -148,7 +148,14 @@ layers must read from this local source of truth; they do not replace it.
    `halyard voyage` CLI group. Spec in
    `openspec/changes/v2.26-passport-and-friends/`.
    **Status: complete (799 tests passing).**
-6. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+6. **v2.27 — VS Code manual capture:** `halyard install-vscode-tasks` creates a
+   workspace VS Code task that records `tool=vscode` sessions through
+   `record-session`; Passport, dashboard, TUI, README, and tests understand the
+   VS Code tool slug. This is manual/editor-task capture, not native Copilot
+   token capture, because Copilot exposes no public session-end hook. Spec in
+   `openspec/changes/v2.27-vscode-manual-capture/`.
+   **Status: complete.**
+7. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 
@@ -159,7 +166,9 @@ layers must read from this local source of truth; they do not replace it.
   v2.24 is the incremental step; v3.0 is the full graph. Do not conflate them.
 - Org admin dashboards, SSO/RBAC, and hosted enterprise reporting wait until
   security posture and design-partner pull justify them.
-- New collectors (Copilot, Windsurf) wait until v2.18 hardens the foundation.
+- Native automatic collectors (Copilot, Windsurf) wait until v2.18 hardens the
+  foundation and the tools expose usable APIs/hooks. Manual VS Code/Copilot
+  capture is allowed and shipped in v2.27.
 - Calendar scheduling is strategic candy; defer.
 - The public `ai-sessions.log` spec is published only after at least one
   external tool emits the format. Writing the spec before adoption exists is
