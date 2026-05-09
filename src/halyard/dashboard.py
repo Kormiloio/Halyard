@@ -153,6 +153,17 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
                 self.end_headers()
                 return
 
+            elif self.path == "/api/voyage-refresh":
+                from halyard.ai_log import parse_sessions
+                from halyard.voyages import check_auto_complete
+
+                all_sessions = parse_sessions(project_dir)
+                sessions_by_project: dict[str, list[AiSession]] = {}
+                for s in all_sessions:
+                    if s.project:
+                        sessions_by_project.setdefault(s.project, []).append(s)
+                check_auto_complete(project_dir, sessions_by_project)
+
             self.send_response(HTTPStatus.FOUND)
             self.send_header("Location", "/")
             self.end_headers()
@@ -236,12 +247,12 @@ def _proof_score(sessions: list[AiSession]) -> tuple[int, str]:
     """Return (score 0-100, css_class) representing client-ready confidence.
 
     Score = attribution_rate * 60% + token_capture_rate * 40%.
-    css_class is one of: proof-healthy (>=80), proof-warn (60-79), proof-low (<60).
-    Empty session list returns (100, 'proof-healthy') - nothing broken.
+    css_class is one of: proof-healthy (>=80), proof-warn (60-79), proof-low (<60),
+    proof-neutral (no sessions).
     """
     total = len(sessions)
     if total == 0:
-        return 100, "proof-healthy"
+        return 0, "proof-neutral"
     attributed = sum(1 for s in sessions if s.project)
     with_tokens = sum(1 for s in sessions if s.tokens_available)
     score = round((attributed / total * 0.6 + with_tokens / total * 0.4) * 100)
@@ -276,7 +287,9 @@ def _voyage_panel(state: DashboardState) -> str:
         bar_pct = min(100, int(timer.elapsed_minutes / 90 * 100))
         manifest_label = f"{attributed}/{total} in manifest" if total else "no sessions yet"
         score_label = (
-            "client-ready" if score >= 80 else "review needed" if score >= 60 else "gaps present"
+            "not underway"
+            if total == 0
+            else "client-ready" if score >= 80 else "review needed" if score >= 60 else "gaps present"
         )
         adrift_col = (
             f'<div class="voyage-col voyage-col-warn">'
@@ -317,7 +330,9 @@ def _voyage_panel(state: DashboardState) -> str:
         score, score_cls = _proof_score(sessions)
         score_display = "—" if total == 0 else str(score)
         score_label = (
-            "client-ready" if score >= 80 else "review needed" if score >= 60 else "gaps present"
+            "not underway"
+            if total == 0
+            else "client-ready" if score >= 80 else "review needed" if score >= 60 else "gaps present"
         )
         adrift = report.unattributed_count
         adrift_col = (
@@ -782,6 +797,7 @@ def _friends_panel(project_dir: Path, sessions: list[AiSession]) -> str:
               <span class="friend-count">{v.session_count} / {v.target_sessions}</span>
             </div>"""
 
+    moored_count = sum(1 for v in summaries if v.stage == "moored")
     return f"""
       <article class="panel span-12">
         <div class="panel-head">
@@ -791,7 +807,10 @@ def _friends_panel(project_dir: Path, sessions: list[AiSession]) -> str:
           </div>
           <div class="pill-group">
             <span class="pill">{len(summaries)} project{"s" if len(summaries) != 1 else ""}</span>
-            <span class="pill">{sum(1 for v in summaries if v.stage == "moored")} moored</span>
+            <span class="pill">{moored_count} moored</span>
+            <form method="post" action="/api/voyage-refresh" style="display:inline">
+              <button class="btn btn-sm" type="submit" title="Check for auto-completion">⚓ Refresh</button>
+            </form>
           </div>
         </div>
         <div class="friends-grid">{cards}
@@ -1205,6 +1224,8 @@ def _tool_icon(tool: str) -> str:
         return "C"
     if "cursor" in t:
         return "X"
+    if "vscode" in t or "vs-code" in t or "visual-studio-code" in t:
+        return "V"
     if "gemini" in t:
         return "G"
     if "codex" in t:
@@ -1562,6 +1583,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .btn-start:hover { background: rgba(112, 225, 143, .25); }
 .btn-stop { background: rgba(255, 111, 111, .12); color: var(--red); width: 100%; }
 .btn-stop:hover { background: rgba(255, 111, 111, .22); }
+.btn-sm { background: rgba(255,255,255,.06); color: var(--muted); font-size: 10px; padding: 3px 8px; }
+.btn-sm:hover { background: rgba(255,255,255,.12); color: var(--fg); }
 
 /* Stop celebration toast */
 .toast {
@@ -1609,6 +1632,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .proof-healthy { color: var(--green); }
 .proof-warn { color: var(--amber); }
 .proof-low { color: var(--red); }
+.proof-neutral { color: var(--muted); }
 
 /* Captain's Quarters */
 .cq-body { display: grid; grid-template-columns: 2fr 1fr 1.5fr 1fr; gap: 24px; }

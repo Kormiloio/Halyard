@@ -604,8 +604,8 @@ def test_proof_score_empty_sessions() -> None:
     from halyard.dashboard import _proof_score
 
     score, cls = _proof_score([])
-    assert score == 100
-    assert cls == "proof-healthy"
+    assert score == 0
+    assert cls == "proof-neutral"
 
 
 def test_proof_score_fully_attributed_with_tokens() -> None:
