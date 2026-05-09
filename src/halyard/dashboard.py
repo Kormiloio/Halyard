@@ -283,6 +283,17 @@ def _render_state(state: DashboardState) -> str:
         else:
             costs_trust_pill = _panel_status_pill("all captured", "healthy")
 
+    trail_month_sessions = [
+        s
+        for s in report.sessions
+        if s.start.date().year == now.year and s.start.date().month == now.month
+    ]
+    trail_active_days = len({s.start.date() for s in trail_month_sessions})
+    trail_pill = _panel_status_pill(
+        f"{trail_active_days} active day{'s' if trail_active_days != 1 else ''}",
+        "muted" if trail_active_days else "warning",
+    )
+
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -351,6 +362,17 @@ def _render_state(state: DashboardState) -> str:
           {unattr_pill}
         </div>
         {_unattributed_table(report.unattributed_sessions)}
+      </article>
+
+      <article class="panel span-12">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Work Trail</p>
+            <h2>Trail · {_e(now.strftime("%B %Y"))}</h2>
+          </div>
+          <div class="pill-group">{trail_pill}</div>
+        </div>
+        {_trail_heatmap_html(report.sessions, now)}
       </article>
 
       <article class="panel span-6">
@@ -891,6 +913,71 @@ def _panel_status_pill(text: str, state: str) -> str:
     return f"<span class='pill pill-{_e(state)}'>{_e(text)}</span>"
 
 
+def _trail_heatmap_html(sessions: list[AiSession], period: object) -> str:
+    import calendar
+    from collections import defaultdict
+    from datetime import date, datetime
+
+    p = period if isinstance(period, datetime) else datetime.now()
+    year, month = p.year, p.month
+    today = datetime.now().date()
+
+    day_total: dict[date, int] = defaultdict(int)
+    day_attr: dict[date, int] = defaultdict(int)
+    for s in sessions:
+        d = s.start.date()
+        if d.year == year and d.month == month:
+            day_total[d] += 1
+            if s.project:
+                day_attr[d] += 1
+
+    weeks = calendar.monthcalendar(year, month)
+    header = (
+        "<div class='trail-cal-header'>"
+        + "".join(f"<span>{day}</span>" for day in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"])
+        + "</div>"
+    )
+
+    rows_html = []
+    for week in weeks:
+        cells = []
+        for day_num in week:
+            if day_num == 0:
+                cells.append("<span class='trail-cell trail-empty'></span>")
+            else:
+                d = date(year, month, day_num)
+                total = day_total[d]
+                attr = day_attr[d]
+                noun = "session" if total == 1 else "sessions"
+                title = f"{d.isoformat()}: {total} {noun}, {attr} attributed"
+                if d > today:
+                    cls = "trail-future"
+                elif total == 0:
+                    cls = "trail-none"
+                elif attr == 0:
+                    cls = "trail-unattr"
+                elif attr < total:
+                    cls = "trail-partial"
+                else:
+                    cls = "trail-full"
+                cells.append(
+                    f"<span class='trail-cell {_e(cls)}' title='{_e(title)}'>"
+                    f"<span class='trail-dn'>{day_num}</span>"
+                    f"</span>"
+                )
+        rows_html.append("<div class='trail-cal-row'>" + "".join(cells) + "</div>")
+
+    legend = (
+        "<div class='trail-legend'>"
+        "<span class='trail-cell trail-none'></span><span>none</span>"
+        "<span class='trail-cell trail-unattr'></span><span>unattributed</span>"
+        "<span class='trail-cell trail-partial'></span><span>partial</span>"
+        "<span class='trail-cell trail-full'></span><span>attributed</span>"
+        "</div>"
+    )
+    return "<div class='trail-cal'>" + header + "".join(rows_html) + "</div>" + legend
+
+
 _CSS = """
 :root {
   color-scheme: dark;
@@ -1065,6 +1152,28 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .btn-start:hover { background: rgba(112, 225, 143, .25); }
 .btn-stop { background: rgba(255, 111, 111, .12); color: var(--red); width: 100%; }
 .btn-stop:hover { background: rgba(255, 111, 111, .22); }
+
+/* Trail heatmap calendar */
+.trail-cal { display: inline-block; }
+.trail-cal-header { display: grid; grid-template-columns: repeat(7, 38px); gap: 5px; margin-bottom: 4px; font-size: 11px; color: var(--muted); font-weight: 700; text-align: center; }
+.trail-cal-row { display: grid; grid-template-columns: repeat(7, 38px); gap: 5px; margin-bottom: 5px; }
+.trail-cell { width: 38px; height: 38px; border-radius: 6px; border: 1px solid rgba(255,255,255,.05); display: flex; align-items: center; justify-content: center; cursor: default; transition: opacity .15s; }
+.trail-cell:hover { opacity: .8; }
+.trail-dn { font-size: 11px; font-weight: 600; pointer-events: none; }
+.trail-empty { border-color: transparent; background: transparent; }
+.trail-future { background: rgba(255,255,255,.02); border-color: transparent; }
+.trail-future .trail-dn { color: var(--muted); opacity: .4; }
+.trail-none { background: rgba(255,255,255,.04); }
+.trail-none .trail-dn { color: var(--muted); }
+.trail-unattr { background: rgba(243,191,91,.13); border-color: rgba(243,191,91,.22); }
+.trail-unattr .trail-dn { color: var(--amber); }
+.trail-partial { background: rgba(243,191,91,.22); border-color: rgba(243,191,91,.38); }
+.trail-partial .trail-dn { color: var(--amber); }
+.trail-full { background: rgba(112,225,143,.16); border-color: rgba(112,225,143,.30); }
+.trail-full .trail-dn { color: var(--green); }
+.trail-legend { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.trail-legend .trail-cell { width: 14px; height: 14px; min-width: 14px; border-radius: 3px; pointer-events: none; }
+.trail-legend .trail-dn { display: none; }
 
 @media (max-width: 1100px) {
   body { min-width: 760px; }
