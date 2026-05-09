@@ -1388,6 +1388,110 @@ def import_gemini(
 
 
 # ---------------------------------------------------------------------------
+# Honors — ranks, stripes, and medals
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def honors() -> None:
+    """Display your service record — rank, stripes, and earned medals."""
+    from rich.panel import Panel
+    from rich.text import Text
+
+    from halyard.achievements import RANKS, build_service_record
+    from halyard.ai_log import find_project_dir, parse_sessions
+    from halyard.hub import find_hub
+
+    project_dir = find_project_dir() or find_hub()
+    if project_dir is None:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
+        raise typer.Exit(code=1)
+
+    sessions = parse_sessions(project_dir)
+    record = build_service_record(project_dir, sessions)
+    rank = record.rank
+
+    # -- Rank panel --
+    body = Text()
+    body.append(f"  {rank.icon}  ", style="bold")
+    body.append(f"{rank.name}\n", style="bold cyan")
+    body.append(f"  {rank.flavor}\n", style="italic dim")
+    body.append("\n")
+
+    # Progress bar toward next rank
+    if record.next_rank:
+        earned = record.attributed_sessions
+        target = record.next_rank.sessions_required
+        filled = min(20, round(20 * earned / max(target, 1)))
+        bar = "▓" * filled + "░" * (20 - filled)
+        body.append(f"  {bar}  ", style="bold")
+        body.append(
+            f"{earned} / {target} attributed sessions → {record.next_rank.name}\n",
+            style="dim",
+        )
+    else:
+        body.append("  ✦ Highest rank achieved ✦\n", style="bold gold1")
+
+    body.append("\n")
+
+    # Stripes
+    stripe_count = min(4, record.watch_streak // 7)  # 1 stripe per 7-day streak week
+    body.append("  Stripes  ", style="bold")
+    if stripe_count:
+        body.append("▐" * stripe_count, style="bold cyan")
+        body.append("  ", style="dim")
+    body.append(f"  {record.watch_streak}-day watch streak", style="dim")
+    if record.gold_stripe_earned:
+        body.append("  ✦ gold stripe", style="bold gold1")
+    body.append("\n")
+
+    body.append(
+        f"  Proof score  {record.proof_score}%  "
+        f"({record.attributed_sessions}/{record.total_sessions} attributed)\n",
+        style="dim",
+    )
+
+    console.print(
+        Panel(
+            body,
+            title="[bold]⚓  Captain's Quarters · Service Record[/]",
+            border_style="cyan",
+            padding=(0, 1),
+            expand=False,
+        )
+    )
+
+    # Passport
+    if record.passport:
+        console.print("\n[bold]Passport · Ports of Call[/]")
+        for stamp in record.passport:
+            console.print(f"  {stamp.icon}  [bold]{stamp.name}[/]  [dim]{stamp.tool}[/]")
+    else:
+        console.print("\n[dim]Passport empty — capture sessions to earn stamps.[/]")
+
+    # Medals
+    if record.earned_medals:
+        console.print("\n[bold]Medals earned[/]")
+        for medal in record.earned_medals:
+            console.print(f"  {medal.icon}  [bold]{medal.name}[/]  [dim]{medal.description}[/]")
+            console.print(f"     [dim italic]{medal.detail}[/]")
+    else:
+        console.print("\n[dim]No medals yet — complete watches to start earning honors.[/]")
+
+    # Ranks reference
+    console.print("\n[dim]All ranks:[/]")
+    for r in RANKS[1:]:
+        marker = "▶ " if r.level == rank.level else "  "
+        style = "bold cyan" if r.level == rank.level else "dim"
+        console.print(
+            f"  {marker}{r.icon}  {r.name:<16}  {r.sessions_required} attributed sessions",
+            style=style,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Reporting (task v1 3.1)
 # ---------------------------------------------------------------------------
 
@@ -2509,6 +2613,182 @@ def org_purge_user(
     console.print(
         f"Purged [bold]{count}[/] session record(s) for [bold cyan]{user_id}[/]. "
         "Logged to audit trail."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Voyage — Friends of the Sea lifecycle management
+# ---------------------------------------------------------------------------
+
+voyage_app = typer.Typer(name="voyage", help="Manage project voyage lifecycle and sea creatures.")
+app.add_typer(voyage_app)
+
+
+@voyage_app.callback(invoke_without_command=True)
+def voyage_list(ctx: typer.Context) -> None:
+    """List all project voyages with stage, progress, and creature."""
+    if ctx.invoked_subcommand is not None:
+        return
+
+    from halyard.ai_log import AiSession, find_project_dir, parse_sessions
+    from halyard.hub import find_hub
+    from halyard.voyages import STAGE_LABELS, build_voyage_summaries, check_auto_complete
+
+    project_dir = find_project_dir() or find_hub()
+    if project_dir is None:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
+        raise typer.Exit(code=1)
+
+    sessions = parse_sessions(project_dir)
+    sessions_by_project: dict[str, list[AiSession]] = {}
+    for s in sessions:
+        if s.project:
+            sessions_by_project.setdefault(s.project, []).append(s)
+
+    check_auto_complete(project_dir, sessions_by_project)
+    summaries = build_voyage_summaries(project_dir, sessions_by_project)
+
+    if not summaries:
+        console.print("[dim]No voyages yet. Attribute sessions to projects to begin.[/]")
+        return
+
+    console.print("\n[bold]⛵  Friends of the Sea · Voyages[/]\n")
+    for v in summaries:
+        creature = v.creature or "·"
+        label = STAGE_LABELS.get(v.stage, v.stage)
+        bar_filled = min(20, round(20 * v.session_count / max(v.target_sessions, 1)))
+        bar = "▓" * bar_filled + "░" * (20 - bar_filled)
+        if v.stage == "moored":
+            console.print(
+                f"  {creature}  [bold]{v.slug}[/]  [green]{label}[/]"
+                + (f"  [dim]{v.creature_trait}[/]" if v.creature_trait else "")
+            )
+        else:
+            console.print(
+                f"  {creature}  [bold]{v.slug}[/]  [cyan]{label}[/]  "
+                f"[dim]{v.session_count}/{v.target_sessions}[/]"
+            )
+            console.print(f"       {bar}", style="dim")
+    console.print()
+
+
+@voyage_app.command(name="complete")
+def voyage_complete(
+    project: str = typer.Argument(..., help="Project slug to mark complete."),
+) -> None:
+    """Manually mark a project voyage as complete (Shipshape · Moored)."""
+    from datetime import date
+
+    from halyard.ai_log import AiSession, find_project_dir, parse_sessions
+    from halyard.hub import find_hub
+    from halyard.voyages import (
+        assign_creature,
+        read_voyages,
+        voyage_for_slug,
+        write_voyages,
+    )
+
+    project_dir = find_project_dir() or find_hub()
+    if project_dir is None:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
+        raise typer.Exit(code=1)
+
+    sessions = parse_sessions(project_dir)
+    project_sessions = [s for s in sessions if s.project == project]
+
+    entries = read_voyages(project_dir)
+    entry = voyage_for_slug(entries, project)
+
+    if entry.stage == "moored":
+        console.print(
+            f"[yellow]{project}[/] is already moored  {entry.creature}  {entry.creature_trait}"
+        )
+        raise typer.Exit()
+
+    all_completed = {
+        e.slug: len([s for s in sessions if s.project == e.slug])
+        for e in entries
+        if e.stage == "moored"
+    }
+    all_completed[project] = len(project_sessions)
+
+    from halyard.voyages import _had_concurrent_projects
+
+    sessions_by_project: dict[str, list[AiSession]] = {}
+    for s in sessions:
+        if s.project:
+            sessions_by_project.setdefault(s.project, []).append(s)
+    coral_reef = _had_concurrent_projects(sessions_by_project, project)
+
+    emoji, trait = assign_creature(project, project_sessions, all_completed, coral_reef=coral_reef)
+    today = date.today().isoformat()
+    started = project_sessions[0].start.strftime("%Y-%m-%d") if project_sessions else ""
+
+    entry.stage = "moored"
+    entry.started_at = entry.started_at or started
+    entry.completed_at = today
+    entry.creature = emoji
+    entry.creature_trait = trait
+
+    slug_map = {e.slug: e for e in entries}
+    slug_map[project] = entry
+    write_voyages(project_dir, list(slug_map.values()))
+
+    console.print(
+        f"\n[bold green]Shipshape · Moored![/]  {emoji}  [bold]{project}[/]  [dim]{trait}[/]\n"
+    )
+
+
+@voyage_app.command(name="set")
+def voyage_set(
+    project: str = typer.Argument(..., help="Project slug."),
+    sessions: int | None = typer.Option(None, "--sessions", help="Session budget target."),
+    inactivity: int | None = typer.Option(
+        None, "--inactivity", help="Days of inactivity before auto-complete."
+    ),
+) -> None:
+    """Edit voyage settings — session budget and inactivity threshold."""
+    from halyard.ai_log import find_project_dir
+    from halyard.hub import find_hub
+    from halyard.voyages import read_voyages, voyage_for_slug, write_voyages
+
+    if sessions is None and inactivity is None:
+        console.print("[yellow]No changes specified. Use --sessions or --inactivity.[/]")
+        raise typer.Exit()
+
+    project_dir = find_project_dir() or find_hub()
+    if project_dir is None:
+        console.print(
+            "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+        )
+        raise typer.Exit(code=1)
+
+    entries = read_voyages(project_dir)
+    entry = voyage_for_slug(entries, project)
+
+    if sessions is not None:
+        if sessions < 1:
+            console.print("[bold red]Error:[/] --sessions must be ≥ 1.")
+            raise typer.Exit(code=1)
+        entry.target_sessions = sessions
+
+    if inactivity is not None:
+        if inactivity < 1:
+            console.print("[bold red]Error:[/] --inactivity must be ≥ 1.")
+            raise typer.Exit(code=1)
+        entry.inactivity_days = inactivity
+
+    slug_map = {e.slug: e for e in entries}
+    slug_map[project] = entry
+    write_voyages(project_dir, list(slug_map.values()))
+
+    console.print(
+        f"[bold]{project}[/]  target=[bold cyan]{entry.target_sessions}[/] sessions  "
+        f"inactivity=[bold cyan]{entry.inactivity_days}[/] days"
     )
 
 

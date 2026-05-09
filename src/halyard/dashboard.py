@@ -472,6 +472,8 @@ def _render_state(state: DashboardState) -> str:
 
     <section class="grid">
       {_voyage_panel(state)}
+      {_captains_quarters_panel(state.project_dir, report.sessions)}
+      {_friends_panel(state.project_dir, report.sessions)}
 
       <article class="panel span-12">
         <div class="panel-head">
@@ -601,6 +603,183 @@ def _render_state(state: DashboardState) -> str:
   {_celebration_script()}
 </body>
 </html>"""
+
+
+def _captains_quarters_panel(project_dir: Path, sessions: list[AiSession]) -> str:
+    from halyard.achievements import RANKS, ServiceRecord, build_service_record
+
+    record: ServiceRecord = build_service_record(project_dir, sessions)
+    rank = record.rank
+
+    # Rank progress bar
+    if record.next_rank:
+        earned = record.attributed_sessions
+        target = record.next_rank.sessions_required
+        pct = min(100, round(100 * earned / max(target, 1)))
+        next_label = _e(record.next_rank.name)
+        progress_html = f"""
+          <div class="cq-progress-outer">
+            <div class="cq-progress-fill" style="width:{pct}%"></div>
+          </div>
+          <p class="cq-sub">{earned} / {target} attributed sessions → {next_label}</p>"""
+    else:
+        progress_html = '<p class="cq-sub" style="color:var(--amber)">✦ Highest rank achieved</p>'
+
+    # Rank row
+    rank_html = f"""
+      <div class="cq-rank">
+        <span class="cq-rank-icon">{_e(rank.icon)}</span>
+        <div>
+          <p class="cq-rank-name">{_e(rank.name)}</p>
+          <p class="cq-rank-flavor">{_e(rank.flavor)}</p>
+        </div>
+      </div>
+      {progress_html}"""
+
+    # Stripes
+    stripe_count = min(4, record.watch_streak // 7)
+    stripes = "▐" * stripe_count if stripe_count else "—"
+    gold = ' <span style="color:var(--amber)">✦ gold</span>' if record.gold_stripe_earned else ""
+    stripes_html = f"""
+      <div class="cq-stripes">
+        <span class="cq-stripe-bar">{_e(stripes)}{gold}</span>
+        <span class="cq-sub">{record.watch_streak}-day streak · {record.clean_watches} clean watches</span>
+      </div>"""
+
+    # Passport
+    passport_items = "".join(
+        f'<li class="cq-stamp" title="{_e(s.tool)}">'
+        f'<span class="cq-stamp-icon">{_e(s.icon)}</span>'
+        f'<span class="cq-stamp-name">{_e(s.name)}</span>'
+        f"</li>"
+        for s in record.passport
+    )
+    passport_html = (
+        f'<ul class="cq-stamps">{passport_items}</ul>'
+        if passport_items
+        else '<p class="cq-sub cq-empty">No ports of call yet.</p>'
+    )
+
+    # Medals
+    medal_items = "".join(
+        f'<li class="cq-medal" title="{_e(m.detail)}">'
+        f'<span class="cq-medal-icon">{_e(m.icon)}</span>'
+        f'<span class="cq-medal-name">{_e(m.name)}</span>'
+        f'<span class="cq-medal-desc">{_e(m.description)}</span>'
+        f"</li>"
+        for m in record.earned_medals
+    )
+    medals_html = (
+        f'<ul class="cq-medals">{medal_items}</ul>'
+        if medal_items
+        else '<p class="cq-sub cq-empty">No medals yet — complete watches to start earning honors.</p>'
+    )
+
+    # Rank ladder (mini)
+    ladder_items = ""
+    for r in RANKS[1:]:
+        active = "cq-ladder-active" if r.level == rank.level else ""
+        ladder_items += (
+            f'<li class="cq-ladder-item {active}">{_e(r.icon)} <span>{_e(r.short)}</span></li>'
+        )
+    ladder_html = f'<ol class="cq-ladder">{ladder_items}</ol>'
+
+    proof_cls = (
+        "proof-healthy"
+        if record.proof_score >= 80
+        else ("proof-warn" if record.proof_score >= 60 else "proof-low")
+    )
+    proof_html = f'<span class="{proof_cls}">{record.proof_score}%</span>'
+
+    return f"""
+      <article class="panel span-12">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">⚓ Captain's Quarters</p>
+            <h2>Service Record</h2>
+          </div>
+          <div class="pill-group">
+            <span class="pill">{_e(rank.icon)} {_e(rank.name)}</span>
+            <span class="pill">Proof {proof_html}</span>
+          </div>
+        </div>
+        <div class="cq-body">
+          <div class="cq-main">
+            {rank_html}
+            {stripes_html}
+          </div>
+          <div class="cq-passport-col">
+            <p class="cq-section-label">Passport · Ports of Call</p>
+            {passport_html}
+          </div>
+          <div class="cq-medals-col">
+            <p class="cq-section-label">Medals</p>
+            {medals_html}
+          </div>
+          <div class="cq-ladder-col">
+            <p class="cq-section-label">All Ranks</p>
+            {ladder_html}
+          </div>
+        </div>
+      </article>"""
+
+
+def _friends_panel(project_dir: Path, sessions: list[AiSession]) -> str:
+    """Friends of the Sea — voyage stage cards for every tracked project."""
+    from halyard.voyages import STAGE_LABELS, build_voyage_summaries, check_auto_complete
+
+    sessions_by_project: dict[str, list[AiSession]] = {}
+    for s in sessions:
+        if s.project:
+            sessions_by_project.setdefault(s.project, []).append(s)
+
+    check_auto_complete(project_dir, sessions_by_project)
+    summaries = build_voyage_summaries(project_dir, sessions_by_project)
+
+    if not summaries:
+        return ""
+
+    cards = ""
+    for v in summaries:
+        label = STAGE_LABELS.get(v.stage, v.stage)
+        if v.stage == "moored":
+            creature = _e(v.creature or "🦭")
+            trait = _e(v.creature_trait or "")
+            cards += f"""
+            <div class="friend-card friend-moored">
+              <span class="friend-creature">{creature}</span>
+              <span class="friend-slug">{_e(v.slug)}</span>
+              <span class="friend-stage">{_e(label)}</span>
+              <span class="friend-trait">{trait}</span>
+            </div>"""
+        else:
+            pct = v.progress_pct
+            stage_cls = f"friend-stage-{_e(v.stage)}"
+            cards += f"""
+            <div class="friend-card friend-active">
+              <span class="friend-slug">{_e(v.slug)}</span>
+              <span class="friend-stage {stage_cls}">{_e(label)}</span>
+              <div class="friend-progress-outer">
+                <div class="friend-progress-fill" style="width:{pct}%"></div>
+              </div>
+              <span class="friend-count">{v.session_count} / {v.target_sessions}</span>
+            </div>"""
+
+    return f"""
+      <article class="panel span-12">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">⛵ Friends of the Sea</p>
+            <h2>Voyage Roster</h2>
+          </div>
+          <div class="pill-group">
+            <span class="pill">{len(summaries)} project{"s" if len(summaries) != 1 else ""}</span>
+            <span class="pill">{sum(1 for v in summaries if v.stage == "moored")} moored</span>
+          </div>
+        </div>
+        <div class="friends-grid">{cards}
+        </div>
+      </article>"""
 
 
 def _overall_health(state: DashboardState) -> str:
@@ -1414,6 +1593,51 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .proof-warn { color: var(--amber); }
 .proof-low { color: var(--red); }
 
+/* Captain's Quarters */
+.cq-body { display: grid; grid-template-columns: 2fr 1fr 1.5fr 1fr; gap: 24px; }
+.cq-main { display: flex; flex-direction: column; gap: 14px; }
+.cq-rank { display: flex; align-items: flex-start; gap: 16px; }
+.cq-rank-icon { font-size: 38px; line-height: 1; }
+.cq-rank-name { margin: 0; font-size: 22px; font-weight: 700; }
+.cq-rank-flavor { margin: 4px 0 0; font-size: 13px; color: var(--muted); font-style: italic; }
+.cq-progress-outer { width: 100%; background: var(--line); border-radius: 99px; height: 5px; overflow: hidden; margin: 4px 0 6px; }
+.cq-progress-fill { height: 100%; border-radius: 99px; background: var(--cyan); transition: width .4s ease; }
+.cq-sub { margin: 0; font-size: 11px; color: var(--muted); }
+.cq-stripes { display: flex; align-items: center; gap: 12px; }
+.cq-stripe-bar { font-size: 22px; color: var(--cyan); letter-spacing: 3px; }
+.cq-section-label { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+.cq-medals { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.cq-medal { display: flex; align-items: flex-start; gap: 8px; cursor: default; }
+.cq-medal:hover .cq-medal-desc { color: var(--text); }
+.cq-medal-icon { font-size: 18px; flex-shrink: 0; }
+.cq-medal-name { font-size: 13px; font-weight: 600; display: block; }
+.cq-medal-desc { font-size: 11px; color: var(--muted); display: block; }
+.cq-empty { font-style: italic; }
+.cq-stamps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cq-stamp { display: flex; align-items: center; gap: 8px; }
+.cq-stamp-icon { font-size: 18px; flex-shrink: 0; }
+.cq-stamp-name { font-size: 13px; font-weight: 600; }
+.cq-ladder { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cq-ladder-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.cq-ladder-active { color: var(--cyan); font-weight: 700; }
+
+/* Friends of the Sea */
+.friends-grid { display: flex; flex-wrap: wrap; gap: 12px; padding: 4px 0 8px; }
+.friend-card { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; border-radius: 8px; background: var(--surface); min-width: 160px; max-width: 220px; flex: 1 1 160px; }
+.friend-moored { border: 1px solid var(--cyan); }
+.friend-active { border: 1px solid var(--border); }
+.friend-creature { font-size: 28px; line-height: 1; }
+.friend-slug { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.friend-stage { font-size: 11px; color: var(--muted); }
+.friend-trait { font-size: 11px; color: var(--cyan); font-style: italic; }
+.friend-count { font-size: 11px; color: var(--muted); }
+.friend-progress-outer { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 2px 0; }
+.friend-progress-fill { height: 100%; background: var(--cyan); border-radius: 2px; }
+.friend-stage-anchors_aweigh { color: var(--amber); }
+.friend-stage-making_headway { color: var(--cyan); }
+.friend-stage-rounding_the_mark { color: #7dd3fc; }
+.friend-stage-flying_colors { color: #4ade80; }
+
 @media (max-width: 1100px) {
   body { min-width: 760px; }
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1422,5 +1646,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   .usage-stats, .usage-warnings { grid-column: span 1; }
   .usage-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .voyage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cq-body { grid-template-columns: 1fr; }
 }
 """

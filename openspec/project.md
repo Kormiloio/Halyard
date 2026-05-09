@@ -134,7 +134,21 @@ layers must read from this local source of truth; they do not replace it.
    Claude/Cursor/Codex collectors, `halyard outcome sync` command for PR
    linkage. Moves outcome-awareness score from 2/10 to 6/10. Spec in
    `openspec/changes/v2.24-outcome-metadata/`.
-4. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+4. **v2.25 — Honors and achievements:** `halyard honors` CLI command + Captain's
+   Quarters panel on The Bridge. Ranks (Civilian → Commodore), stripes (watch
+   streaks), medals (Eight Bells, Full Sail, Clean Manifest, Lighthouse, Signal
+   Master, Harbor Master, Fair Winds, Rescue at Sea). Pure read layer — no new
+   data formats. Spec in `openspec/changes/v2.25-honors-and-achievements/`.
+   **Status: complete (762 tests passing).**
+5. **v2.26 — Passport and Friends of the Sea:** Passport stamps (one per AI
+   tool first used, in Captain's Quarters) + Friends of the Sea (one sea
+   creature per completed project, auto-assigned by personality trait, with
+   voyage stages: Anchors Aweigh → Making Headway → Rounding the Mark →
+   Flying Colors → Shipshape · Moored). New `voyages.toml` data file.
+   `halyard voyage` CLI group. Spec in
+   `openspec/changes/v2.26-passport-and-friends/`.
+   **Status: complete (799 tests passing).**
+6. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 
