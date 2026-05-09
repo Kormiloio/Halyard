@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import sys
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from halyard.ai_log import (
     AI_LOG_FILENAME,
@@ -22,7 +24,13 @@ from halyard.ai_log import (
     read_active_project,
     write_unattributed_session,
 )
-from halyard.git_context import current_branch, infer_project
+from halyard.git_context import (
+    commits_in_window,
+    current_branch,
+    head_sha,
+    infer_project,
+    numstat_delta,
+)
 from halyard.hub import find_hub
 from halyard.pricing import calculate_cost, model_is_known
 
@@ -46,8 +54,13 @@ def record_session_start() -> int:
             if warning:
                 print(warning)
 
+    cwd = Path.cwd()
     _CC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _CC_SESSION_FILE.write_text(datetime.now().strftime("%Y-%m-%dT%H:%M:%S"))
+    state: dict[str, Any] = {
+        "start": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "sha_at_start": head_sha(cwd),
+    }
+    _CC_SESSION_FILE.write_text(json.dumps(state))
     return 0
 
 
@@ -65,7 +78,9 @@ def handle_stop_hook() -> int:
     can_append_project_log = project_dir is not None and (project_dir / AI_LOG_FILENAME).exists()
 
     now = datetime.now()
-    start = _read_session_start() or now
+    session_state = _read_session_state()
+    start = session_state.get("start_dt") or now
+    sha_at_start: str | None = session_state.get("sha")
     _clear_session_start()
 
     # Try usage from payload first (older Claude Code format)
@@ -102,6 +117,15 @@ def handle_stop_hook() -> int:
     tokens_available = input_tokens > 0 or output_tokens > 0
     cost = calculate_cost(model, input_tokens, output_tokens, cache_read, cache_write)
 
+    # v2.24: commit count and code delta
+    commit_count = commits_in_window(cwd, start, now)
+    code_added: int | None = None
+    code_removed: int | None = None
+    if sha_at_start:
+        delta = numstat_delta(cwd, sha_at_start)
+        if delta is not None:
+            code_added, code_removed = delta
+
     # D-1: resolve attribution source so provenance is recorded in the log.
     _active = read_active_project()
     _project: str | None
@@ -130,7 +154,11 @@ def handle_stop_hook() -> int:
         tokens_available=tokens_available,
         source="hook",
         attr_method=_attr_method,
-        tags=([f"branch:{branch}"] if branch else []) + _extra_tags,
+        tags=_extra_tags,
+        branch=branch,
+        commit_count=commit_count,
+        code_added=code_added,
+        code_removed=code_removed,
     )
 
     if can_append_project_log and project_dir is not None:
@@ -159,13 +187,26 @@ def _read_payload() -> dict:  # type: ignore[type-arg]
         return {}
 
 
-def _read_session_start() -> datetime | None:
+def _read_session_state() -> dict[str, Any]:
+    """Return {"start_dt": datetime, "sha": str|None} from the session file.
+
+    Handles both the new JSON format (v2.24+) and the legacy plain ISO timestamp
+    written by older versions of the collector.
+    """
     if not _CC_SESSION_FILE.exists():
-        return None
+        return {}
+    raw = _CC_SESSION_FILE.read_text().strip()
     try:
-        return datetime.fromisoformat(_CC_SESSION_FILE.read_text().strip())
-    except ValueError:
-        return None
+        data = json.loads(raw)
+        start_dt: datetime | None = None
+        with suppress(ValueError, TypeError):
+            start_dt = datetime.fromisoformat(data.get("start", ""))
+        return {"start_dt": start_dt, "sha": data.get("sha_at_start")}
+    except (json.JSONDecodeError, ValueError):
+        # Legacy format: plain ISO timestamp string
+        with suppress(ValueError):
+            return {"start_dt": datetime.fromisoformat(raw), "sha": None}
+        return {}
 
 
 def _clear_session_start() -> None:

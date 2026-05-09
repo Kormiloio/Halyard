@@ -42,7 +42,7 @@ from halyard.collectors.gemini_history import (
     find_session_file,
     parse_session_file,
 )
-from halyard.git_context import current_branch, infer_project
+from halyard.git_context import commits_in_window, current_branch, infer_project
 from halyard.hub import find_hub
 from halyard.pricing import calculate_cost
 
@@ -127,7 +127,8 @@ def handle_agent_stop() -> int:
         start = now
 
     branch = current_branch(cwd)
-    base_tags = [f"branch:{branch}"] if branch else []
+    commit_count = commits_in_window(cwd, start, now)
+    base_tags: list[str] = []
 
     # D-1: resolve attribution source before building the session so provenance
     # is recorded in the log line.
@@ -211,6 +212,8 @@ def handle_agent_stop() -> int:
         code_added=rich_code_added,
         code_removed=rich_code_removed,
         resume_command=rich_resume_command,
+        branch=branch,
+        commit_count=commit_count,
     )
 
     if can_append_project_log and project_dir is not None:

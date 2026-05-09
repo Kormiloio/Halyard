@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import json
 import sys
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from halyard.ai_log import (
     AI_LOG_FILENAME,
@@ -30,7 +32,13 @@ from halyard.ai_log import (
     read_active_project,
     write_unattributed_session,
 )
-from halyard.git_context import current_branch, infer_project
+from halyard.git_context import (
+    commits_in_window,
+    current_branch,
+    head_sha,
+    infer_project,
+    numstat_delta,
+)
 from halyard.hub import find_hub
 
 _CURSOR_SESSION_FILE = Path.home() / ".halyard" / "cursor-session"
@@ -52,8 +60,13 @@ def record_session_start() -> int:
             if warning:
                 print(warning)
 
+    cwd = Path.cwd()
     _CURSOR_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _CURSOR_SESSION_FILE.write_text(datetime.now().strftime("%Y-%m-%dT%H:%M:%S"))
+    state: dict[str, Any] = {
+        "start": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "sha_at_start": head_sha(cwd),
+    }
+    _CURSOR_SESSION_FILE.write_text(json.dumps(state))
     return 0
 
 
@@ -65,7 +78,9 @@ def handle_stop_hook() -> int:
     can_append_project_log = project_dir is not None and (project_dir / AI_LOG_FILENAME).exists()
 
     now = datetime.now()
-    start = _read_session_start() or now
+    session_state = _read_session_state()
+    start = session_state.get("start_dt") or now
+    sha_at_start: str | None = session_state.get("sha")
     _clear_session_start()
 
     usage = payload.get("usage") or payload.get("message", {}).get("usage", {}) or {}
@@ -82,6 +97,15 @@ def handle_stop_hook() -> int:
     roots = payload.get("workspace_roots") or []
     cwd_for_git = Path(roots[0]) if roots else None
     branch = current_branch(cwd_for_git) if cwd_for_git else None
+
+    # v2.24: commit count and code delta (numstat uses workspace cwd; sha captured at hook-fire cwd)
+    commit_count = commits_in_window(cwd_for_git, start, now) if cwd_for_git else None
+    code_added: int | None = None
+    code_removed: int | None = None
+    if sha_at_start and cwd_for_git:
+        delta = numstat_delta(cwd_for_git, sha_at_start)
+        if delta is not None:
+            code_added, code_removed = delta
 
     _active = read_active_project()
     _project: str | None
@@ -117,7 +141,11 @@ def handle_stop_hook() -> int:
         billing="credits",
         source="hook",
         attr_method=_attr_method,
-        tags=([f"branch:{branch}"] if branch else []) + _extra_tags,
+        tags=_extra_tags,
+        branch=branch,
+        commit_count=commit_count,
+        code_added=code_added,
+        code_removed=code_removed,
     )
 
     if can_append_project_log and project_dir is not None:
@@ -161,13 +189,24 @@ def _read_payload() -> dict:  # type: ignore[type-arg]
         return {}
 
 
-def _read_session_start() -> datetime | None:
+def _read_session_state() -> dict[str, Any]:
+    """Return {"start_dt": datetime, "sha": str|None} from the session file.
+
+    Handles both the new JSON format (v2.24+) and the legacy plain ISO timestamp.
+    """
     if not _CURSOR_SESSION_FILE.exists():
-        return None
+        return {}
+    raw = _CURSOR_SESSION_FILE.read_text().strip()
     try:
-        return datetime.fromisoformat(_CURSOR_SESSION_FILE.read_text().strip())
-    except ValueError:
-        return None
+        data = json.loads(raw)
+        start_dt: datetime | None = None
+        with suppress(ValueError, TypeError):
+            start_dt = datetime.fromisoformat(data.get("start", ""))
+        return {"start_dt": start_dt, "sha": data.get("sha_at_start")}
+    except (json.JSONDecodeError, ValueError):
+        with suppress(ValueError):
+            return {"start_dt": datetime.fromisoformat(raw), "sha": None}
+        return {}
 
 
 def _clear_session_start() -> None:

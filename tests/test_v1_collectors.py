@@ -41,9 +41,12 @@ def _init_project(tmp_path: Path) -> None:
 
 
 def test_cc_session_writes_start_file() -> None:
+    import json
+
     record_session_start()
     assert CC_SESSION_FILE.exists()
-    ts = datetime.fromisoformat(CC_SESSION_FILE.read_text().strip())
+    data = json.loads(CC_SESSION_FILE.read_text())
+    ts = datetime.fromisoformat(data["start"])
     assert isinstance(ts, datetime)
 
 

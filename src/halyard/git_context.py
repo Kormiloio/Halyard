@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 import subprocess
 import tomllib
+from datetime import datetime
 from pathlib import Path
 
 _REPOS_CONFIG = Path.home() / ".halyard" / "repos.toml"
@@ -33,6 +34,83 @@ def infer_project(cwd: Path) -> str | None:
 
     repo_name = _extract_repo_name(remote)
     return f"git/{repo_name}" if repo_name else None
+
+
+def head_sha(cwd: Path) -> str | None:
+    """Return the current HEAD SHA (short, 12 chars), or None.
+
+    Returns None on detached HEAD with no commits, git not installed, or any
+    subprocess error. Never raises.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(cwd), "rev-parse", "--short=12", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        sha = result.stdout.strip()
+        return sha or None
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+        return None
+
+
+def commits_in_window(cwd: Path, start: datetime, end: datetime) -> int | None:
+    """Return the number of commits whose author date falls in [start, end].
+
+    Returns None on any git error, timeout, or if cwd is not a git repo.
+    Never raises.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(cwd),
+                "log",
+                f"--since={start.isoformat()}",
+                f"--until={end.isoformat()}",
+                "--oneline",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode != 0:
+            return None
+        return sum(1 for line in result.stdout.splitlines() if line.strip())
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+        return None
+
+
+def numstat_delta(cwd: Path, sha_at_start: str) -> tuple[int, int] | None:
+    """Return (lines_added, lines_removed) from git diff --numstat <sha_at_start> HEAD.
+
+    Binary files (reported as '-') are skipped. Returns None on any git error,
+    timeout, or non-zero exit. Never raises.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(cwd), "diff", "--numstat", sha_at_start, "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode != 0:
+            return None
+        added = removed = 0
+        for line in result.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) < 2 or parts[0] == "-" or parts[1] == "-":
+                continue
+            try:
+                added += int(parts[0])
+                removed += int(parts[1])
+            except ValueError:
+                continue
+        return added, removed
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+        return None
 
 
 def current_branch(cwd: Path) -> str | None:

@@ -163,6 +163,12 @@ class AiSession:
     code_removed: int | None = None
     model_breakdown: str | None = None  # compact: "model-a:3|model-b:1"
     resume_command: str | None = None
+    # v2.24 outcome metadata
+    branch: str | None = None           # git branch at session close; trust: captured
+    commit_count: int | None = None     # commits in session window; trust: captured
+    pr_ref: str | None = None           # e.g. "owner/repo#42"; written by outcome sync
+    pr_state: str | None = None         # merged | closed | open | none
+    outcome_resolved_at: str | None = None  # ISO timestamp when pr_ref was resolved
 
     @classmethod
     def from_log_line(cls, line: str) -> AiSession | None:
@@ -192,6 +198,12 @@ class AiSession:
                 pass  # confirmed_at is metadata; no AiSession field for it yet
             elif key == "note":
                 self.note = value.replace("_", " ")
+            elif key == "pr_ref":
+                self.pr_ref = value
+            elif key == "pr_state":
+                self.pr_state = value
+            elif key == "outcome_resolved_at":
+                self.outcome_resolved_at = value
 
     @classmethod
     def log_line_error(cls, line: str) -> str | None:
@@ -264,6 +276,16 @@ class AiSession:
             # Same underscore ambiguity as note — see comment above.
             safe_cmd = self.resume_command.replace(" ", "_").replace("\n", "").replace("\r", "")
             kvs.append(f"resume_command={safe_cmd}")
+        if self.branch:
+            kvs.append(f"branch={self.branch}")
+        if self.commit_count is not None:
+            kvs.append(f"commit_count={self.commit_count}")
+        if self.pr_ref:
+            kvs.append(f"pr_ref={self.pr_ref}")
+        if self.pr_state:
+            kvs.append(f"pr_state={self.pr_state}")
+        if self.outcome_resolved_at:
+            kvs.append(f"outcome_resolved_at={self.outcome_resolved_at}")
         return " ".join(parts + kvs)
 
 
@@ -461,6 +483,24 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
                 session.model_breakdown = v
             case "resume_command":
                 session.resume_command = v.replace("_", " ")
+            case "branch":
+                session.branch = v
+            case "commit_count":
+                with suppress(ValueError):
+                    session.commit_count = int(v)
+            case "pr_ref":
+                session.pr_ref = v
+            case "pr_state":
+                session.pr_state = v
+            case "outcome_resolved_at":
+                session.outcome_resolved_at = v
+
+    # v2.24 backward-compat: promote legacy "branch:<name>" tag to branch field
+    if session.branch is None and session.tags:
+        for tag in session.tags:
+            if tag.startswith("branch:"):
+                session.branch = tag[len("branch:"):]
+                break
 
     return session, None
 

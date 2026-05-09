@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
-from halyard.git_context import current_branch, infer_project
+from halyard.git_context import commits_in_window, current_branch, infer_project
 from halyard.hub import find_hub
 
 _CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
@@ -69,9 +69,8 @@ def import_codex_sessions(
             cwd_path = Path(cwd)
             if session.project is None:
                 session.project = infer_project(cwd_path)
-            branch = current_branch(cwd_path)
-            if branch:
-                session.tags = [f"branch:{branch}"]
+            session.branch = current_branch(cwd_path)
+            session.commit_count = commits_in_window(cwd_path, session.start, session.end)
 
         if not dry_run and target_dir is not None:
             append_session(target_dir, session)

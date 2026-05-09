@@ -62,10 +62,12 @@ def test_record_session_start_creates_state_file(
 
     result = record_session_start()
 
+    import json
+
     assert result == 0
     assert state_file.exists()
-    # Should contain a parseable ISO timestamp
-    ts = datetime.fromisoformat(state_file.read_text().strip())
+    data = json.loads(state_file.read_text())
+    ts = datetime.fromisoformat(data["start"])
     assert ts.year == datetime.now().year
 
 
