@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from halyard.log_agent import LogAgentError, run_openai_log_query
+from halyard.log_agent import LogAgentError, _validate_base_url, run_openai_log_query
 
 _BASE_URL = "https://api.openai.com/v1"
 _LOCAL_URL = "http://localhost:11434/v1"
@@ -173,3 +173,61 @@ def test_run_openai_log_query_no_tool_support(
             base_url=_BASE_URL,
             now=_NOW,
         )
+
+
+# ---------------------------------------------------------------------------
+# H-2: _validate_base_url — reject non-HTTPS / non-localhost URLs
+# ---------------------------------------------------------------------------
+
+
+def test_validate_base_url_accepts_https() -> None:
+    assert _validate_base_url("https://api.openai.com/v1") == "https://api.openai.com/v1"
+
+
+def test_validate_base_url_accepts_localhost_http() -> None:
+    assert _validate_base_url("http://localhost:11434/v1") == "http://localhost:11434/v1"
+
+
+def test_validate_base_url_accepts_127_0_0_1() -> None:
+    assert _validate_base_url("http://127.0.0.1:8080/v1") == "http://127.0.0.1:8080/v1"
+
+
+def test_validate_base_url_accepts_ipv6_loopback() -> None:
+    # IPv6 loopback must be bracket-enclosed in URLs per RFC 2732
+    assert _validate_base_url("http://[::1]:11434/v1") == "http://[::1]:11434/v1"
+
+
+def test_validate_base_url_rejects_plain_http_remote() -> None:
+    with pytest.raises(LogAgentError, match="must be HTTPS or a localhost HTTP URL"):
+        _validate_base_url("http://attacker.example.com/v1")
+
+
+def test_validate_base_url_rejects_file_scheme() -> None:
+    with pytest.raises(LogAgentError, match="must be HTTPS or a localhost HTTP URL"):
+        _validate_base_url("file:///etc/passwd")
+
+
+def test_validate_base_url_rejects_data_scheme() -> None:
+    with pytest.raises(LogAgentError, match="must be HTTPS or a localhost HTTP URL"):
+        _validate_base_url("data:text/plain,malicious")
+
+
+def test_run_openai_log_query_rejects_malicious_base_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """run_openai_log_query must reject a non-localhost HTTP base_url before any network call."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    mock_openai = MagicMock()
+    with (
+        patch.dict(sys.modules, {"openai": mock_openai}),
+        pytest.raises(LogAgentError, match="must be HTTPS or a localhost HTTP URL"),
+    ):
+        run_openai_log_query(
+            "what did I spend",
+            project_dir=tmp_path,
+            model="gpt-4o",
+            base_url="http://attacker.example.com/v1",
+            now=_NOW,
+        )
+    # Confirm no network call was made
+    mock_openai.OpenAI.assert_not_called()

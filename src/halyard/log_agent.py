@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from halyard.ai_log import AiSession, parse_sessions
 from halyard.reports import (
@@ -319,10 +320,33 @@ def run_claude_log_query(
         raise LogAgentError("Agent exceeded maximum turn limit (3) without a final answer.")
 
     except anthropic.AnthropicError as exc:
-        raise LogAgentError(f"Anthropic API error: {exc}") from exc
+        # Don't forward SDK exception text — it may contain request context or key material.
+        raise LogAgentError(
+            f"Anthropic API error: {type(exc).__name__} — check your ANTHROPIC_API_KEY."
+        ) from exc
 
 
 _OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
+
+
+def _validate_base_url(url: str) -> str:
+    """Require HTTPS or localhost HTTP for the OpenAI-compatible base_url.
+
+    Raises LogAgentError for file://, data://, or arbitrary HTTP endpoints
+    that could redirect session metadata to an attacker-controlled server.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme == "https":
+        return url
+    if parsed.scheme == "http":
+        host = parsed.hostname or ""
+        if host in ("127.0.0.1", "localhost", "::1"):
+            return url
+    raise LogAgentError(
+        f"Invalid base_url {url!r}: must be HTTPS or a localhost HTTP URL. "
+        "Use https://api.openai.com/v1 for OpenAI or http://localhost:PORT/v1 "
+        "for local servers (Ollama, LM Studio, vLLM)."
+    )
 
 
 def run_openai_log_query(
@@ -341,6 +365,8 @@ def run_openai_log_query(
             "The openai package is required for --agent openai. Install it with:\n"
             "  pip install halyard[openai]"
         ) from None
+
+    _validate_base_url(base_url)
 
     is_openai_endpoint = base_url.rstrip("/") == _OPENAI_DEFAULT_BASE_URL.rstrip("/")
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -447,7 +473,10 @@ def run_openai_log_query(
             "Try a different model or use --agent local."
         ) from exc
     except openai.OpenAIError as exc:
-        raise LogAgentError(f"OpenAI API error: {exc}") from exc
+        # Don't forward SDK exception text — it may contain request context or key material.
+        raise LogAgentError(
+            f"OpenAI API error: {type(exc).__name__} — check your OPENAI_API_KEY or --base-url."
+        ) from exc
 
 
 def _execute_tool(name: str, args: dict[str, Any], project_dir: Path, now: datetime) -> Any:

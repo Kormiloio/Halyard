@@ -16,7 +16,8 @@ Implementation checklist for v2.16 — Distribution and Security.
 - [ ] 2.1 Add `_token_path()` and `_load_or_create_token()` helpers in `service.py`.
 - [ ] 2.2 In `dashboard.py do_GET`, set `halyard_token` cookie on `/` and `/index.html` responses.
 - [ ] 2.3 In `dashboard.py do_POST`, validate `Host` header against the bound `host:port`.
-- [ ] 2.4 Validate `Origin` / `Referer` headers if present.
+- [x] 2.4 Validate `Origin` / `Referer` headers if present.
+  — Implemented in v2.20 (H-1): Origin header validation; cross-origin POSTs return 403.
 - [ ] 2.5 Validate token via cookie or `X-Halyard-Token` header.
 - [ ] 2.6 Return 400 / 401 / 403 with terse JSON bodies on rejection.
 - [ ] 2.7 Cap `Content-Length` at 8192 bytes; return 413 if exceeded.

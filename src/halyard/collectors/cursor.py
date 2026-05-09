@@ -27,13 +27,13 @@ from halyard.ai_log import (
     append_session,
     find_project_dir,
     maybe_show_dashboard_hint,
+    read_active_project,
     write_unattributed_session,
 )
 from halyard.git_context import current_branch, infer_project
 from halyard.hub import find_hub
 
 _CURSOR_SESSION_FILE = Path.home() / ".halyard" / "cursor-session"
-_HALYARD_ACTIVE = Path.home() / ".halyard" / "active"
 
 
 def record_session_start() -> int:
@@ -42,7 +42,7 @@ def record_session_start() -> int:
         return 0  # already tracking this session — budget already checked
 
     # Budget check fires once per session, before the session file is written
-    active = _read_active_project()
+    active = read_active_project()
     if active:
         project_dir = find_project_dir() or find_hub()
         if project_dir:
@@ -77,11 +77,30 @@ def handle_stop_hook() -> int:
 
     model = payload.get("model") or payload.get("stop_model") or "cursor-unknown"
 
-    # Infer project and branch from workspace root when no active timer is running
+    # D-1: resolve attribution source so provenance is recorded in the log.
+    # Priority: active timer > workspace root git inference.
     roots = payload.get("workspace_roots") or []
     cwd_for_git = Path(roots[0]) if roots else None
-    project = _read_active_project() or (infer_project(cwd_for_git) if cwd_for_git else None)
     branch = current_branch(cwd_for_git) if cwd_for_git else None
+
+    _active = read_active_project()
+    _project: str | None
+    _attr_method: str | None
+    _extra_tags: list[str]
+    if _active:
+        _project = _active
+        _attr_method = "timer"
+        _extra_tags = []
+    elif cwd_for_git:
+        _inferred = infer_project(cwd_for_git)
+        _project = _inferred
+        # workspace_roots is Cursor-specific — stronger than pure git inference
+        _attr_method = "ws_root" if _inferred else None
+        _extra_tags = ["attribution:inferred"] if _inferred else []
+    else:
+        _project = None
+        _attr_method = None
+        _extra_tags = []
 
     session = AiSession(
         start=start,
@@ -91,13 +110,14 @@ def handle_stop_hook() -> int:
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cost_usd=0.0,
-        project=project,
+        project=_project,
         cache_read=cache_read or None,
         cache_write=cache_write or None,
         tokens_available=tokens_available,
         billing="credits",
         source="hook",
-        tags=[f"branch:{branch}"] if branch else [],
+        attr_method=_attr_method,
+        tags=([f"branch:{branch}"] if branch else []) + _extra_tags,
     )
 
     if can_append_project_log and project_dir is not None:
@@ -154,10 +174,3 @@ def _clear_session_start() -> None:
     _CURSOR_SESSION_FILE.unlink(missing_ok=True)
 
 
-def _read_active_project() -> str | None:
-    if not _HALYARD_ACTIVE.exists():
-        return None
-    for line in _HALYARD_ACTIVE.read_text().splitlines():
-        if line.startswith("slug="):
-            return line[5:]
-    return None

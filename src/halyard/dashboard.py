@@ -71,6 +71,22 @@ def _handler_for(project_dir: Path) -> type[BaseHTTPRequestHandler]:
 
             from halyard.reports import _HALYARD_ACTIVE, read_active_timer
 
+            # CSRF guard: browsers always send Origin on cross-site form POSTs.
+            # Reject any POST whose Origin header is present but does not match
+            # the dashboard's own origin.  Curl/CLI calls with no Origin header
+            # are still permitted (same-host tool access).
+            origin = self.headers.get("Origin", "")
+            if origin:
+                # server_port is the bound port; dashboard always binds 127.0.0.1
+                server_port = self.server.server_port  # type: ignore[attr-defined]
+                allowed = {
+                    f"http://127.0.0.1:{server_port}",
+                    f"http://localhost:{server_port}",
+                }
+                if origin not in allowed:
+                    self.send_error(HTTPStatus.FORBIDDEN, "Cross-origin POST not allowed")
+                    return
+
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode(errors="replace") if length else ""
             params = {k: v[0] for k, v in parse_qs(body).items()}
@@ -93,9 +109,13 @@ def _handler_for(project_dir: Path) -> type[BaseHTTPRequestHandler]:
                         with timeclock.open("a") as f:
                             f.write(f"i {ts} {account}\n")
                         _HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
-                        _HALYARD_ACTIVE.write_text(
-                            f"timeclock={timeclock}\nslug={account}\nstarted={ts}\n"
-                        )
+                        # D-2: atomic write — collectors read this file concurrently;
+                        # write to a temp file then rename so a collector never sees
+                        # partial content during the truncate-then-write window.
+                        _active_content = f"timeclock={timeclock}\nslug={account}\nstarted={ts}\n"
+                        _active_tmp = _HALYARD_ACTIVE.with_suffix(".tmp")
+                        _active_tmp.write_text(_active_content)
+                        _active_tmp.replace(_HALYARD_ACTIVE)
 
             elif self.path == "/api/stop":
                 active = read_active_timer()

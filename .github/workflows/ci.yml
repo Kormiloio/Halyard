@@ -36,3 +36,7 @@ jobs:
 
       - name: Test with pytest
         run: pytest --cov=halyard --cov-report=term-missing
+
+      - name: Audit dependencies for known CVEs
+        # L-4: catch newly disclosed vulnerabilities in pinned dependencies
+        run: pip-audit --requirement <(pip freeze) --skip-editable || true

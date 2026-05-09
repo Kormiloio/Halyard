@@ -11,10 +11,13 @@ from halyard.ai_log import (
     AI_LOG_FILENAME,
     HEADER,
     AiSession,
+    _safe_field,
     append_session,
     assign_unattributed_sessions,
+    backfill_window,
     find_project_dir,
     parse_sessions,
+    read_active_project,
     write_unattributed_session,
 )
 
@@ -371,3 +374,333 @@ def test_tool_errors_zero_written_when_calls_known() -> None:
     line = session.to_log_line()
     assert "tool_calls=5" in line
     assert "tool_errors=0" in line
+
+
+# ---------------------------------------------------------------------------
+# M-1: Newline injection sanitization in tool/model fields
+# ---------------------------------------------------------------------------
+
+
+def test_safe_field_strips_newline() -> None:
+    assert "\n" not in _safe_field("cursor\nmalicious")
+
+
+def test_safe_field_strips_equals() -> None:
+    assert "=" not in _safe_field("model=evil")
+
+
+def test_safe_field_strips_tab_and_spaces() -> None:
+    result = _safe_field("bad\tfield value")
+    assert "\t" not in result
+    assert " " not in result
+
+
+def test_safe_field_caps_at_128_chars() -> None:
+    assert len(_safe_field("x" * 200)) == 128
+
+
+def test_newline_injection_tool_sanitized(tmp_path: Path) -> None:
+    """A tool value with an embedded newline must not corrupt the log."""
+    s = _session(tool="cursor\ncost_usd=0.0000 project=evil:client")
+    append_session(tmp_path, s)
+
+    raw = (tmp_path / AI_LOG_FILENAME).read_text()
+    # The injected newline must not create extra lines in the log
+    data_lines = [ln for ln in raw.splitlines() if ln.startswith("s ")]
+    assert len(data_lines) == 1, "Newline injection created extra log lines"
+
+
+def test_newline_injection_model_sanitized(tmp_path: Path) -> None:
+    """A model value with an embedded newline must not corrupt the log."""
+    s = _session(model="bad model\n s 2026-01-01T00:00:00 2026-01-01T01:00:00 fake fake 0 0 0.0")
+    append_session(tmp_path, s)
+
+    raw = (tmp_path / AI_LOG_FILENAME).read_text()
+    data_lines = [ln for ln in raw.splitlines() if ln.startswith("s ")]
+    assert len(data_lines) == 1, "Newline injection created extra log lines"
+
+
+def test_newline_injection_round_trips_safely(tmp_path: Path) -> None:
+    """After sanitization, the log line must still parse to a valid session."""
+    s = _session(tool="cursor\nevil", model="gpt-4o\nevil")
+    append_session(tmp_path, s)
+    sessions = parse_sessions(tmp_path)
+    assert len(sessions) == 1
+    # Newlines replaced with underscores, so field contains no whitespace
+    assert "\n" not in sessions[0].tool
+    assert "\n" not in sessions[0].model
+
+
+# ---------------------------------------------------------------------------
+# M-2: note/resume_command encoding documentation (round-trip verification)
+# ---------------------------------------------------------------------------
+
+
+def test_note_with_spaces_round_trips(tmp_path: Path) -> None:
+    """Spaces in note are encoded as underscores and decoded back."""
+    s = _session(note="quick check here")
+    append_session(tmp_path, s)
+    parsed = parse_sessions(tmp_path)[0]
+    assert parsed.note == "quick check here"
+
+
+def test_note_with_underscores_ambiguity_documented(tmp_path: Path) -> None:
+    """Literal underscores in note are indistinguishable from encoded spaces after round-trip.
+    This test documents the known limitation described in M-2."""
+    s = _session(note="snake_case_note")
+    line = s.to_log_line()
+    # Underscores are preserved as-is in the encoded form
+    assert "note=snake_case_note" in line
+    # After decoding, underscores become spaces — this is the documented ambiguity
+    parsed = AiSession.from_log_line(line)
+    assert parsed is not None
+    assert parsed.note == "snake case note"  # underscores decoded as spaces
+
+
+def test_resume_command_with_spaces_round_trips(tmp_path: Path) -> None:
+    """Spaces in resume_command are encoded as underscores and decoded back."""
+    s = _session(resume_command="gemini --resume session-123")
+    append_session(tmp_path, s)
+    parsed = parse_sessions(tmp_path)[0]
+    assert parsed.resume_command == "gemini --resume session-123"
+
+
+def test_note_newline_stripped_on_encode(tmp_path: Path) -> None:
+    """Newlines in note are stripped/replaced before writing to log."""
+    s = _session(note="line one\nline two")
+    line = s.to_log_line()
+    assert "\n" not in line
+
+
+# ---------------------------------------------------------------------------
+# M-5: Quarantine error string escaping
+# ---------------------------------------------------------------------------
+
+
+def test_quarantine_error_newline_escaped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Embedded newlines in the error string must not inject extra '; error=' header lines.
+
+    The _write_quarantine function receives error strings derived from user-controlled
+    field values (e.g. 'invalid start timestamp: <value>').  If that value contained
+    a newline it would produce a second '; error=' line, confusing quarantine readers.
+    """
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    # Directly exercise _write_quarantine with an error string that contains a newline
+    from halyard.ai_log import _write_quarantine
+
+    _write_quarantine(
+        "s 2026-05-06T10:00:00 2026-05-06T11:00:00 tool model 0 0 0.0",
+        "invalid start timestamp: bad\n; error=injected",
+    )
+
+    quarantine = tmp_path / ".halyard" / "quarantine.log"
+    assert quarantine.exists()
+    content = quarantine.read_text()
+    # Must have exactly one "; error=" line — the injected one must be stripped
+    error_lines = [ln for ln in content.splitlines() if ln.startswith("; error=")]
+    assert len(error_lines) == 1, f"Injected extra error header lines:\n{content!r}"
+    # The injected fragment must not appear as a standalone header line
+    assert "; error=injected" not in content or "invalid start timestamp" in error_lines[0]
+
+
+def test_quarantine_error_no_carriage_return(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Carriage returns in error strings are also stripped."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    from halyard.ai_log import _write_quarantine
+
+    _write_quarantine(
+        "s bad-line",
+        "invalid field: value\r; error=cr-injected",
+    )
+
+    quarantine = tmp_path / ".halyard" / "quarantine.log"
+    content = quarantine.read_text()
+    assert "\r" not in content
+    error_lines = [ln for ln in content.splitlines() if ln.startswith("; error=")]
+    assert len(error_lines) == 1
+
+
+# ---------------------------------------------------------------------------
+# L-3: assign_unattributed_sessions uses atomic write (tmp → replace)
+# ---------------------------------------------------------------------------
+
+
+def test_assign_unattributed_sessions_atomic_write(tmp_path: Path) -> None:
+    """assign_unattributed_sessions must write via a temp file then rename."""
+    log = tmp_path / AI_LOG_FILENAME
+    log.write_text(
+        HEADER + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 codex codex-local "
+        "5000 1000 0.0000 source=codex\n"
+    )
+
+    tmp_file = log.with_suffix(".log.tmp")
+    # Confirm no stale tmp exists before the call
+    assert not tmp_file.exists()
+
+    changed = assign_unattributed_sessions(tmp_path, "acme:auth")
+
+    # After successful write the tmp file must have been renamed away
+    assert changed == 1
+    assert not tmp_file.exists()
+    assert log.exists()
+    sessions = parse_sessions(tmp_path)
+    assert sessions[0].project == "acme:auth"
+
+
+def test_assign_unattributed_no_change_leaves_no_tmp(tmp_path: Path) -> None:
+    """If nothing changes, no tmp file should be created."""
+    append_session(tmp_path, _session(project="acme:auth"))
+
+    changed = assign_unattributed_sessions(tmp_path, "other:proj")
+
+    assert changed == 0
+    assert not (tmp_path / AI_LOG_FILENAME).with_suffix(".log.tmp").exists()
+
+
+# ---------------------------------------------------------------------------
+# D-1: Attribution provenance — attr_method field and attribution:inferred tag
+# ---------------------------------------------------------------------------
+
+
+def test_attr_method_timer_round_trips() -> None:
+    """attr_method=timer survives a log write/read cycle."""
+    s = _session(project="acme:auth", attr_method="timer")
+    line = s.to_log_line()
+    assert "attr_method=timer" in line
+    parsed = AiSession.from_log_line(line)
+    assert parsed is not None
+    assert parsed.attr_method == "timer"
+
+
+def test_attr_method_git_round_trips() -> None:
+    """attr_method=git survives a log write/read cycle."""
+    s = _session(project="acme:auth", attr_method="git")
+    line = s.to_log_line()
+    assert "attr_method=git" in line
+    parsed = AiSession.from_log_line(line)
+    assert parsed is not None
+    assert parsed.attr_method == "git"
+
+
+def test_attr_method_none_omitted_from_log_line() -> None:
+    """When attr_method is None the field must not appear in the log line."""
+    s = _session(project="acme:auth")
+    assert s.attr_method is None
+    assert "attr_method=" not in s.to_log_line()
+
+
+def test_attr_method_backfill_set_by_assign_unattributed(tmp_path: Path) -> None:
+    """assign_unattributed_sessions must write attr_method=backfill on every attributed line."""
+    log = tmp_path / AI_LOG_FILENAME
+    log.write_text(
+        HEADER
+        + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-sonnet-4-6 "
+        "5000 1000 0.0500 source=hook\n"
+    )
+
+    assign_unattributed_sessions(tmp_path, "acme:auth")
+
+    sessions = parse_sessions(tmp_path)
+    assert len(sessions) == 1
+    assert sessions[0].project == "acme:auth"
+    assert sessions[0].attr_method == "backfill"
+
+
+def test_attr_method_backfill_set_by_backfill_window(tmp_path: Path) -> None:
+    """backfill_window must write attr_method=backfill on every attributed line."""
+    log = tmp_path / AI_LOG_FILENAME
+    log.write_text(
+        HEADER
+        + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-sonnet-4-6 "
+        "5000 1000 0.0500 source=hook\n"
+    )
+
+    backfill_window(
+        tmp_path,
+        start=datetime(2026, 5, 6, 9, 0),
+        end=datetime(2026, 5, 6, 11, 0),
+        project="acme:auth",
+    )
+
+    sessions = parse_sessions(tmp_path)
+    assert len(sessions) == 1
+    assert sessions[0].project == "acme:auth"
+    assert sessions[0].attr_method == "backfill"
+
+
+def test_already_attributed_line_not_modified_by_assign(tmp_path: Path) -> None:
+    """Lines that already have project= must not be touched by assign_unattributed_sessions."""
+    s = _session(project="acme:auth", attr_method="timer")
+    append_session(tmp_path, s)
+
+    changed = assign_unattributed_sessions(tmp_path, "other:proj")
+
+    assert changed == 0
+    sessions = parse_sessions(tmp_path)
+    assert sessions[0].project == "acme:auth"
+    assert sessions[0].attr_method == "timer"  # original provenance preserved
+
+
+def test_old_log_line_without_attr_method_parses_as_none() -> None:
+    """Pre-D-1 log lines with no attr_method= field must parse with attr_method=None."""
+    line = (
+        "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-sonnet-4-6 "
+        "5000 1000 0.0500 project=acme:auth source=hook"
+    )
+    parsed = AiSession.from_log_line(line)
+    assert parsed is not None
+    assert parsed.attr_method is None  # backward-compatible: field absent → None
+
+
+# ---------------------------------------------------------------------------
+# D-2: Shared read_active_project() utility
+# ---------------------------------------------------------------------------
+
+
+def test_read_active_project_returns_slug(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """read_active_project reads the slug= line from ~/.halyard/active."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    active = tmp_path / ".halyard" / "active"
+    active.parent.mkdir(parents=True, exist_ok=True)
+    active.write_text("timeclock=/some/path\nslug=acme:auth\nstarted=2026-05-06 10:00:00\n")
+
+    assert read_active_project() == "acme:auth"
+
+
+def test_read_active_project_returns_none_when_file_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """read_active_project returns None when ~/.halyard/active does not exist."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    # no active file created
+    assert read_active_project() is None
+
+
+def test_read_active_project_returns_none_when_no_slug_line(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """read_active_project returns None when active file has no slug= line."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    active = tmp_path / ".halyard" / "active"
+    active.parent.mkdir(parents=True, exist_ok=True)
+    active.write_text("timeclock=/some/path\nstarted=2026-05-06 10:00:00\n")
+
+    assert read_active_project() is None
+
+
+def test_read_active_project_handles_partial_content(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """read_active_project returns None gracefully when file content is empty (partial write)."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    active = tmp_path / ".halyard" / "active"
+    active.parent.mkdir(parents=True, exist_ok=True)
+    active.write_text("")  # simulates truncated write before rename completes
+
+    assert read_active_project() is None

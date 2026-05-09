@@ -91,3 +91,20 @@ def test_init_preserves_existing_gitignore(tmp_path: Path, monkeypatch: object) 
     assert "dist/" in content
     assert ".halyard-cache/" in content
     assert content.count(".halyard-cache/") == 1
+
+
+# ---------------------------------------------------------------------------
+# L-5: .gitignore must include .halyard/ to prevent accidental commit of
+#       user-local logs (quarantine.log, unattributed.log, active, cc-session)
+# ---------------------------------------------------------------------------
+
+
+def test_init_gitignore_includes_halyard_dir(tmp_path: Path, monkeypatch: object) -> None:
+    """halyard init must add .halyard/ to .gitignore (L-5 fix)."""
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+
+    result = runner.invoke(app, ["init"])
+
+    assert result.exit_code == 0, result.output
+    content = (tmp_path / ".gitignore").read_text()
+    assert ".halyard/" in content

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import tomllib
@@ -15,6 +16,11 @@ from jinja2 import Environment, FileSystemLoader
 
 from halyard.ai_log import AiSession, parse_sessions
 from halyard.ai_plans import AiPlan
+
+# M-3/M-4: Slugs must be lowercase alphanumeric + hyphens only.
+# This prevents path traversal (e.g. slug = "../../etc") and argument
+# splitting in subprocess calls to open/xdg-open.
+_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 
 @dataclass(frozen=True)
@@ -183,6 +189,14 @@ def generate_invoice(
     else:
         invoice_number = f"{period}-{counter + 1:03d}"
         invoice_path = invoice_dir / f"{invoice_number}-{client_slug}.md"
+
+    # M-4: confirm the resolved invoice path stays within invoice_dir.
+    # Slug validation in _read_clients already blocks traversal chars, but this
+    # adds a second layer of defence for the force=True branch (existing path).
+    if not invoice_path.resolve().is_relative_to(invoice_dir.resolve()):
+        raise InvoiceError(
+            f"Invoice path escapes invoice directory: {invoice_path}"
+        )
 
     business = config.get("business", {}) if isinstance(config.get("business"), dict) else {}
     currency = str(business.get("currency") or "USD")
@@ -358,7 +372,8 @@ def _read_clients(project_dir: Path) -> dict[str, ClientRecord]:
         if not isinstance(raw, dict):
             continue
         slug = str(raw.get("slug") or "")
-        if not slug:
+        if not slug or not _SLUG_RE.match(slug):
+            # M-3: reject slugs with path separators, spaces, or other unsafe chars
             continue
         history: list[tuple[date, float]] = []
         for entry in raw.get("rate_history", []):
@@ -389,7 +404,10 @@ def _read_projects(project_dir: Path) -> dict[str, ProjectRecord]:
             continue
         slug = str(raw.get("slug") or "")
         client_slug = str(raw.get("client_slug") or "")
+        # M-3: reject slugs that contain path separators or other unsafe chars
         if not slug or not client_slug:
+            continue
+        if not _SLUG_RE.match(slug) or not _SLUG_RE.match(client_slug):
             continue
         rate = raw.get("hourly_rate")
         result[slug] = ProjectRecord(
@@ -516,6 +534,8 @@ def _render_invoice(
         template_dir = Path(__file__).resolve().parents[2] / "templates"
         template_name = "invoice.md.j2"
 
+    # L-1: autoescape=False is intentional — output is Markdown, not HTML.
+    # If adding HTML templates in future, create a separate Environment with autoescape=True.
     env = Environment(loader=FileSystemLoader(str(template_dir)), autoescape=False)
     template = env.get_template(template_name)
     return template.render(

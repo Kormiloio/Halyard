@@ -19,6 +19,7 @@ from halyard.ai_log import (
     append_session,
     find_project_dir,
     maybe_show_dashboard_hint,
+    read_active_project,
     write_unattributed_session,
 )
 from halyard.git_context import current_branch, infer_project
@@ -26,7 +27,6 @@ from halyard.hub import find_hub
 from halyard.pricing import calculate_cost, model_is_known
 
 _CC_SESSION_FILE = Path.home() / ".halyard" / "cc-session"
-_HALYARD_ACTIVE = Path.home() / ".halyard" / "active"
 
 
 def record_session_start() -> int:
@@ -35,7 +35,7 @@ def record_session_start() -> int:
         return 0  # already tracking this session — budget already checked
 
     # Budget check fires once per session, before the session file is written
-    active = _read_active_project()
+    active = read_active_project()
     if active:
         cwd = Path.cwd()
         project_dir = find_project_dir(start=cwd) or find_hub()
@@ -85,6 +85,20 @@ def handle_stop_hook() -> int:
     cost = calculate_cost(model, input_tokens, output_tokens, cache_read, cache_write)
     branch = current_branch(cwd)
 
+    # D-1: resolve attribution source so provenance is recorded in the log.
+    _active = read_active_project()
+    _project: str | None
+    _attr_method: str | None
+    _extra_tags: list[str]
+    if _active:
+        _project = _active
+        _attr_method = "timer"
+        _extra_tags = []
+    else:
+        _project = infer_project(cwd)
+        _attr_method = "git" if _project else None
+        _extra_tags = ["attribution:inferred"] if _project else []
+
     session = AiSession(
         start=start,
         end=now,
@@ -93,12 +107,13 @@ def handle_stop_hook() -> int:
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cost_usd=cost,
-        project=_read_active_project() or infer_project(cwd),
+        project=_project,
         cache_read=cache_read or None,
         cache_write=cache_write or None,
         tokens_available=tokens_available,
         source="hook",
-        tags=[f"branch:{branch}"] if branch else [],
+        attr_method=_attr_method,
+        tags=([f"branch:{branch}"] if branch else []) + _extra_tags,
     )
 
     if can_append_project_log and project_dir is not None:
@@ -138,15 +153,6 @@ def _read_session_start() -> datetime | None:
 
 def _clear_session_start() -> None:
     _CC_SESSION_FILE.unlink(missing_ok=True)
-
-
-def _read_active_project() -> str | None:
-    if not _HALYARD_ACTIVE.exists():
-        return None
-    for line in _HALYARD_ACTIVE.read_text().splitlines():
-        if line.startswith("slug="):
-            return line[5:]
-    return None
 
 
 def _read_model_from_settings(project_dir: Path) -> str | None:

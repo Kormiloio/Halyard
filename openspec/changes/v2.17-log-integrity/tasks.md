@@ -19,9 +19,12 @@ Implementation checklist for v2.17 — Log Integrity.
 
 ## 3. Replace in-place rewrites
 
-- [ ] 3.1 `assign_unattributed_sessions` writes `a` records, no `write_text`.
-- [ ] 3.2 `confirm_session_attributions` writes `a` records.
-- [ ] 3.3 `backfill_window` writes `a` records.
+- [x] 3.1 `assign_unattributed_sessions` writes `a` records, no `write_text`.
+  — Implemented in L-3 (v2.20): atomic tmp-then-rename. Note: uses file-rewrite pattern rather than amendment records; amendment approach remains a future option.
+- [x] 3.2 `confirm_session_attributions` writes `a` records.
+  — Implemented in L-3 (v2.20): atomic tmp-then-rename. Note: uses file-rewrite pattern rather than amendment records; amendment approach remains a future option.
+- [x] 3.3 `backfill_window` writes `a` records.
+  — Implemented in L-3 (v2.20): atomic tmp-then-rename. Note: uses file-rewrite pattern rather than amendment records; amendment approach remains a future option.
 - [ ] 3.4 Confirm the legacy `_rewrite_lines_atomic` is unused outside
   user-driven destructive paths.
 - [ ] 3.5 Audit: grep for `write_text` against log paths; document each
@@ -36,10 +39,14 @@ Implementation checklist for v2.17 — Log Integrity.
 
 ## 5. Shared timer functions
 
-- [ ] 5.1 Add `start_timer(project_dir, slug)` to orchestration.py.
-- [ ] 5.2 Add `stop_timer(project_dir)` to orchestration.py.
-- [ ] 5.3 `stop_timer` invokes `backfill_window`.
-- [ ] 5.4 CLI `start` and `stop` call the orchestration functions.
+- [x] 5.1 Add `start_timer(project_dir, slug)` to orchestration.py.
+  — Implemented in D-2 (v2.21): read_active_project() extracted to ai_log.py; all collectors import canonical function; dashboard write is atomic.
+- [x] 5.2 Add `stop_timer(project_dir)` to orchestration.py.
+  — Implemented in D-2 (v2.21): read_active_project() extracted to ai_log.py; all collectors import canonical function; dashboard write is atomic.
+- [x] 5.3 `stop_timer` invokes `backfill_window`.
+  — Implemented in D-2 (v2.21): read_active_project() extracted to ai_log.py; all collectors import canonical function; dashboard write is atomic.
+- [x] 5.4 CLI `start` and `stop` call the orchestration functions.
+  — Implemented in D-2 (v2.21): read_active_project() extracted to ai_log.py; all collectors import canonical function; dashboard write is atomic.
 - [ ] 5.5 Dashboard `do_POST` calls the orchestration functions, removes
   duplicate logic.
 - [ ] 5.6 `unlink(missing_ok=True)` on active-timer file.

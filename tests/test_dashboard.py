@@ -347,3 +347,118 @@ def test_panel_status_costs_trust_pill_warning(tmp_path: Path) -> None:
     html = render_dashboard(tmp_path)
 
     assert "1 missing" in html  # costs trust pill
+
+
+# ---------------------------------------------------------------------------
+# H-1: CSRF — Origin header validation on POST endpoints
+# ---------------------------------------------------------------------------
+
+
+def _make_request(
+    project_dir: Path,
+    path: str,
+    body: bytes,
+    headers: dict[str, str],
+) -> tuple[int, str]:
+    """Spin up a real ThreadingHTTPServer, fire one POST, return (status, reason)."""
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from halyard.dashboard import _handler_for
+
+    handler_cls = _handler_for(project_dir)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
+    port = server.server_port
+
+    status_box: list[int] = []
+    reason_box: list[str] = []
+
+    def _serve_one() -> None:
+        server.handle_request()
+
+    t = threading.Thread(target=_serve_one, daemon=True)
+    t.start()
+
+    import http.client
+
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    conn.request("POST", path, body=body, headers={"Content-Length": str(len(body)), **headers})
+    resp = conn.getresponse()
+    status_box.append(resp.status)
+    reason_box.append(resp.reason)
+    conn.close()
+    server.server_close()
+    t.join(timeout=2)
+
+    return status_box[0], reason_box[0]
+
+
+def test_csrf_rejects_cross_origin_post(tmp_path: Path) -> None:
+    """A POST with a foreign Origin header must be rejected with 403."""
+    _init_project(tmp_path)
+    body = b"project=acme/auth"
+    status, _reason = _make_request(
+        tmp_path,
+        "/api/start",
+        body,
+        {"Content-Type": "application/x-www-form-urlencoded", "Origin": "http://evil.example.com"},
+    )
+    assert status == 403
+
+
+def test_csrf_allows_same_origin_post(tmp_path: Path) -> None:
+    """A POST from the dashboard's own origin must be processed (not 403)."""
+    _init_project(tmp_path)
+    # Write a minimal timeclock file so the endpoint has something to work with
+    (tmp_path / "time.timeclock").write_text("; timeclock\n")
+    body = b"project=acme/auth"
+
+    import http.client
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from halyard.dashboard import _handler_for
+
+    handler_cls = _handler_for(tmp_path)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
+    port = server.server_port
+
+    results: list[int] = []
+
+    def _serve_one() -> None:
+        server.handle_request()
+
+    t = threading.Thread(target=_serve_one, daemon=True)
+    t.start()
+
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    conn.request(
+        "POST",
+        "/api/start",
+        body=body,
+        headers={
+            "Content-Length": str(len(body)),
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": f"http://127.0.0.1:{port}",
+        },
+    )
+    resp = conn.getresponse()
+    results.append(resp.status)
+    conn.close()
+    server.server_close()
+    t.join(timeout=2)
+
+    assert results[0] != 403
+
+
+def test_csrf_allows_no_origin_post(tmp_path: Path) -> None:
+    """A POST with no Origin header (curl/CLI) must not be blocked."""
+    _init_project(tmp_path)
+    body = b"project=acme/auth"
+    status, _reason = _make_request(
+        tmp_path,
+        "/api/start",
+        body,
+        {"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert status != 403

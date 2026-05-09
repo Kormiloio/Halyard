@@ -98,6 +98,7 @@ _AI_PLANS_TOML = """\
 
 _GITIGNORE = """\
 # Halyard
+.halyard/
 .halyard-cache/
 .DS_Store
 

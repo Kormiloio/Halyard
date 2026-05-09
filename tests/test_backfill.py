@@ -249,3 +249,50 @@ def test_backfill_no_timeclock_data(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     result = runner.invoke(app, ["backfill"], catch_exceptions=False)
     assert result.exit_code == 0
     assert "No timeclock data" in result.output
+
+
+# ---------------------------------------------------------------------------
+# L-3: backfill_window uses atomic write (tmp → replace)
+# ---------------------------------------------------------------------------
+
+
+def test_backfill_window_atomic_write(tmp_path: Path) -> None:
+    """backfill_window must write via a temp file then rename (no stale .tmp)."""
+    from halyard.ai_log import parse_sessions
+
+    start = datetime(2026, 5, 6, 10, 0)
+    window_end = datetime(2026, 5, 6, 12, 0)
+
+    log = tmp_path / AI_LOG_FILENAME
+    append_session(tmp_path, _session(start=start))
+
+    tmp_file = log.with_suffix(".log.tmp")
+    assert not tmp_file.exists()
+
+    changed = backfill_window(tmp_path, start, window_end, "acme:auth")
+
+    assert changed == 1
+    assert not tmp_file.exists()
+    sessions = parse_sessions(tmp_path)
+    assert sessions[0].project == "acme:auth"
+
+
+def test_backfill_window_dry_run_leaves_no_tmp(tmp_path: Path) -> None:
+    """In dry_run mode, no tmp file must be written."""
+    from halyard.ai_log import parse_sessions
+
+    start = datetime(2026, 5, 6, 10, 0)
+    window_end = datetime(2026, 5, 6, 12, 0)
+
+    append_session(tmp_path, _session(start=start))
+
+    changed = backfill_window(
+        tmp_path, start, window_end, "acme:auth", dry_run=True
+    )
+
+    log = tmp_path / AI_LOG_FILENAME
+    assert changed == 1
+    assert not log.with_suffix(".log.tmp").exists()
+    # dry_run must not write attribution to disk
+    sessions = parse_sessions(tmp_path)
+    assert sessions[0].project is None

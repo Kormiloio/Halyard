@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -13,6 +14,20 @@ HEADER = (
     "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd> [key=value ...]\n"
 )
 AI_LOG_FILENAME = "ai-sessions.log"
+
+# Regex matching characters that would break the space-delimited log line format.
+# Used to sanitize positional fields (tool, model) before writing.
+_UNSAFE_FIELD_RE = re.compile(r"[\s=]")
+
+
+def _safe_field(value: str) -> str:
+    """Sanitize a positional log field (tool, model) for safe embedding in a log line.
+
+    Replaces whitespace and '=' characters with '_' and caps the result at 128
+    characters.  Whitespace would split the space-delimited record into extra
+    tokens; '=' would be mis-parsed as a key=value pair by the parser.
+    """
+    return _UNSAFE_FIELD_RE.sub("_", value)[:128]
 
 
 @dataclass
@@ -35,6 +50,11 @@ class AiSession:
     source: str | None = None
     tags: list[str] = field(default_factory=list)
     note: str | None = None
+    # D-1: attribution provenance — how the project was determined.
+    # Values: "timer" (active timer running), "ws_root" (Cursor workspace root),
+    # "git" (git-remote inference), "backfill" (assign-unattributed / backfill-window),
+    # "manual" (explicit CLI flag).  None means unknown / pre-D-1 log line.
+    attr_method: str | None = None
     # Rich session telemetry (v2.6 — optional, all surfaces backward-compatible)
     session_id: str | None = None
     tool_calls: int | None = None
@@ -65,8 +85,8 @@ class AiSession:
             "s",
             self.start.strftime("%Y-%m-%dT%H:%M:%S"),
             self.end.strftime("%Y-%m-%dT%H:%M:%S"),
-            self.tool,
-            self.model,
+            _safe_field(self.tool),    # M-1: sanitize whitespace/= injection
+            _safe_field(self.model),   # M-1: sanitize whitespace/= injection
             str(self.input_tokens),
             str(self.output_tokens),
             f"{self.cost_usd:.4f}",
@@ -90,9 +110,15 @@ class AiSession:
             kvs.append(f"job_id={self.job_id}")
         if self.source:
             kvs.append(f"source={self.source}")
+        if self.attr_method:
+            kvs.append(f"attr_method={self.attr_method}")
         if self.tags:
             kvs.append(f"tags={','.join(self.tags)}")
         if self.note:
+            # M-2 encoding contract: spaces→underscores, CR/LF/tab stripped.
+            # Limitation: literal underscores in the original note are
+            # indistinguishable from encoded spaces after round-trip.
+            # Future format versions should use percent-encoding.
             note_safe = (
                 self.note.replace("\n", " ").replace("\r", "").replace("\t", " ").replace(" ", "_")
             )
@@ -115,6 +141,8 @@ class AiSession:
         if self.model_breakdown:
             kvs.append(f"model_breakdown={self.model_breakdown}")
         if self.resume_command:
+            # M-2 encoding contract: spaces→underscores, CR/LF stripped.
+            # Same underscore ambiguity as note — see comment above.
             safe_cmd = self.resume_command.replace(" ", "_").replace("\n", "").replace("\r", "")
             kvs.append(f"resume_command={safe_cmd}")
         return " ".join(parts + kvs)
@@ -151,13 +179,19 @@ def assign_unattributed_sessions(project_dir: Path, project: str) -> int:
     lines = []
     for line in log_path.read_text().splitlines():
         if _is_assignable_session_line(line):
-            lines.append(f"{line} project={project}")
+            # D-1: record provenance so auditors can distinguish automatic
+            # backfill attribution from timer-confirmed attribution.
+            lines.append(f"{line} project={project} attr_method=backfill")
             changed += 1
         else:
             lines.append(line)
 
     if changed:
-        log_path.write_text("\n".join(lines) + "\n")
+        # L-3: atomic write — write to a temp file then rename so a crash
+        # mid-write cannot leave the log in a partially-written state.
+        tmp = log_path.with_suffix(".log.tmp")
+        tmp.write_text("\n".join(lines) + "\n")
+        tmp.replace(log_path)
 
     return changed
 
@@ -254,6 +288,8 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
                 session.job_id = v
             case "source":
                 session.source = v
+            case "attr_method":
+                session.attr_method = v
             case "tags":
                 session.tags = v.split(",")
             case "note":
@@ -312,7 +348,10 @@ def confirm_session_attributions(
             new_lines.append(raw_line)
 
     if changed:
-        log_path.write_text("\n".join(new_lines) + "\n")
+        # L-3: atomic write
+        tmp = log_path.with_suffix(".log.tmp")
+        tmp.write_text("\n".join(new_lines) + "\n")
+        tmp.replace(log_path)
 
     return changed
 
@@ -343,7 +382,8 @@ def backfill_window(
             session = _parse_line(line)
             if session is not None and start <= session.start < end:
                 if not dry_run:
-                    new_lines.append(f"{line} project={project}")
+                    # D-1: record provenance — backfill is a post-hoc attribution
+                    new_lines.append(f"{line} project={project} attr_method=backfill")
                 else:
                     new_lines.append(raw_line)
                 changed += 1
@@ -351,7 +391,10 @@ def backfill_window(
         new_lines.append(raw_line)
 
     if changed and not dry_run:
-        log_path.write_text("\n".join(new_lines) + "\n")
+        # L-3: atomic write — same pattern as assign_unattributed_sessions
+        tmp = log_path.with_suffix(".log.tmp")
+        tmp.write_text("\n".join(new_lines) + "\n")
+        tmp.replace(log_path)
 
     return changed
 
@@ -359,6 +402,23 @@ def backfill_window(
 def _is_assignable_session_line(line: str) -> bool:
     stripped = line.strip()
     return stripped.startswith("s ") and " project=" not in stripped
+
+
+def read_active_project() -> str | None:
+    """Return the active project slug from ~/.halyard/active, or None if not set.
+
+    This is the single canonical implementation.  All three collectors import
+    this function so that the read logic is never duplicated.  The file is
+    written atomically by the dashboard (tmp-then-rename), so a partial read
+    will simply find no ``slug=`` line and return None — a safe degradation.
+    """
+    active = Path.home() / ".halyard" / "active"
+    if not active.exists():
+        return None
+    for line in active.read_text().splitlines():
+        if line.startswith("slug="):
+            return line[5:]
+    return None
 
 
 def write_unattributed_session(session: AiSession) -> Path:
@@ -401,7 +461,10 @@ def maybe_show_dashboard_hint() -> None:
 def _write_quarantine(original_line: str, error: str) -> Path:
     path = Path.home() / ".halyard" / "quarantine.log"
     path.parent.mkdir(parents=True, exist_ok=True)
+    # M-5: strip newlines from the error string so a crafted log line cannot
+    # inject additional "; error=..." header lines into quarantine.log.
+    safe_error = error.replace("\n", " ").replace("\r", "")
     with path.open("a") as f:
-        f.write(f"; error={error}\n")
+        f.write(f"; error={safe_error}\n")
         f.write(original_line.rstrip("\n") + "\n")
     return path

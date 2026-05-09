@@ -34,6 +34,7 @@ from halyard.ai_log import (
     append_session,
     find_project_dir,
     maybe_show_dashboard_hint,
+    read_active_project,
     write_unattributed_session,
 )
 from halyard.collectors.gemini_history import (
@@ -54,7 +55,7 @@ def record_session_start() -> int:
     cwd_str = payload.get("cwd", "")
 
     # Budget check fires before writing the new session state
-    active = _read_active_project()
+    active = read_active_project()
     if active:
         cwd = Path(cwd_str) if cwd_str else Path.cwd()
         project_dir = find_project_dir(start=cwd) or find_hub()
@@ -128,6 +129,18 @@ def handle_agent_stop() -> int:
     branch = current_branch(cwd)
     base_tags = [f"branch:{branch}"] if branch else []
 
+    # D-1: resolve attribution source before building the session so provenance
+    # is recorded in the log line.
+    _active = read_active_project()
+    if _active:
+        _gc_project: str | None = _active
+        _gc_attr_method: str | None = "timer"
+        _gc_inferred_tag: list[str] = []
+    else:
+        _gc_project = infer_project(cwd)
+        _gc_attr_method = "git" if _gc_project else None
+        _gc_inferred_tag = ["attribution:inferred"] if _gc_project else []
+
     # Try to enrich from the history file for accurate multi-model cost
     session_id = (state or {}).get("session_id") or ""
     history_summary = None
@@ -152,7 +165,7 @@ def handle_agent_stop() -> int:
         cache_tokens = history_summary.total_cache
         cost = history_summary.cost_usd
         tokens_available = net_input > 0 or output_tokens > 0
-        tags = base_tags
+        tags = base_tags + _gc_inferred_tag
         # Rich telemetry — use proper fields, not tags
         if history_summary.total_tool_calls:
             rich_tool_calls = history_summary.total_tool_calls
@@ -172,7 +185,7 @@ def handle_agent_stop() -> int:
         net_input = max(0, prompt_tokens - cache_tokens)
         cost = calculate_cost(model, net_input, output_tokens, cache_read=cache_tokens)
         tokens_available = prompt_tokens > 0 or output_tokens > 0
-        tags = base_tags
+        tags = base_tags + _gc_inferred_tag
         rich_wall_seconds = max(0, int((now - start).total_seconds()))
 
     session = AiSession(
@@ -183,11 +196,12 @@ def handle_agent_stop() -> int:
         input_tokens=net_input,
         output_tokens=output_tokens,
         cost_usd=cost,
-        project=_read_active_project() or infer_project(cwd),
+        project=_gc_project,
         cache_read=cache_tokens or None,
         tokens_available=tokens_available,
         billing="api",
         source="hook",
+        attr_method=_gc_attr_method,
         tags=tags,
         session_id=rich_session_id,
         tool_calls=rich_tool_calls,
@@ -255,11 +269,3 @@ def _format_model_breakdown(model_stats: list[GeminiModelStats]) -> str:
     return "|".join(parts)
 
 
-def _read_active_project() -> str | None:
-    active = Path.home() / ".halyard" / "active"
-    if not active.exists():
-        return None
-    for line in active.read_text().splitlines():
-        if line.startswith("slug="):
-            return line[5:]
-    return None

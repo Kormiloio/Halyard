@@ -224,3 +224,70 @@ def test_install_hook_preserves_existing_settings(
     settings = json.loads((settings_dir / "settings.json").read_text())
     assert settings["model"] == "claude-opus-4-7"
     assert "hooks" in settings
+
+
+# ---------------------------------------------------------------------------
+# D-1: Attribution provenance — claude_code collector
+# ---------------------------------------------------------------------------
+
+
+def test_stop_hook_timer_attribution_sets_attr_method_timer(tmp_path: Path) -> None:
+    """When active timer is running, attr_method=timer and no attribution:inferred tag."""
+    _init_project(tmp_path)
+    HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
+    HALYARD_ACTIVE.write_text(
+        f"timeclock={tmp_path}/time.timeclock\nslug=acme:auth\nstarted=2026-05-06 10:00:00\n"
+    )
+
+    _run_stop_hook(
+        tmp_path,
+        {"model": "claude-sonnet-4-6", "usage": {"input_tokens": 1000, "output_tokens": 200}},
+    )
+
+    s = parse_sessions(tmp_path)[0]
+    assert s.project == "acme:auth"
+    assert s.attr_method == "timer"
+    assert "attribution:inferred" not in s.tags
+
+
+def test_stop_hook_git_inference_sets_attr_method_git(tmp_path: Path) -> None:
+    """When no active timer, git inference sets attr_method=git and attribution:inferred tag."""
+    import io
+
+    _init_project(tmp_path)
+    inferred_project = "git/my-repo"
+    payload = json.dumps(
+        {"model": "claude-sonnet-4-6", "usage": {"input_tokens": 500, "output_tokens": 100}}
+    )
+
+    with (
+        patch("halyard.collectors.claude_code.find_project_dir", return_value=tmp_path),
+        patch("halyard.collectors.claude_code.infer_project", return_value=inferred_project),
+        patch("sys.stdin", io.StringIO(payload)),
+    ):
+        handle_stop_hook()
+
+    s = parse_sessions(tmp_path)[0]
+    assert s.project == inferred_project
+    assert s.attr_method == "git"
+    assert "attribution:inferred" in s.tags
+
+
+def test_stop_hook_no_project_sets_attr_method_none(tmp_path: Path) -> None:
+    """When both active timer and git inference return None, attr_method is not set."""
+    import io
+
+    _init_project(tmp_path)
+    payload = json.dumps({"model": "claude-sonnet-4-6", "usage": {}})
+
+    with (
+        patch("halyard.collectors.claude_code.find_project_dir", return_value=tmp_path),
+        patch("halyard.collectors.claude_code.infer_project", return_value=None),
+        patch("sys.stdin", io.StringIO(payload)),
+    ):
+        handle_stop_hook()
+
+    s = parse_sessions(tmp_path)[0]
+    assert s.project is None
+    assert s.attr_method is None
+    assert "attribution:inferred" not in s.tags

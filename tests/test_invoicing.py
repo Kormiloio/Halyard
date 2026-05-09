@@ -616,3 +616,88 @@ def test_read_clients_parses_rate_history(tmp_path: Path) -> None:
     assert len(clients["acme"].rate_history) == 2
     assert clients["acme"].rate_history[0] == (date(2026, 1, 1), 150.0)
     assert clients["acme"].rate_history[1] == (date(2026, 6, 1), 175.0)
+
+
+# ---------------------------------------------------------------------------
+# M-3: Invoice slug validation (path traversal prevention)
+# ---------------------------------------------------------------------------
+
+
+def test_read_clients_rejects_traversal_slug(tmp_path: Path) -> None:
+    """A client slug containing path traversal characters must be rejected."""
+    from halyard.invoicing import _read_clients
+
+    (tmp_path / "clients.toml").write_text(
+        '[[client]]\nslug = "../../evil"\nname = "Evil"\nhourly_rate = 100\n'
+    )
+    clients = _read_clients(tmp_path)
+    assert "../../evil" not in clients
+    assert len(clients) == 0
+
+
+def test_read_clients_rejects_slug_with_spaces(tmp_path: Path) -> None:
+    from halyard.invoicing import _read_clients
+
+    (tmp_path / "clients.toml").write_text(
+        '[[client]]\nslug = "bad slug"\nname = "Bad"\nhourly_rate = 100\n'
+    )
+    clients = _read_clients(tmp_path)
+    assert len(clients) == 0
+
+
+def test_read_clients_accepts_valid_slug(tmp_path: Path) -> None:
+    from halyard.invoicing import _read_clients
+
+    (tmp_path / "clients.toml").write_text(
+        '[[client]]\nslug = "acme-corp"\nname = "Acme Corp"\nhourly_rate = 100\n'
+    )
+    clients = _read_clients(tmp_path)
+    assert "acme-corp" in clients
+
+
+def test_read_projects_rejects_traversal_slug(tmp_path: Path) -> None:
+    """A project slug containing path traversal characters must be rejected."""
+    from halyard.invoicing import _read_projects
+
+    (tmp_path / "projects.toml").write_text(
+        '[[project]]\nslug = "../evil"\nclient_slug = "acme"\nname = "Evil"\n'
+    )
+    projects = _read_projects(tmp_path)
+    assert "../evil" not in projects
+    assert len(projects) == 0
+
+
+def test_read_projects_rejects_traversal_client_slug(tmp_path: Path) -> None:
+    """A client_slug containing path traversal characters must be rejected."""
+    from halyard.invoicing import _read_projects
+
+    (tmp_path / "projects.toml").write_text(
+        '[[project]]\nslug = "auth"\nclient_slug = "../../etc"\nname = "Auth"\n'
+    )
+    projects = _read_projects(tmp_path)
+    assert len(projects) == 0
+
+
+# ---------------------------------------------------------------------------
+# M-4: Invoice path confinement
+# ---------------------------------------------------------------------------
+
+
+def test_generate_invoice_path_confined_to_invoices_dir(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    """A valid client slug must produce an invoice path inside invoices/."""
+    monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
+    _init_project(tmp_path)
+
+    from halyard.invoicing import generate_invoice
+
+    result = generate_invoice(
+        "acme",
+        project_slug=None,
+        period="2026-05",
+        project_dir=tmp_path,
+    )
+    assert result.path is not None
+    invoice_dir = (tmp_path / "invoices").resolve()
+    assert result.path.resolve().is_relative_to(invoice_dir)

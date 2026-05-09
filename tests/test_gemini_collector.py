@@ -186,7 +186,7 @@ def test_handle_agent_stop_writes_session(tmp_path: Path, monkeypatch: pytest.Mo
         )
     )
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
-    monkeypatch.setattr("halyard.collectors.gemini_cli._read_active_project", lambda: "acme:web")
+    monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: "acme:web")
 
     with _patch_stdin(_after_agent_payload(cwd=str(project))):
         result = handle_agent_stop()
@@ -220,7 +220,7 @@ def test_handle_agent_stop_resets_accumulators(
         )
     )
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
-    monkeypatch.setattr("halyard.collectors.gemini_cli._read_active_project", lambda: None)
+    monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)
 
     with _patch_stdin(_after_agent_payload(cwd=str(project))):
         handle_agent_stop()
@@ -271,7 +271,7 @@ def test_handle_agent_stop_tokens_available_false_when_no_tokens(
         )
     )
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
-    monkeypatch.setattr("halyard.collectors.gemini_cli._read_active_project", lambda: None)
+    monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)
 
     with _patch_stdin(_after_agent_payload(cwd=str(project))):
         handle_agent_stop()
@@ -288,7 +288,7 @@ def test_full_turn_sequence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "gc-session"
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
-    monkeypatch.setattr("halyard.collectors.gemini_cli._read_active_project", lambda: None)
+    monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)
 
     with _patch_stdin(_session_start_payload(cwd=str(project), timestamp="2026-05-07T10:00:00")):
         record_session_start()
@@ -321,7 +321,7 @@ def test_cache_tokens_reduce_input_and_set_cache_read(
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "gc-session"
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
-    monkeypatch.setattr("halyard.collectors.gemini_cli._read_active_project", lambda: None)
+    monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)
 
     with _patch_stdin(_session_start_payload(cwd=str(project))):
         record_session_start()

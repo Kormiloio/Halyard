@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 PLIST_LABEL = "io.kormilo.halyard"
@@ -23,7 +24,20 @@ def install_service(project_dir: Path, port: int = 7432) -> str:
 def uninstall_service() -> None:
     """Unload and remove the LaunchAgent plist."""
     if PLIST_PATH.exists():
-        subprocess.run(["launchctl", "unload", "-w", str(PLIST_PATH)], check=False)
+        # L-2: capture launchctl output so we can warn on failure.
+        # check=False is intentional — we still remove the plist even if unload
+        # fails (e.g. service already stopped / partially loaded state).
+        result = subprocess.run(
+            ["launchctl", "unload", "-w", str(PLIST_PATH)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(
+                f"[halyard] Warning: launchctl unload exited {result.returncode}"
+                + (f": {result.stderr.strip()}" if result.stderr.strip() else ""),
+                file=sys.stderr,
+            )
         PLIST_PATH.unlink()
 
 
