@@ -84,7 +84,7 @@ def _remote_to_repo(remote: str) -> str | None:
     # https://github.com/owner/repo.git
     for prefix in ("https://github.com/", "http://github.com/"):
         if remote.startswith(prefix):
-            path = remote[len(prefix):].removesuffix(".git")
+            path = remote[len(prefix) :].removesuffix(".git")
             return path or None
     return None
 
@@ -307,8 +307,7 @@ def outcome_report(
     filtered = [
         s
         for s in sessions
-        if s.start.date() >= cutoff
-        and (project_slug is None or s.project == project_slug)
+        if s.start.date() >= cutoff and (project_slug is None or s.project == project_slug)
     ]
 
     buckets: dict[str, list[AiSession]] = {
@@ -460,8 +459,13 @@ def _fetch_pr_by_ref(
         return []
     try:
         result = subprocess.run(
-            ["gh", "api", f"repos/{repo}/pulls/{number_str}",
-             "--jq", "{number: .number, state: .state, mergedAt: .merged_at, url: .html_url}"],
+            [
+                "gh",
+                "api",
+                f"repos/{repo}/pulls/{number_str}",
+                "--jq",
+                "{number: .number, state: .state, mergedAt: .merged_at, url: .html_url}",
+            ],
             capture_output=True,
             text=True,
             timeout=_GH_TIMEOUT,

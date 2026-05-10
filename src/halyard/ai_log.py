@@ -164,10 +164,10 @@ class AiSession:
     model_breakdown: str | None = None  # compact: "model-a:3|model-b:1"
     resume_command: str | None = None
     # v2.24 outcome metadata
-    branch: str | None = None           # git branch at session close; trust: captured
-    commit_count: int | None = None     # commits in session window; trust: captured
-    pr_ref: str | None = None           # e.g. "owner/repo#42"; written by outcome sync
-    pr_state: str | None = None         # merged | closed | open | none
+    branch: str | None = None  # git branch at session close; trust: captured
+    commit_count: int | None = None  # commits in session window; trust: captured
+    pr_ref: str | None = None  # e.g. "owner/repo#42"; written by outcome sync
+    pr_state: str | None = None  # merged | closed | open | none
     outcome_resolved_at: str | None = None  # ISO timestamp when pr_ref was resolved
 
     @classmethod
@@ -499,7 +499,7 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
     if session.branch is None and session.tags:
         for tag in session.tags:
             if tag.startswith("branch:"):
-                session.branch = tag[len("branch:"):]
+                session.branch = tag[len("branch:") :]
                 break
 
     return session, None

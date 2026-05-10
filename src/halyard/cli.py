@@ -1723,8 +1723,7 @@ def report(
             added = sum(s.code_added or 0 for s in branch_sessions_list)
             meta = f"  [dim]{commits} commits  +{added} lines[/]" if commits or added else ""
             console.print(
-                f"  {branch_name:<32} [dim]{count} session{'s' if count != 1 else ''}[/]"
-                f"{meta}"
+                f"  {branch_name:<32} [dim]{count} session{'s' if count != 1 else ''}[/]{meta}"
             )
 
     if outcomes:
