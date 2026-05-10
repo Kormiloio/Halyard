@@ -520,7 +520,10 @@ def _render_state(state: DashboardState) -> str:
           <h1>{_e(state.project_dir.name)}</h1>
         </div>
       </div>
-      <div class="status status-{health_level}">{_e(health_level.title())}</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark mode">☀️</button>
+        <div class="status status-{health_level}">{_e(health_level.title())}</div>
+      </div>
     </header>
 
     <section class="metrics" aria-label="Today summary">
@@ -1458,6 +1461,21 @@ def _trail_heatmap_html(sessions: list[AiSession], period: object) -> str:
 def _easter_egg_script() -> str:
     return """<script>
 (function(){
+  /* ── Light/dark mode toggle ── */
+  var btn = document.getElementById('theme-toggle');
+  function applyTheme(light) {
+    document.body.classList.toggle('light-mode', light);
+    if (btn) btn.textContent = light ? '🌙' : '☀️';
+  }
+  applyTheme(localStorage.getItem('halyard-theme') === 'light');
+  if (btn) {
+    btn.addEventListener('click', function(){
+      var next = !document.body.classList.contains('light-mode');
+      applyTheme(next);
+      localStorage.setItem('halyard-theme', next ? 'light' : 'dark');
+    });
+  }
+
   /* ── Konami code → confetti ── */
   var KONAMI = [38,38,40,40,37,39,37,39,66,65];
   var kpos = 0;
@@ -1823,6 +1841,31 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   .voyage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cq-body { grid-template-columns: 1fr; }
 }
+
+/* Light mode */
+body.light-mode {
+  color-scheme: light;
+  --bg: #f4f7f8;
+  --panel: #ffffff;
+  --panel-2: #eef2f3;
+  --line: #d0dde0;
+  --text: #0e2028;
+  --muted: #5a7a82;
+  --cyan: #0e9e99;
+  --green: #1a9e3f;
+  --amber: #b07a10;
+  --red: #c0392b;
+  --purple: #6b52c8;
+  background: linear-gradient(180deg, rgba(14,158,153,.06), transparent 28rem), var(--bg) !important;
+}
+body.light-mode .panel, body.light-mode article { box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+body.light-mode .brand-mark svg { filter: drop-shadow(0 0 6px rgba(14,158,153,.3)); }
+.theme-toggle {
+  background: none; border: 1px solid var(--line); border-radius: 8px;
+  color: var(--muted); cursor: pointer; font-size: 16px;
+  padding: 5px 10px; line-height: 1; transition: border-color .2s, color .2s;
+}
+.theme-toggle:hover { border-color: var(--cyan); color: var(--text); }
 
 /* Night Watch mode — activated by clicking the logo 5x */
 body.night-watch { --bg: #0a0a0f; --surface: #0d0d14; --border: #1a1a2e; --text: #c8a8e9; --muted: #6a5a8a; }
