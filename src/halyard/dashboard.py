@@ -1085,6 +1085,7 @@ def _model_table(buckets: Iterable[CostBucket]) -> str:
     rows = []
     for bucket in bucket_list:
         pct = int((bucket.cost_usd / total_cost) * 100)
+        pct_label = f"{pct}%" if pct > 0 or bucket.cost_usd == 0 else "<1%"
         rows.append(
             "<tr>"
             f"<td>{_e(bucket.label)}</td>"
@@ -1092,7 +1093,7 @@ def _model_table(buckets: Iterable[CostBucket]) -> str:
             f"<td class='num'>${bucket.cost_usd:.2f}</td>"
             f"<td><div class='bar-cell'>"
             f"<div class='bar-wrap'><div class='bar' style='width:{pct}%'></div></div>"
-            f"<span>{pct}%</span></div></td>"
+            f"<span>{_e(pct_label)}</span></div></td>"
             "</tr>"
         )
     return (
