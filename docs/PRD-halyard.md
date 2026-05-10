@@ -318,6 +318,59 @@ core ledger and OSS install base are established.
 
 ---
 
+## Pre-Ship Hardening (v2.29)
+
+A pre-launch architecture and security review on 2026-05-10 identified seven
+issues that must be resolved before the public OSS release. All seven are
+addressed in v2.29. Full spec: `openspec/changes/v2.29-pre-ship-hardening/`.
+
+### 1. Windows platform safety
+`fcntl` is a POSIX-only module. Halyard will not be installed on Windows without
+a platform guard. v2.29 adds a no-op lock fallback for Windows with a clear
+error message, macOS/Linux OS classifiers in `pyproject.toml`, and a README note
+directing Windows users to WSL2.
+
+### 2. TOML injection
+`voyages.py` and `git_context.py` built TOML files using unescaped f-string
+interpolation. A project slug containing a double-quote or newline could corrupt
+or structurally modify these config files. Fixed by replacing all manual TOML
+construction with `tomli_w.dumps()`, which correctly escapes all string values.
+
+### 3. Pricing hash bypass
+`halyard update-pricing` called `_check_pricing_hash()` but discarded its return
+value. A changed pricing table was accepted silently after a stderr warning. For
+a tool that calculates client bills, silent pricing changes are a billing
+integrity failure. Fixed: changed hash now requires explicit user confirmation
+or the `--accept-changed` flag. Non-interactive environments abort by default.
+
+### 4. Outcome hash mismatch
+`_session_line_hash()` in `outcomes.py` hashed the serialized form of an
+already-mutated `AiSession` (one with amendments folded in), producing a hash
+that no `a` record in the log references. Outcome amendments silently failed to
+round-trip. Fixed by carrying `_raw_hash` on `AiSession` — set from the
+original `s` line before any amendment folding — so the hash is always stable.
+
+### 5. SQLite cache staleness
+`db.py` used `INSERT OR IGNORE` when syncing sessions, meaning sessions that
+received amendments after the initial sync (attribution changes, PR linkage) were
+never updated in the cache. `halyard report --from-cache` silently served stale
+data. Fixed: changed to `INSERT OR REPLACE` so re-running `halyard db sync`
+always brings the cache into agreement with the log.
+
+### 6. Datetime timezone inconsistency
+`claude_code.py` stored session start in UTC while all other collectors used
+local time. Both landed as timezone-naive datetimes in `AiSession`, making
+day-boundary comparisons wrong for non-UTC users near midnight. Fixed by
+standardizing all collectors to local-naive time, consistent with the timeclock
+file format and the user's mental model.
+
+### 7. OS declaration
+`pyproject.toml` had no OS classifiers and the README had no platform note.
+Windows users discovered the `fcntl` crash only after installation. Fixed by
+adding POSIX/macOS classifiers and a platform note to the README install section.
+
+---
+
 ## Deliberately Out of Scope
 
 - **Accounting system replacement.** Halyard produces invoice evidence and AI

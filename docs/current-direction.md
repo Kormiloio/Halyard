@@ -109,7 +109,13 @@ Spec: `openspec/changes/v2.24-outcome-metadata/`. 902 tests passing.
    `i`/`o` timeclock entries automatically while Claude Code is active.
    30-minute inactivity gap closes and reopens a session. Manual timer always
    wins. Entries tagged `;auto` for auditability. (921 tests passing.)
-5. **v2.19** — Attestable AI work appendix. Gated on v2.24 so the appendix
+5. **v2.29** — Pre-ship hardening — **in progress**: seven issues from a
+   pre-launch architecture and security review. Windows platform safety,
+   TOML injection fix, pricing hash bypass, session hash mismatch, SQLite
+   cache staleness, datetime timezone normalization, OS declaration in docs.
+   Gate to OSS launch: v2.29 complete + `pipx install halyard && halyard init`
+   works end-to-end on macOS and Linux with zero friction.
+6. **v2.19** — Attestable AI work appendix. Gated on v2.24 so the appendix
    can include commit and PR evidence.
 5. **v3.0** — Outcome graph (connect sessions to commits, PRs, tests) only
    if design partners ask for it.

@@ -161,7 +161,19 @@ layers must read from this local source of truth; they do not replace it.
    tagged `;auto` for auditability. State in `~/.halyard/auto-timer`. Spec in
    `openspec/changes/v2.28-auto-human-timer/`.
    **Status: complete (921 tests passing).**
-8. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+8. **v2.29 — Pre-ship hardening:** seven issues identified in a pre-launch
+   architecture and security review. (1) Windows crash on `fcntl` import —
+   platform guard + OS classifiers + README note. (2) TOML injection in
+   `voyages.py` and `git_context.py` — replaced f-string building with
+   `tomli_w.dumps()`. (3) Pricing hash bypass — `update-pricing` now prompts
+   or aborts on hash change; `--accept-changed` flag for CI. (4) `_session_line_hash`
+   hash mismatch — `AiSession._raw_hash` carries the original line hash before
+   amendment folding. (5) SQLite cache staleness — `INSERT OR IGNORE` changed to
+   `INSERT OR REPLACE`. (6) Datetime timezone inconsistency — standardized to
+   local-naive across all collectors. (7) OS declaration in pyproject.toml and
+   README. Spec in `openspec/changes/v2.29-pre-ship-hardening/`.
+   **Status: in progress.**
+9. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 
