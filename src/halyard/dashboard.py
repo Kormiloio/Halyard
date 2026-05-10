@@ -899,7 +899,17 @@ def _timer_metric(active_timer: object) -> str:
 def _sessions_table(sessions: Iterable[AiSession]) -> str:
     rows = []
     deduped = [s for s in sessions if s.end > s.start]
-    for session in deduped[-25:][::-1]:
+    # Always include the most recent session from each tool so e.g. Codex
+    # is never buried by a flood of Claude Code sessions.
+    latest_per_tool: dict[str, AiSession] = {}
+    for s in deduped:
+        if s.tool not in latest_per_tool or s.end > latest_per_tool[s.tool].end:
+            latest_per_tool[s.tool] = s
+    recent = deduped[-25:]
+    recent_ids = {id(r) for r in recent}
+    pinned_missing = [s for s in latest_per_tool.values() if id(s) not in recent_ids]
+    combined = sorted(recent + pinned_missing, key=lambda s: s.end)[-25:]
+    for session in combined[::-1]:
         css_key, emoji = _tool_icon(session.tool)
         dur = _duration_str(session.end - session.start)
         health = _health_badge(session)
