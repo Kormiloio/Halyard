@@ -898,7 +898,7 @@ def _timer_metric(active_timer: object) -> str:
 
 def _sessions_table(sessions: Iterable[AiSession]) -> str:
     rows = []
-    for session in list(sessions)[-8:][::-1]:
+    for session in list(sessions)[-25:][::-1]:
         css_key, emoji = _tool_icon(session.tool)
         dur = _duration_str(session.end - session.start)
         health = _health_badge(session)
@@ -1199,7 +1199,7 @@ def _costs_panel(
 
 def _unattributed_table(sessions: Iterable[AiSession]) -> str:
     rows = []
-    for session in list(sessions)[-8:][::-1]:
+    for session in list(sessions)[-25:][::-1]:
         rows.append(
             "<tr>"
             f"<td>{_e(session.end.strftime('%Y-%m-%d %H:%M'))}</td>"
