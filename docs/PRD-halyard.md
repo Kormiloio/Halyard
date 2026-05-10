@@ -287,6 +287,37 @@ These apply to every layer of the product:
 
 ---
 
+## Email Integration (Deferred)
+
+Three distinct email capabilities are planned but not yet scheduled:
+
+### 1. Email session capture
+Some AI-assisted work happens in email: prompting via Gmail, iterating on a
+draft with Claude, or using an AI email assistant. A future `halyard
+import-email` command (or a Gmail / Outlook hook) would ingest these
+interactions as sessions in `ai-sessions.log`, attributed by thread or label.
+This is distinct from the existing collectors — email sessions are identified
+by message timestamps and subject, not tool stop events.
+
+### 2. Invoice and report delivery
+`halyard invoice` already generates a PDF; a future `halyard send-invoice`
+command would attach it to an outbound email via SMTP or a mail provider
+(SendGrid, Mailgun, or native macOS Mail). The same pipeline could deliver
+weekly or monthly summary reports to a client or manager address on a schedule.
+
+### 3. Meeting time capture via calendar email
+AI-adjacent meetings (standups, design reviews, client calls scheduled via
+email invites) represent human time that is currently untracked. A future
+`halyard import-calendar` command would parse iCal / ICS export files or sync
+with Google Calendar / Outlook Calendar API to pull meeting events into
+`time.timeclock` as clock-in/out blocks, tagged `;calendar`.
+
+All three capabilities share a dependency on an authenticated outbound/inbound
+mail credential that Halyard does not yet manage. They are deferred until the
+core ledger and OSS install base are established.
+
+---
+
 ## Deliberately Out of Scope
 
 - **Accounting system replacement.** Halyard produces invoice evidence and AI
