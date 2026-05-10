@@ -898,7 +898,8 @@ def _timer_metric(active_timer: object) -> str:
 
 def _sessions_table(sessions: Iterable[AiSession]) -> str:
     rows = []
-    for session in list(sessions)[-25:][::-1]:
+    deduped = [s for s in sessions if s.end > s.start]
+    for session in deduped[-25:][::-1]:
         css_key, emoji = _tool_icon(session.tool)
         dur = _duration_str(session.end - session.start)
         health = _health_badge(session)
