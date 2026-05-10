@@ -3146,7 +3146,7 @@ def signal(
     elif action == "start":
         if not slug:
             console.print("[yellow]⚓ START signal received.[/] Provide a slug to begin:")
-            console.print(f'   [bold]halyard signal {MORSE_START} client/project[/]')
+            console.print(f"   [bold]halyard signal {MORSE_START} client/project[/]")
             return
         from halyard.orchestration import TimerAlreadyRunning, start_timer
 
