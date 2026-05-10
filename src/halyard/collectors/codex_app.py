@@ -147,21 +147,30 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
     if session_start is None or session_end is None:
         return None
 
-    # Extract token counts from last cumulative snapshot
+    # Extract token counts from last cumulative snapshot.
+    # Newer o-series Codex sessions report total_tokens only (input/output = 0).
     total_input = 0
     cached_input = 0
     output_tokens = 0
+    total_tokens = 0
 
     if last_token_usage:
         total_input = int(last_token_usage.get("input_tokens", 0))
         cached_input = int(last_token_usage.get("cached_input_tokens", 0))
         output_tokens = int(last_token_usage.get("output_tokens", 0))
+        total_tokens = int(last_token_usage.get("total_tokens", 0))
 
-    # Skip plugin-init sessions with no real work
-    if output_tokens == 0:
+    # Skip sessions with no real work.
+    if output_tokens == 0 and total_tokens == 0:
         return None
 
-    net_input = max(0, total_input - cached_input)
+    # o-series fallback: use total_tokens as net_input proxy, mark breakdown unavailable.
+    tokens_available = output_tokens > 0
+    if tokens_available:
+        net_input = max(0, total_input - cached_input)
+    else:
+        net_input = total_tokens
+        output_tokens = 0
 
     session = AiSession(
         start=session_start,
@@ -172,7 +181,7 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
         output_tokens=output_tokens,
         cost_usd=0.0,
         cache_read=cached_input or None,
-        tokens_available=True,
+        tokens_available=tokens_available,
         billing="credits",
         source="sdk",
     )

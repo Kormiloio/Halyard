@@ -273,7 +273,7 @@ def build_dashboard_state(project_dir: Path) -> DashboardState:
 
     with suppress(Exception):
         from halyard.collectors.codex_app import import_codex_sessions
-        import_codex_sessions(project_dir)
+        import_codex_sessions()
 
     report = build_ai_report(project_dir, all_time=False)
     active_timer = read_active_timer()
