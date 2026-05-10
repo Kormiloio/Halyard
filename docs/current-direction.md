@@ -105,7 +105,11 @@ Spec: `openspec/changes/v2.24-outcome-metadata/`. 902 tests passing.
    stars.
 3. **v2.24** — Outcome metadata uplift — **shipped**: branch field, commit
    count, code delta for all collectors, PR linkage via `halyard outcome sync`.
-4. **v2.19** — Attestable AI work appendix. Gated on v2.24 so the appendix
+4. **v2.28** — Auto human timer — **shipped**: presence-window model writes
+   `i`/`o` timeclock entries automatically while Claude Code is active.
+   30-minute inactivity gap closes and reopens a session. Manual timer always
+   wins. Entries tagged `;auto` for auditability. (921 tests passing.)
+5. **v2.19** — Attestable AI work appendix. Gated on v2.24 so the appendix
    can include commit and PR evidence.
 5. **v3.0** — Outcome graph (connect sessions to commits, PRs, tests) only
    if design partners ask for it.

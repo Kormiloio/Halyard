@@ -154,7 +154,14 @@ layers must read from this local source of truth; they do not replace it.
    token capture, because Copilot exposes no public session-end hook. Spec in
    `openspec/changes/v2.27-vscode-manual-capture/`.
    **Status: complete.**
-7. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+7. **v2.28 — Auto human timer:** presence-window model writes `i`/`o` timeclock
+   entries automatically while Claude Code is active. One timeclock block per
+   contiguous work session; 30-minute inactivity gap closes and reopens. Manual
+   timer (`halyard start`) always wins — auto-timer silently skips. Entries
+   tagged `;auto` for auditability. State in `~/.halyard/auto-timer`. Spec in
+   `openspec/changes/v2.28-auto-human-timer/`.
+   **Status: complete (921 tests passing).**
+8. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

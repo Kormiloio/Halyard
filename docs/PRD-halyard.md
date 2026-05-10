@@ -168,6 +168,14 @@ The clock time a person spends directing, reviewing, building, communicating,
 and making decisions on a project. Stored in `time.timeclock` (hledger timeclock
 format). Tracked with `halyard start / stop`.
 
+Since v2.28, Halyard also records human time automatically while Claude Code is
+active. The **auto human timer** uses a presence-window model: one `i`/`o`
+timeclock block per contiguous work session, regardless of how many AI turns it
+contains. A session is considered ended when more than 30 minutes pass since the
+last Claude Code hook event. Auto entries carry a `;auto` comment so they are
+distinguishable from manual `halyard start / stop` entries. A manual timer
+always takes precedence — the auto-timer silently skips when one is running.
+
 ### AI session
 A bounded unit of AI tool activity: a Claude Code session, a Cursor stop event,
 a Gemini CLI turn, a Codex Desktop session, a VS Code/Copilot manual capture, or

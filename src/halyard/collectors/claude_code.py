@@ -62,6 +62,18 @@ def record_session_start() -> int:
     }
     _CC_SESSION_FILE.write_text(json.dumps(state))
 
+    # Auto human timer — close stale window, then open/refresh for this session
+    try:
+        from halyard.auto_timer import auto_timer_activity, auto_timer_close_if_stale
+
+        auto_timer_close_if_stale()
+        at_project_dir = find_project_dir(start=cwd) or find_hub()
+        if at_project_dir and (at_project_dir / "time.timeclock").exists():
+            at_project = read_active_project() or infer_project(cwd) or "unattributed"
+            auto_timer_activity(at_project, at_project_dir / "time.timeclock")
+    except Exception:
+        pass
+
     # Late-night easter egg — fires once per session start between midnight and 5am
     try:
         from halyard.easter_eggs import is_late_night, late_night_message
@@ -181,6 +193,14 @@ def handle_stop_hook() -> int:
             f"[halyard] session saved to {path} — run 'halyard assign-unattributed' to review.",
             file=sys.stderr,
         )
+
+    # Auto human timer — keep last_activity fresh on every stop
+    try:
+        from halyard.auto_timer import auto_timer_update_activity
+
+        auto_timer_update_activity()
+    except Exception:
+        pass
 
     maybe_show_dashboard_hint()
     return 0

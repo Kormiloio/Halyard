@@ -480,6 +480,14 @@ def stop() -> None:
     # v2.17 task 5.4: delegate to shared stop_timer (orchestration.py)
     result = stop_timer(Path.cwd())
 
+    # Close auto-timer alongside the manual timer
+    try:
+        from halyard.auto_timer import auto_timer_close_now
+
+        auto_timer_close_now()
+    except Exception:
+        pass
+
     if result.was_running:
         from halyard.visuals import stop_card
 
