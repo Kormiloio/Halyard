@@ -269,6 +269,12 @@ def parse_timeclock(
 
 def build_dashboard_state(project_dir: Path) -> DashboardState:
     """Build all data needed for the local Glass Cockpit."""
+    from contextlib import suppress
+
+    with suppress(Exception):
+        from halyard.collectors.codex_app import import_codex_sessions
+        import_codex_sessions(project_dir)
+
     report = build_ai_report(project_dir, all_time=False)
     active_timer = read_active_timer()
     human_time = build_human_time_report(project_dir)
