@@ -946,11 +946,20 @@ def _health_badge(session: AiSession) -> str:
             rate = errors / calls if calls else 1.0
             css = "trust-allocated" if rate < 0.25 else "trust-unallocated"
             parts.append(f"<span class='{css}'>{calls}c {errors}e</span>")
-    if session.code_added is not None or session.code_removed is not None:
-        added = session.code_added or 0
-        removed = session.code_removed or 0
-        parts.append(f"<span class='dim'>+{added}/-{removed}</span>")
-    return " ".join(parts) if parts else "<span class='dim'>—</span>"
+    added = session.code_added
+    removed = session.code_removed
+    if added is not None or removed is not None:
+        a, r = added or 0, removed or 0
+        if a or r:
+            parts.append(f"<span class='dim'>+{a}/-{r}</span>")
+    if session.commit_count:
+        parts.append(f"<span class='dim'>{session.commit_count}↑</span>")
+    if not parts:
+        if session.tokens_available:
+            parts.append("<span class='trust-captured'>✓</span>")
+        else:
+            parts.append("<span class='dim'>~est</span>")
+    return " ".join(parts)
 
 
 def _usage_panel(usage: UsageAnalytics) -> str:
