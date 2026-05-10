@@ -294,3 +294,124 @@ def test_stop_hook_no_project_sets_attr_method_none(tmp_path: Path) -> None:
     assert s.project is None
     assert s.attr_method is None
     assert "attribution:inferred" not in s.tags
+
+
+# ---------------------------------------------------------------------------
+# _read_from_transcript with since= filtering
+# ---------------------------------------------------------------------------
+
+
+def _make_transcript(tmp_path: Path, turns: list[dict]) -> str:  # type: ignore[type-arg]
+    """Write a JSONL transcript and return its path string."""
+    lines = [json.dumps(t) for t in turns]
+    p = tmp_path / "transcript.jsonl"
+    p.write_text("\n".join(lines) + "\n")
+    return str(p)
+
+
+def _turn(  # type: ignore[return]
+    ts: str, inp: int, out: int, *, model: str = "claude-sonnet-4-6", branch: str | None = None
+) -> dict:  # type: ignore[type-arg]
+    obj: dict = {  # type: ignore[type-arg]
+        "type": "assistant",
+        "timestamp": ts,
+        "message": {"model": model, "usage": {"input_tokens": inp, "output_tokens": out}},
+    }
+    if branch:
+        obj["gitBranch"] = branch
+    return obj
+
+
+def test_read_from_transcript_no_since(tmp_path: Path) -> None:
+    """Without since=, all assistant turns are summed."""
+    from halyard.collectors.claude_code import _read_from_transcript
+
+    transcript = _make_transcript(
+        tmp_path,
+        [
+            _turn("2026-05-09T10:00:00.000Z", 100, 50, branch="main"),
+            _turn("2026-05-09T11:00:00.000Z", 200, 80),
+        ],
+    )
+    model, t_in, t_out, _cr, _cw, branch = _read_from_transcript(transcript)
+    assert model == "claude-sonnet-4-6"
+    assert t_in == 300
+    assert t_out == 130
+    assert branch == "main"
+
+
+def test_read_from_transcript_since_filters_earlier_turns(tmp_path: Path) -> None:
+    """`since` filters turns timestamped before the cutoff."""
+    from halyard.collectors.claude_code import _read_from_transcript
+
+    transcript = _make_transcript(
+        tmp_path,
+        [
+            _turn("2026-05-09T10:00:00.000Z", 100, 50),
+            _turn("2026-05-09T11:30:00.000Z", 200, 80),
+        ],
+    )
+    since = datetime(2026, 5, 9, 11, 0, 0)  # 11:00 UTC-naive — first turn is before this
+    _m, t_in, t_out, _cr, _cw, _br = _read_from_transcript(transcript, since=since)
+    assert t_in == 200
+    assert t_out == 80
+
+
+def test_read_from_transcript_since_includes_boundary_turn(tmp_path: Path) -> None:
+    """A turn with timestamp exactly equal to since is included (>=)."""
+    from halyard.collectors.claude_code import _read_from_transcript
+
+    transcript = _make_transcript(
+        tmp_path,
+        [_turn("2026-05-09T11:00:00.000Z", 42, 7)],
+    )
+    since = datetime(2026, 5, 9, 11, 0, 0)
+    _m, t_in, t_out, _cr, _cw, _br = _read_from_transcript(transcript, since=since)
+    assert t_in == 42
+    assert t_out == 7
+
+
+def test_read_from_transcript_since_excludes_all(tmp_path: Path) -> None:
+    """When since is after all turns, totals are zero."""
+    from halyard.collectors.claude_code import _read_from_transcript
+
+    transcript = _make_transcript(
+        tmp_path,
+        [_turn("2026-05-09T10:00:00.000Z", 999, 500)],
+    )
+    since = datetime(2026, 5, 9, 23, 0, 0)
+    _m, t_in, t_out, _cr, _cw, _br = _read_from_transcript(transcript, since=since)
+    assert t_in == 0
+    assert t_out == 0
+
+
+# ---------------------------------------------------------------------------
+# _read_session_state UTC / legacy roundtrip
+# ---------------------------------------------------------------------------
+
+
+def test_read_session_state_utc_format() -> None:
+    """Z-suffixed start string is parsed as UTC-naive datetime."""
+    from halyard.collectors.claude_code import _read_session_state
+
+    state = {"start": "2026-05-09T14:30:00Z", "sha_at_start": "abc123"}
+    CC_SESSION_FILE.write_text(json.dumps(state))
+    result = _read_session_state()
+    assert result["start_dt"] == datetime(2026, 5, 9, 14, 30, 0)
+    assert result["sha"] == "abc123"
+
+
+def test_record_session_start_writes_utc_z_suffix(tmp_path: Path) -> None:
+    """record_session_start writes an ISO timestamp ending in Z."""
+    with (
+        patch("halyard.collectors.claude_code.find_project_dir", return_value=None),
+        patch("halyard.collectors.claude_code.read_active_project", return_value=None),
+        patch("halyard.collectors.claude_code.head_sha", return_value=None),
+    ):
+        record_session_start()
+
+    raw = json.loads(CC_SESSION_FILE.read_text())
+    assert raw["start"].endswith("Z"), f"Expected Z suffix, got: {raw['start']}"
+    # Must be parseable as UTC-naive
+    dt = datetime.fromisoformat(raw["start"][:-1])
+    assert dt.tzinfo is None

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sys
 from contextlib import suppress
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +57,7 @@ def record_session_start() -> int:
     cwd = Path.cwd()
     _CC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
     state: dict[str, Any] = {
-        "start": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "start": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "sha_at_start": head_sha(cwd),
     }
     _CC_SESSION_FILE.write_text(json.dumps(state))
@@ -102,7 +102,9 @@ def handle_stop_hook() -> int:
     if not (input_tokens or output_tokens):
         transcript_path = payload.get("transcript_path", "")
         if transcript_path:
-            t_model, t_in, t_out, t_cr, t_cw, t_branch = _read_from_transcript(transcript_path)
+            t_model, t_in, t_out, t_cr, t_cw, t_branch = _read_from_transcript(
+                transcript_path, since=start
+            )
             if t_in or t_out:
                 input_tokens, output_tokens = t_in, t_out
                 cache_read, cache_write = t_cr, t_cw
@@ -199,8 +201,16 @@ def _read_session_state() -> dict[str, Any]:
     try:
         data = json.loads(raw)
         start_dt: datetime | None = None
+        raw_start = data.get("start", "")
         with suppress(ValueError, TypeError):
-            start_dt = datetime.fromisoformat(data.get("start", ""))
+            if raw_start.endswith("Z"):
+                # UTC timestamp written by current version — keep as UTC-naive
+                start_dt = datetime.fromisoformat(raw_start[:-1])
+            elif raw_start:
+                # Legacy local-time ISO string — convert to UTC-naive
+                local = datetime.fromisoformat(raw_start)
+                utc_offset = datetime.now() - datetime.now(UTC).replace(tzinfo=None)
+                start_dt = local - utc_offset
         return {"start_dt": start_dt, "sha": data.get("sha_at_start")}
     except (json.JSONDecodeError, ValueError):
         # Legacy format: plain ISO timestamp string
@@ -215,12 +225,17 @@ def _clear_session_start() -> None:
 
 def _read_from_transcript(
     transcript_path: str,
+    since: datetime | None = None,
 ) -> tuple[str | None, int, int, int, int, str | None]:
     """Aggregate model, token totals, and branch from a Claude Code transcript JSONL.
 
     Claude Code ≥2.x passes transcript_path in the Stop payload instead of
     embedding usage directly. Each assistant event looks like:
-      {"type":"assistant","message":{"model":"...","usage":{...}},"gitBranch":"..."}
+      {"type":"assistant","timestamp":"...Z","message":{"model":"...","usage":{...}},"gitBranch":"..."}
+
+    `since` is a UTC-naive datetime; messages timestamped before it are skipped so
+    that accumulated turns from earlier sessions in the same conversation file are
+    excluded from the current session's totals.
 
     Returns (model, input_tokens, output_tokens, cache_read, cache_write, branch).
     """
@@ -244,6 +259,15 @@ def _read_from_transcript(
 
             if obj.get("type") != "assistant":
                 continue
+
+            # Skip turns from before this session started
+            if since is not None:
+                ts_str = obj.get("timestamp", "")
+                if ts_str.endswith("Z"):
+                    with suppress(ValueError):
+                        ts = datetime.fromisoformat(ts_str[:-1])
+                        if ts < since:
+                            continue
 
             msg = obj.get("message") or {}
             if msg.get("model"):
