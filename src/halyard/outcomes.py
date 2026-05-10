@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 from contextlib import suppress
 from dataclasses import dataclass
@@ -126,9 +127,9 @@ def _best_pr_for_session(
 
 
 def _cache_get(
-    conn,  # type: ignore[no-untyped-def]
+    conn: sqlite3.Connection,
     cache_key: str,
-) -> list[dict] | None:  # type: ignore[type-arg]
+) -> list[dict[str, object]] | None:
     """Return cached PR list if fresher than TTL, else None."""
     row = conn.execute(
         "SELECT payload, fetched_at FROM pr_cache WHERE cache_key = ?",
@@ -140,14 +141,15 @@ def _cache_get(
     with suppress(ValueError):
         fetched_at = datetime.fromisoformat(fetched_at_str)
         if datetime.now() - fetched_at < timedelta(hours=_CACHE_TTL_HOURS):
-            return json.loads(row["payload"])  # type: ignore[no-any-return]
+            result: list[dict[str, object]] = json.loads(row["payload"])
+            return result
     return None
 
 
 def _cache_set(
-    conn,  # type: ignore[no-untyped-def]
+    conn: sqlite3.Connection,
     cache_key: str,
-    prs: list[dict],  # type: ignore[type-arg]
+    prs: list[dict[str, object]],
 ) -> None:
     conn.execute(
         """
@@ -210,7 +212,7 @@ def resolve_sessions(
         # Group by branch to minimise gh calls
         by_branch: dict[str, list[AiSession]] = {}
         for s in candidates:
-            by_branch.setdefault(s.branch or "", []).append(s)  # type: ignore[arg-type]
+            by_branch.setdefault(s.branch or "", []).append(s)
 
         for branch, branch_sessions in by_branch.items():
             cache_key = f"{remote or ''}:{branch}"

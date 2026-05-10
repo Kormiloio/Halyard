@@ -2945,7 +2945,7 @@ def outcome_sync(
     force: bool = typer.Option(False, "--force", help="Re-resolve already-resolved sessions."),
 ) -> None:
     """Scan sessions and resolve each to a PR ref via gh."""
-    import dateparser
+    import dateparser  # type: ignore[import-untyped]
 
     from halyard.ai_log import find_project_dir, parse_sessions
     from halyard.hub import find_hub
