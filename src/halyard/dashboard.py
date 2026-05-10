@@ -899,13 +899,13 @@ def _timer_metric(active_timer: object) -> str:
 def _sessions_table(sessions: Iterable[AiSession]) -> str:
     rows = []
     for session in list(sessions)[-8:][::-1]:
-        icon = _tool_icon(session.tool)
+        css_key, emoji = _tool_icon(session.tool)
         dur = _duration_str(session.end - session.start)
         health = _health_badge(session)
         rows.append(
             "<tr>"
             f"<td>{_e(session.end.strftime('%H:%M'))}</td>"
-            f"<td><span class='tool-icon tool-{_e(icon)}'>{_e(icon)}</span></td>"
+            f"<td><span class='tool-icon tool-{_e(css_key)}'>{emoji}</span></td>"
             f"<td>{_e(session.project or '(unattributed)')}</td>"
             f"<td>{_e(session.model)}</td>"
             f"<td class='num'>{_e(dur)}</td>"
@@ -1245,19 +1245,20 @@ def _latest_label(session: AiSession | None) -> str:
     return _e(f"{session.tool} {session.model} at {session.end.strftime('%H:%M')}")
 
 
-def _tool_icon(tool: str) -> str:
+def _tool_icon(tool: str) -> tuple[str, str]:
+    """Return (css_key, emoji) for the tool badge."""
     t = tool.lower()
     if "claude" in t:
-        return "C"
+        return "C", "🤖"
     if "cursor" in t:
-        return "X"
+        return "X", "🖱️"
     if "vscode" in t or "vs-code" in t or "visual-studio-code" in t:
-        return "V"
+        return "V", "🧩"
     if "gemini" in t:
-        return "G"
+        return "G", "♊"
     if "codex" in t:
-        return "O"
-    return "A"
+        return "O", "📦"
+    return "A", "🔧"
 
 
 def _hour_label(hour: int) -> str:
@@ -1526,11 +1527,12 @@ footer { padding: 18px 2px 0; font-size: 12px; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 3px; }
 
 /* Tool icons */
-.tool-icon { display: inline-block; width: 18px; height: 18px; border-radius: 4px; font-size: 11px; font-weight: 800; text-align: center; line-height: 18px; }
-.tool-C { background: rgba(69, 214, 208, .15); color: var(--cyan); }
-.tool-X { background: rgba(112, 225, 143, .12); color: var(--green); }
-.tool-G { background: rgba(243, 191, 91, .12); color: var(--amber); }
-.tool-O, .tool-A { background: rgba(255,255,255,.08); color: var(--muted); }
+.tool-icon { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; font-size: 15px; text-align: center; }
+.tool-C { background: rgba(69, 214, 208, .15); }
+.tool-X { background: rgba(112, 225, 143, .12); }
+.tool-G { background: rgba(243, 191, 91, .12); }
+.tool-V { background: rgba(180, 120, 255, .12); }
+.tool-O, .tool-A { background: rgba(255,255,255,.08); }
 
 /* Progress bars */
 .bar-wrap { width: 100%; background: var(--line); border-radius: 99px; height: 4px; overflow: hidden; }
