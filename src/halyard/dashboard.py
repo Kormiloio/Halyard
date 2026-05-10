@@ -1164,9 +1164,9 @@ def _costs_panel(
                 "<tr>"
                 f"<td>{_e(bucket.label)}</td>"
                 f"<td class='num'>{bucket.sessions}</td>"
-                f"<td class='num'>${bucket.cost_usd:.4f}</td>"
+                f"<td class='num'>${bucket.cost_usd:.2f}</td>"
                 "<td>—</td>"
-                f"<td class='num'>${bucket.cost_usd:.4f}</td>"
+                f"<td class='num'>${bucket.cost_usd:.2f}</td>"
                 f"<td><span class='trust trust-{_e(trust_cls)}'>{_e(trust)}</span></td>"
                 "</tr>"
             )
@@ -1195,9 +1195,9 @@ def _costs_panel(
             "<tr>"
             f"<td>{_e(entry.project)}{inferred_marker}</td>"
             f"<td class='num'>{entry.sessions}</td>"
-            f"<td class='num'>${entry.direct_usd:.4f}</td>"
-            f"<td class='num'>${entry.allocated_usd:.4f}</td>"
-            f"<td class='num'><strong>${entry.total_usd:.4f}</strong></td>"
+            f"<td class='num'>${entry.direct_usd:.2f}</td>"
+            f"<td class='num'>${entry.allocated_usd:.2f}</td>"
+            f"<td class='num'><strong>${entry.total_usd:.2f}</strong></td>"
             f"<td><span class='trust trust-{_e(trust_cls)}'>{_e(entry.trust)}</span></td>"
             "</tr>"
         )
@@ -1207,9 +1207,9 @@ def _costs_panel(
     footer = (
         f"<tfoot><tr>"
         f"<td><strong>Total</strong></td><td></td>"
-        f"<td class='num'><strong>${ledger.total_direct_usd:.4f}</strong></td>"
-        f"<td class='num'><strong>${ledger.total_allocated_usd:.4f}</strong></td>"
-        f"<td class='num'><strong>${ledger.total_usd:.4f}</strong></td>"
+        f"<td class='num'><strong>${ledger.total_direct_usd:.2f}</strong></td>"
+        f"<td class='num'><strong>${ledger.total_allocated_usd:.2f}</strong></td>"
+        f"<td class='num'><strong>${ledger.total_usd:.2f}</strong></td>"
         f"<td></td></tr></tfoot>"
     )
     return (
