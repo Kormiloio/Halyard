@@ -1341,6 +1341,9 @@ def _celebration_script() -> str:
   var q = new URLSearchParams(location.search);
   if (q.get('stopped') !== '1') return;
 
+  // Remove ?stopped=1 so auto-refresh doesn't retrigger the celebration
+  history.replaceState(null, '', location.pathname);
+
   var toast = document.createElement('div');
   toast.className = 'toast';
   toast.textContent = '🔔 Eight bells — watch complete!';
