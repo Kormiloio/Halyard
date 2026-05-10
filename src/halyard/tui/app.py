@@ -9,7 +9,9 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.events import Key
 from textual.reactive import reactive
+from textual.timer import Timer
 from textual.widgets import Footer, Header, Static
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession
@@ -68,6 +70,8 @@ class HalyardApp(App[None]):
         self.project_slug = project_slug
         self.header_note = header_note
         self.selected_index = 0
+        self._morse_buffer: str = ""
+        self._morse_timer: Timer | None = None
         super().__init__()
 
     def compose(self) -> ComposeResult:
@@ -209,6 +213,43 @@ class HalyardApp(App[None]):
         if self.header_note:
             parts.append(self.header_note)
         return "  ·  ".join(parts)
+
+    def on_key(self, event: Key) -> None:
+        if event.key not in ("0", "1"):
+            return
+        event.stop()
+        self._morse_buffer += event.key
+        if self._morse_timer is not None:
+            self._morse_timer.stop()
+        self._morse_timer = self.set_timer(2.0, self._flush_morse)
+
+    def _flush_morse(self) -> None:
+        from halyard.easter_eggs import morse_timer_action
+
+        code = self._morse_buffer
+        self._morse_buffer = ""
+        self._morse_timer = None
+        action = morse_timer_action(code)
+        if action == "stop":
+            try:
+                from halyard.orchestration import stop_timer
+
+                result = stop_timer(Path.cwd())
+                if result.was_running:
+                    self.notify(
+                        "📡 · · · — — — · · ·  STOP — timer stopped.",
+                        title="Signal received",
+                    )
+                    self.refresh_views()
+                else:
+                    self.notify("No active timer to stop.", severity="warning")
+            except Exception as exc:
+                self.notify(str(exc), severity="error")
+        elif action == "start":
+            self.notify(
+                "📡 START signal — run: halyard start <slug>",
+                title="Signal received",
+            )
 
     def _clamp_selection(self, sessions: list[AiSession]) -> None:
         if not sessions:

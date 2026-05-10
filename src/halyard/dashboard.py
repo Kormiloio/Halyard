@@ -1492,6 +1492,25 @@ def _easter_egg_script() -> str:
     }
   });
 
+  /* ── Morse timer signals (0/1 keys → START=0001010101 / STOP=00011110110) ── */
+  var MORSE_START = '0001010101', MORSE_STOP = '00011110110';
+  var morseBuf = '', morseTimer = null;
+  document.addEventListener('keydown', function(e){
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key !== '0' && e.key !== '1') return;
+    morseBuf += e.key;
+    clearTimeout(morseTimer);
+    morseTimer = setTimeout(function(){
+      var code = morseBuf;
+      morseBuf = '';
+      if (code === MORSE_START) {
+        _showToast('📡 \xb7\xb7\xb7 ——— \xb7\xb7\xb7  START — run: halyard start <slug>');
+      } else if (code === MORSE_STOP) {
+        _showToast('📡 \xb7\xb7\xb7 ——— \xb7\xb7\xb7  STOP — run: halyard stop');
+      }
+    }, 2000);
+  });
+
   /* ── Logo click x5 -> Night Watch mode ── */
   var logo = document.getElementById('brand-mark');
   var clicks = 0, clickTimer = null;

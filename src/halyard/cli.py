@@ -3101,5 +3101,67 @@ def mayday() -> None:
         typer.echo(line)
 
 
+@app.command(hidden=True)
+def signal(
+    code: str = typer.Argument(..., help="0/1 Morse code (START=0001010101, STOP=00011110110)"),
+    slug: str = typer.Argument("", help="client/project slug for start signal"),
+) -> None:
+    """📡  Decode a 0/1 Morse signal and fire timer start or stop."""
+    from halyard.easter_eggs import MORSE_START, MORSE_STOP, morse_timer_action
+
+    action = morse_timer_action(code)
+
+    if action is None:
+        console.print("[yellow]📡 Unknown signal.[/] Recognized codes:")
+        console.print(f"   START: [bold]{MORSE_START}[/]  [dim](· · ·  —  · —  · — ·  —)[/]")
+        console.print(f"   STOP:  [bold]{MORSE_STOP}[/]  [dim](· · ·  —  — — —  · — — ·)[/]")
+        return
+
+    console.print(f"[bold cyan]📡  · · ·  — — —  · · ·[/]  Signal: [bold]{action.upper()}[/]")
+
+    if action == "stop":
+        from halyard.orchestration import stop_timer
+        from halyard.reports import _elapsed_minutes, format_minutes, read_active_timer
+
+        active = read_active_timer()
+        if active is None:
+            console.print("[red]No active timer to stop.[/]")
+            return
+        result = stop_timer(Path.cwd())
+        try:
+            from halyard.auto_timer import auto_timer_close_now
+
+            auto_timer_close_now()
+        except Exception:
+            pass
+        if result.was_running:
+            from halyard.visuals import stop_card
+
+            now = datetime.now()
+            started = active.started or now.strftime("%Y-%m-%d %H:%M:%S")
+            elapsed_mins = _elapsed_minutes(started, now)
+            elapsed = format_minutes(elapsed_mins)
+            console.print(stop_card(active.slug, elapsed_mins, elapsed, result.backfill_count))
+
+    elif action == "start":
+        if not slug:
+            console.print("[yellow]⚓ START signal received.[/] Provide a slug to begin:")
+            console.print(f'   [bold]halyard signal {MORSE_START} client/project[/]')
+            return
+        from halyard.orchestration import TimerAlreadyRunning, start_timer
+
+        timeclock_candidate = Path.cwd() / "time.timeclock"
+        if not timeclock_candidate.exists():
+            console.print("[red]No time.timeclock here. Run [bold]halyard init[/] first.[/]")
+            return
+        account = slug.replace("/", ":", 1)
+        try:
+            timer = start_timer(Path.cwd(), account)
+        except TimerAlreadyRunning as e:
+            console.print(f"[red]Timer already running for [bold]{e.slug}[/].[/]")
+            return
+        console.print(f"[green]Started[/] [bold]{timer.slug}[/] at {timer.started}.")
+
+
 if __name__ == "__main__":
     app()

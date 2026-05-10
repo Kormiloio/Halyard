@@ -51,10 +51,50 @@ def ship_art() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Morse SOS
+# Morse SOS and timer signals
 # ---------------------------------------------------------------------------
 
 _MORSE_SOS = "· · ·   — — —   · · ·"
+
+# Full alphabet: key = 0/1 string (0=dot, 1=dash), value = letter
+_MORSE_ALPHA: dict[str, str] = {
+    "01": "A", "1000": "B", "1010": "C", "100": "D", "0": "E",
+    "0010": "F", "110": "G", "0000": "H", "00": "I", "0111": "J",
+    "101": "K", "0100": "L", "11": "M", "10": "N", "111": "O",
+    "0110": "P", "1101": "Q", "010": "R", "000": "S", "1": "T",
+    "001": "U", "0001": "V", "011": "W", "1001": "X", "1011": "Y",
+    "1100": "Z",
+}
+
+# Concatenated (no-space) forms for keyboard listeners
+# S=000 T=1 A=01 R=010 T=1
+MORSE_START = "0001010101"
+# S=000 T=1 O=111 P=0110
+MORSE_STOP = "00011110110"
+
+
+def decode_morse(signal: str) -> str | None:
+    """Decode a space-separated 0/1 Morse string to uppercase text, or None on failure."""
+    parts = signal.strip().split()
+    if not parts:
+        return None
+    chars = []
+    for part in parts:
+        ch = _MORSE_ALPHA.get(part)
+        if ch is None:
+            return None
+        chars.append(ch)
+    return "".join(chars)
+
+
+def morse_timer_action(code: str) -> str | None:
+    """Return 'start', 'stop', or None for a 0/1 Morse input (spaced or concatenated)."""
+    normalized = "".join(code.split())
+    if normalized == MORSE_START:
+        return "start"
+    if normalized == MORSE_STOP:
+        return "stop"
+    return None
 
 
 def mayday_lines() -> list[str]:
