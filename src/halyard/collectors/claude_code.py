@@ -61,6 +61,16 @@ def record_session_start() -> int:
         "sha_at_start": head_sha(cwd),
     }
     _CC_SESSION_FILE.write_text(json.dumps(state))
+
+    # Late-night easter egg — fires once per session start between midnight and 5am
+    try:
+        from halyard.easter_eggs import is_late_night, late_night_message
+
+        if is_late_night():
+            print(f"[halyard] {late_night_message()}", file=sys.stderr)
+    except Exception:
+        pass
+
     return 0
 
 

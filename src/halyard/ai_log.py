@@ -290,10 +290,23 @@ class AiSession:
 
 
 def append_session(project_dir: Path, session: AiSession) -> None:
+    import sys
+
     # v2.17 task 4.1: use locked_file so concurrent appenders never interleave
     log_path = project_dir / AI_LOG_FILENAME
     with locked_file(log_path, "a") as f:
         f.write(session.to_log_line() + "\n")
+
+    # Milestone easter eggs — check after every append, print to stderr
+    try:
+        from halyard.easter_eggs import check_milestones
+
+        sessions = parse_sessions(project_dir)
+        total_cost = sum(s.cost_usd for s in sessions)
+        for msg in check_milestones(len(sessions), total_cost):
+            print(f"[halyard] {msg}", file=sys.stderr)
+    except Exception:
+        pass
 
 
 def parse_sessions(project_dir: Path) -> list[AiSession]:
@@ -655,13 +668,29 @@ def maybe_show_dashboard_hint() -> None:
 
     flag = Path.home() / ".halyard" / ".dashboard-hint-shown"
     if flag.exists():
+        # Pirate day easter egg — greet on every stop on September 19
+        try:
+            from halyard.easter_eggs import is_pirate_day
+
+            if is_pirate_day():
+                print(
+                    "[halyard] Arrr! The captain's log be updated. Sail on, ye code-slinger!",
+                    file=sys.stderr,
+                )
+        except Exception:
+            pass
         return
     flag.parent.mkdir(parents=True, exist_ok=True)
     flag.touch()
-    print(
-        "[halyard] First session captured! View it live: halyard dashboard --open",
-        file=sys.stderr,
-    )
+    hint = "[halyard] First session captured! View it live: halyard dashboard --open"
+    try:
+        from halyard.easter_eggs import is_pirate_day
+
+        if is_pirate_day():
+            hint = "[halyard] First watch logged, matey! Chart yer course: halyard dashboard --open"
+    except Exception:
+        pass
+    print(hint, file=sys.stderr)
 
 
 def _write_quarantine(original_line: str, error: str) -> Path:

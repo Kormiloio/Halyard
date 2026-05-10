@@ -3069,5 +3069,29 @@ def outcome_attribute(
         raise typer.Exit(code=1)
 
 
+# ---------------------------------------------------------------------------
+# Easter eggs
+# ---------------------------------------------------------------------------
+
+
+@app.command(hidden=True)
+def ahoy() -> None:
+    """⚓  Ahoy, Captain."""
+    from halyard.easter_eggs import random_quote, ship_art
+
+    typer.echo(ship_art())
+    typer.echo(f'  "{random_quote()}"')
+    typer.echo("\n  Fair winds and following seas. 🌊\n")
+
+
+@app.command(hidden=True)
+def mayday() -> None:
+    """🆘  Send a distress signal."""
+    from halyard.easter_eggs import mayday_lines
+
+    for line in mayday_lines():
+        typer.echo(line)
+
+
 if __name__ == "__main__":
     app()

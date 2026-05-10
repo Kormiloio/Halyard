@@ -508,7 +508,7 @@ def _render_state(state: DashboardState) -> str:
   <main class="shell">
     <header class="topbar">
       <div class="brand">
-        <div class="brand-mark">
+        <div class="brand-mark" id="brand-mark">
           <svg viewBox="0 0 24 24" role="img" aria-label="Halyard">
             <circle cx="12" cy="5" r="3"/>
             <path d="M12 8v14"/>
@@ -661,6 +661,7 @@ def _render_state(state: DashboardState) -> str:
     </footer>
   </main>
   {_celebration_script()}
+  {_easter_egg_script()}
 </body>
 </html>"""
 
@@ -1454,6 +1455,90 @@ def _trail_heatmap_html(sessions: list[AiSession], period: object) -> str:
     return "<div class='trail-cal'>" + header + "".join(rows_html) + "</div>" + legend
 
 
+def _easter_egg_script() -> str:
+    return """<script>
+(function(){
+  /* ── Konami code → confetti ── */
+  var KONAMI = [38,38,40,40,37,39,37,39,66,65];
+  var kpos = 0;
+  document.addEventListener('keydown', function(e){
+    if (e.keyCode === KONAMI[kpos]) { kpos++; } else { kpos = 0; }
+    if (kpos === KONAMI.length) {
+      kpos = 0;
+      _showToast('⚓ Konami unlocked! Fair winds, Captain.');
+      _fireConfetti(180);
+    }
+  });
+
+  /* ── Logo click x5 -> Night Watch mode ── */
+  var logo = document.getElementById('brand-mark');
+  var clicks = 0, clickTimer = null;
+  if (logo) {
+    logo.style.cursor = 'pointer';
+    logo.addEventListener('click', function(){
+      clicks++;
+      clearTimeout(clickTimer);
+      clickTimer = setTimeout(function(){ clicks = 0; }, 1500);
+      if (clicks >= 5) {
+        clicks = 0;
+        var on = document.body.classList.toggle('night-watch');
+        _showToast(on ? '🌙 Night Watch engaged. All hands below.' : '☀️ Returning to day watch.');
+      }
+    });
+  }
+
+  /* ── shared helpers ── */
+  function _showToast(msg) {
+    var t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    requestAnimationFrame(function(){ t.classList.add('show'); });
+    setTimeout(function(){
+      t.style.transition = 'opacity .5s'; t.style.opacity = '0';
+      setTimeout(function(){ t.remove(); }, 500);
+    }, 3200);
+  }
+
+  function _fireConfetti(count) {
+    var canvas = document.createElement('canvas');
+    canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:998';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    canvas.width = innerWidth; canvas.height = innerHeight;
+    var colors = ['#45d6d0','#70e18f','#f3bf5b','#b09fe8','#ff6f6f','#c8a8e9'];
+    var particles = [];
+    for (var i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * -canvas.height * 0.5,
+        w: Math.random() * 8 + 4, h: Math.random() * 5 + 3,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        speed: Math.random() * 3 + 2,
+        angle: Math.random() * Math.PI * 2,
+        spin: (Math.random() - 0.5) * 0.15
+      });
+    }
+    var frame = 0;
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = frame < 150 ? 1 : 1 - (frame - 150) / 50;
+      for (var j = 0; j < particles.length; j++) {
+        var p = particles[j];
+        p.y += p.speed; p.angle += p.spin;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+        ctx.restore();
+      }
+      if (++frame < 200) requestAnimationFrame(draw); else canvas.remove();
+    }
+    draw();
+  }
+})();
+</script>"""
+
+
 _CSS = """
 :root {
   color-scheme: dark;
@@ -1737,5 +1822,18 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   .usage-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .voyage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cq-body { grid-template-columns: 1fr; }
+}
+
+/* Night Watch mode — activated by clicking the logo 5x */
+body.night-watch { --bg: #0a0a0f; --surface: #0d0d14; --border: #1a1a2e; --text: #c8a8e9; --muted: #6a5a8a; }
+body.night-watch .topbar { background: #0d0d14; border-color: #1a1a2e; }
+body.night-watch .brand-mark svg { stroke: #c8a8e9; }
+body.night-watch .night-watch-toast { display: flex !important; }
+.night-watch-toast {
+  display: none;
+  position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 999;
+  background: #1a1a2e; color: #c8a8e9; border: 1px solid #c8a8e9;
+  padding: .6rem 1.2rem; border-radius: 8px; font-size: .85rem;
+  align-items: center; gap: .5rem;
 }
 """
