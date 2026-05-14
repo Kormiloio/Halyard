@@ -7,7 +7,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from halyard.cli import _do_install_vscode_tasks, app
+from halyard.cli import app
+from halyard.cli_hooks import _do_install_vscode_tasks
 
 
 def test_install_vscode_tasks_creates_record_task(
@@ -15,7 +16,7 @@ def test_install_vscode_tasks_creates_record_task(
     monkeypatch: object,
 ) -> None:
     monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
-    monkeypatch.setattr("halyard.cli._halyard_exe", lambda: "/bin/halyard")  # type: ignore[attr-defined]
+    monkeypatch.setattr("halyard.cli_hooks._halyard_exe", lambda: "/bin/halyard")  # type: ignore[attr-defined]
 
     path = _do_install_vscode_tasks()
 

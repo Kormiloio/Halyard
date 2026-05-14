@@ -47,11 +47,11 @@ def test_setup_all_yes_installs_all_tools(monkeypatch, tmp_path: Path) -> None: 
     calls: list[tuple[str, bool | None]] = []
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
-        "halyard.cli.install_hook",
+        "halyard.cli_hooks._do_install_hook_claude",
         lambda global_=False: calls.append(("claude", global_)),
     )
-    monkeypatch.setattr("halyard.cli.install_cursor_hook", lambda: calls.append(("cursor", None)))
-    monkeypatch.setattr("halyard.cli.install_gemini_hook", lambda: calls.append(("gemini", None)))
+    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_cursor", lambda: calls.append(("cursor", None)))
+    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_gemini", lambda: calls.append(("gemini", None)))
 
     result = CliRunner().invoke(app, ["setup", "--all", "--yes"])
 
@@ -63,9 +63,9 @@ def test_setup_all_yes_installs_all_tools(monkeypatch, tmp_path: Path) -> None: 
 def test_setup_selected_tools(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     calls: list[str] = []
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("halyard.cli.install_hook", lambda global_=False: calls.append("claude"))
-    monkeypatch.setattr("halyard.cli.install_cursor_hook", lambda: calls.append("cursor"))
-    monkeypatch.setattr("halyard.cli.install_gemini_hook", lambda: calls.append("gemini"))
+    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_claude", lambda global_=False: calls.append("claude"))
+    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_cursor", lambda: calls.append("cursor"))
+    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_gemini", lambda: calls.append("gemini"))
 
     result = CliRunner().invoke(app, ["setup", "--claude", "--cursor", "--yes"])
 
@@ -76,7 +76,7 @@ def test_setup_selected_tools(monkeypatch, tmp_path: Path) -> None:  # type: ign
 def test_setup_global_claude_forwards_flag(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     calls: list[bool] = []
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("halyard.cli.install_hook", lambda global_=False: calls.append(global_))
+    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_claude", lambda global_=False: calls.append(global_))
 
     result = CliRunner().invoke(app, ["setup", "--claude", "--global-claude", "--yes"])
 
@@ -101,7 +101,7 @@ def test_setup_installer_failure_exits_1_after_summary(monkeypatch, tmp_path: Pa
     def fail_install() -> None:
         raise PermissionError("settings.json")
 
-    monkeypatch.setattr("halyard.cli.install_gemini_hook", fail_install)
+    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_gemini", fail_install)
 
     result = CliRunner().invoke(app, ["setup", "--gemini", "--yes"])
 

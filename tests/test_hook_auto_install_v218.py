@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from halyard.cli import _auto_install_detected_hooks, _do_install_hook_claude
+from halyard.cli_hooks import _auto_install_detected_hooks, _do_install_hook_claude
 
 
 def _settings(tmp_path: Path) -> Path:
