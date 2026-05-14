@@ -26,6 +26,10 @@ env/
 *.swp
 .DS_Store
 
+# VS Code extension build artifacts
+vscode-extension/node_modules/
+vscode-extension/out/
+
 # Local private strategy notes
 strategy/
 

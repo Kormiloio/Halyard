@@ -172,8 +172,31 @@ layers must read from this local source of truth; they do not replace it.
    `INSERT OR REPLACE`. (6) Datetime timezone inconsistency — standardized to
    local-naive across all collectors. (7) OS declaration in pyproject.toml and
    README. Spec in `openspec/changes/v2.29-pre-ship-hardening/`.
-   **Status: in progress.**
-9. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+   **Status: complete (931 tests passing).**
+9. **v2.30 — Tool visibility:** `by_tool_usage: list[ToolUsageBucket]` added to
+   `AiReport`. CLI `halyard report` gains "By tool" section. Dashboard tools
+   panel replaced with session-count bars and token column. Usage analytics panel
+   uncapped (was limited to 4 tools) and gains token counts. Zero-cost tools
+   (Codex free tier) now appear in all surfaces. Spec in
+   `openspec/changes/v2.30-tool-visibility/`.
+   **Status: complete (918 tests passing).**
+10. **v2.31 — Install-hook hardening:** `_do_install_hook_claude()` cross-file
+    dedup prevents double-recording when hooks exist in both local and global
+    Claude Code settings. Setup wizard prompts for global vs project scope.
+    `halyard doctor` gains `hook.claude.duplicate` warning check. Spec in
+    `openspec/changes/v2.31-install-hook-hardening/`.
+    **Status: complete (918 tests passing).**
+11. **v2.32 — VS Code extension and metadata parity:** VS Code extension
+    (`vscode-extension/`) tracks active editing time via workspace events,
+    captures branch and code delta via git, and records sessions through
+    `halyard record-session --tool vscode`. Status bar shows elapsed time;
+    recovery prompt on restart for unfinished sessions. All four collectors
+    upgraded to emit interaction metadata fields (`interaction_count`,
+    `user_message_count`, `assistant_message_count`, `prompt_count`) using the
+    "unavailable is not zero" rule. `record-session` gains 20+ metadata flags.
+    Spec in `openspec/changes/v2.32-vscode-extension-metadata-parity/`.
+    **Status: complete (952 tests passing).**
+12. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

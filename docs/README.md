@@ -8,6 +8,10 @@ public orientation for what Halyard is building now.
 - [`current-direction.md`](current-direction.md) — current wedge, build
   sequence, and deferred work.
 - [`PRD-halyard.md`](PRD-halyard.md) — current public product PRD.
+- [`PRD-vscode-extension-and-metadata-parity.md`](PRD-vscode-extension-and-metadata-parity.md) —
+  proposed VS Code extension and cross-tool metadata parity PRD.
+- [`ARD-vscode-extension-and-metadata-parity.md`](ARD-vscode-extension-and-metadata-parity.md) —
+  architecture decisions for metadata-only extension capture.
 - [`AI-work-intelligence.md`](AI-work-intelligence.md) — strategic framing for
   the long-term category.
 - [`trust-model.md`](trust-model.md) — captured/calculated/allocated/inferred

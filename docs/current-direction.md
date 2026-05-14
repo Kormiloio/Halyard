@@ -109,13 +109,27 @@ Spec: `openspec/changes/v2.24-outcome-metadata/`. 902 tests passing.
    `i`/`o` timeclock entries automatically while Claude Code is active.
    30-minute inactivity gap closes and reopens a session. Manual timer always
    wins. Entries tagged `;auto` for auditability. (921 tests passing.)
-5. **v2.29** — Pre-ship hardening — **in progress**: seven issues from a
-   pre-launch architecture and security review. Windows platform safety,
-   TOML injection fix, pricing hash bypass, session hash mismatch, SQLite
-   cache staleness, datetime timezone normalization, OS declaration in docs.
-   Gate to OSS launch: v2.29 complete + `pipx install halyard && halyard init`
-   works end-to-end on macOS and Linux with zero friction.
-6. **v2.19** — Attestable AI work appendix. Gated on v2.24 so the appendix
+5. **v2.29** — Pre-ship hardening — **shipped**: seven issues from a
+   pre-launch architecture and security review. Windows platform safety
+   (fcntl guard), TOML injection fixed (tomli_w), pricing hash bypass
+   closed (PricingHashChangedError), session hash mismatch fixed
+   (AiSession._raw_hash), SQLite cache stale on amendments fixed
+   (INSERT OR REPLACE + parse_sessions), datetime timezone normalization
+   (all collectors now emit local-naive), OS declaration in pyproject.toml
+   and README. 931 tests passing.
+6. **v2.30** — Tool visibility — **shipped**: `by_tool_usage` added to
+   `AiReport`; CLI `halyard report` gains "By tool" section; dashboard tools
+   panel uses session-count bars with token column; usage analytics panel
+   uncapped. Zero-cost tools (Codex free tier) now appear everywhere. 918 tests.
+7. **v2.31** — Install-hook hardening — **shipped**: cross-file dedup in
+   `install-hook` prevents double-recording; setup wizard prompts for scope;
+   `halyard doctor` warns on duplicate hooks in local + global settings. 918 tests.
+8. **v2.32** — VS Code extension and metadata parity — **shipped**: VS Code
+   extension tracks editing time, branch, and code delta; status bar timer;
+   recovery prompt on restart. All four collectors upgraded to emit interaction
+   metadata with "unavailable is not zero" semantics. `record-session` gains
+   20+ metadata flags. 952 tests passing.
+9. **v2.19** — Attestable AI work appendix. Gated on v2.24 so the appendix
    can include commit and PR evidence.
 5. **v3.0** — Outcome graph (connect sessions to commits, PRs, tests) only
    if design partners ask for it.

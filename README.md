@@ -58,9 +58,9 @@ design-partner pull, and will not change what local files mean.
 Halyard has three layers:
 
 **Collection** — Lightweight hooks that run where AI work happens. Claude Code,
-Cursor, and Gemini CLI hooks capture sessions automatically; VS Code can install
-a local task for manual AI-session logging until VS Code/Copilot exposes a
-public hook. Captured fields include time, tokens when available, model, cost,
+Cursor, and Gemini CLI hooks capture sessions automatically; a VS Code extension
+captures editing time, branch, and code delta — token counts unavailable until
+VS Code/Copilot exposes a public session hook. Captured fields include time, tokens when available, model, cost,
 project, and branch. Written to a plain-text log you own. New sessions are
 appended, and the current hardening track is making corrections explicit and
 auditable. Nothing is lost silently.
@@ -117,8 +117,11 @@ signal each tool exposes:
 - **Codex Desktop**: imports local `~/.codex/sessions/.../rollout-*.jsonl`
   files, extracts timing/model/token metadata, and records imported session IDs
   so repeated imports do not duplicate entries.
-- **VS Code / GitHub Copilot**: uses a VS Code task and `halyard record-session`
-  because there is no public Copilot session hook yet.
+- **VS Code / GitHub Copilot**: a local VS Code extension (`vscode-extension/`)
+  tracks active editing time, captures branch and code-delta via git, and writes
+  sessions through `halyard record-session`. Install the extension from a local
+  `.vsix` build; no public Copilot session hook exists yet so token counts are
+  not available.
 
 Every collector writes the same normalized record shape: timestamps, tool,
 model, tokens when available, cache tokens, cost, billing type, project,
