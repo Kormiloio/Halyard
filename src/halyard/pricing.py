@@ -146,13 +146,15 @@ def _get_multipliers(data: dict[str, object], model: str) -> tuple[float, float]
     """Return (cache_read_mult, cache_write_mult) for a model from raw toml data."""
     try:
         models = data.get("models", {})
-        assert isinstance(models, dict)
+        if not isinstance(models, dict):
+            return _CACHE_READ_MULTIPLIER, _CACHE_WRITE_MULTIPLIER
         entry = models.get(model, {})
-        assert isinstance(entry, dict)
+        if not isinstance(entry, dict):
+            return _CACHE_READ_MULTIPLIER, _CACHE_WRITE_MULTIPLIER
         read_mult = float(entry.get("cache_read_multiplier", _CACHE_READ_MULTIPLIER))
         write_mult = float(entry.get("cache_write_multiplier", _CACHE_WRITE_MULTIPLIER))
         return read_mult, write_mult
-    except (AssertionError, TypeError, ValueError):
+    except (TypeError, ValueError):
         return _CACHE_READ_MULTIPLIER, _CACHE_WRITE_MULTIPLIER
 
 
@@ -227,9 +229,11 @@ def update_pricing(timeout: int = 5, accept_changed: bool = False) -> tuple[int,
 
     # Validate optional multipliers
     models_raw = data["models"]
-    assert isinstance(models_raw, dict)
+    if not isinstance(models_raw, dict):
+        raise PricingFetchError("pricing.toml 'models' section is not a table")
     for model_name, entry in models_raw.items():
-        assert isinstance(entry, dict)
+        if not isinstance(entry, dict):
+            raise PricingFetchError(f"pricing.toml model entry {model_name!r} is not a table")
         for field in ("cache_read_multiplier", "cache_write_multiplier"):
             val = entry.get(field)
             if val is not None and (not isinstance(val, (int, float)) or float(val) <= 0):
