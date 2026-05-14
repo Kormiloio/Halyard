@@ -14,7 +14,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from halyard.ai_log import AiSession, parse_sessions
+from halyard.ai_log import AiSession
 from halyard.ai_plans import read_ai_plans
 from halyard.budget import BudgetStatus, budget_status
 from halyard.ledger import LedgerSummary, build_ledger
@@ -282,6 +282,24 @@ def _proof_score(sessions: list[AiSession]) -> tuple[int, str]:
     return score, "proof-low"
 
 
+def _infer_voyage_stage(sessions: list[AiSession]) -> tuple[str, str, bool]:
+    """Return (stage_label, icon, is_auto) inferred from all-time session history."""
+    total = len(sessions)
+    if total == 0:
+        return "At anchor", "⚓", False
+    attributed = sum(1 for s in sessions if s.project)
+    attr_rate = attributed / total
+    has_merged_pr = any(s.pr_state == "merged" for s in sessions if s.pr_state)
+    has_pr = any(s.pr_ref for s in sessions)
+    if total >= 50 and attr_rate >= 0.80 and has_merged_pr:
+        return "Flying Colors", "⛵", True
+    if total >= 30 and attr_rate >= 0.70 and has_pr:
+        return "Rounding the Mark", "⛵", True
+    if total >= 10 and attr_rate >= 0.50:
+        return "Making Headway", "⛵", True
+    return "Anchors Aweigh", "⚓", True
+
+
 def _voyage_panel(state: DashboardState) -> str:
     """Current Voyage panel — the live work state shown at the top of The Bridge."""
     from datetime import datetime as _dt
@@ -346,10 +364,13 @@ def _voyage_panel(state: DashboardState) -> str:
           {adrift_col}
         </div>"""
     else:
-        eyebrow = "Current Voyage · Web Dashboard"
-        title = "⚓  At anchor"
+        stage_label, stage_icon, is_auto = _infer_voyage_stage(state.all_sessions)
+        eyebrow = "Current Voyage · auto" if is_auto else "Current Voyage · Web Dashboard"
+        title = f"{stage_icon}  {stage_label}"
         sessions = report.sessions
         total = len(sessions)
+        all_total = len(state.all_sessions)
+        attributed_all = sum(1 for s in state.all_sessions if s.project)
         score, score_cls = _proof_score(sessions)
         score_display = "—" if total == 0 else str(score)
         score_label = (
@@ -360,6 +381,14 @@ def _voyage_panel(state: DashboardState) -> str:
             else "review needed"
             if score >= 60
             else "gaps present"
+        )
+        attr_pct = round(attributed_all / all_total * 100) if all_total > 0 else 0
+        with_tokens = sum(1 for s in sessions if s.tokens_available)
+        token_pct = round(with_tokens / total * 100) if total > 0 else 0
+        fix_prompt = (
+            '<span class="voyage-sub proof-low">run halyard assign-unattributed</span>'
+            if attr_pct < 100 and all_total > 0
+            else ""
         )
         adrift = report.unattributed_count
         adrift_col = (
@@ -375,11 +404,13 @@ def _voyage_panel(state: DashboardState) -> str:
           <div class="voyage-col">
             <span class="voyage-label">Sessions · this month</span>
             <span class="voyage-value">{total}</span>
+            <span class="voyage-sub">{all_total} all time</span>
           </div>
           <div class="voyage-col">
             <span class="voyage-label">Proof Score</span>
             <span class="voyage-value"><span class="{_e(score_cls)}">{score_display}%</span></span>
-            <span class="voyage-sub">{_e(score_label)}</span>
+            <span class="voyage-sub">attr {attr_pct}% · tokens {token_pct}%</span>
+            {fix_prompt}
           </div>
           <div class="voyage-col">
             <span class="voyage-label">Cost · this month</span>
@@ -405,7 +436,7 @@ def _render_state(state: DashboardState) -> str:
     human_time = state.human_time
     latest = state.latest_session
     health_level = _overall_health(state)
-    usage = build_usage_analytics(parse_sessions(state.project_dir), now=state.generated_at)
+    usage = build_usage_analytics(state.all_sessions, now=state.generated_at)
 
     # Budget data
     budgets = budget_status()
@@ -528,9 +559,37 @@ def _render_state(state: DashboardState) -> str:
 
     <section class="metrics" aria-label="Today summary">
       {_timer_metric(state.active_timer)}
-      {_metric("Human Time", format_minutes(human_time.today_minutes), "today", "normal")}
+      {
+        _metric(
+            "Human Time",
+            format_minutes(human_time.today_minutes or human_time.presence_minutes),
+            "today"
+            if human_time.today_minutes > 0
+            else ("today · auto-detected" if human_time.presence_minutes > 0 else "today"),
+            "normal",
+        )
+    }
       {_metric("AI Sessions", str(len(report.sessions)), report.period_label, "normal")}
-      {_metric("AI Cost", f"${report.total_cost:.2f}", "captured API cost", "money")}
+      {
+        _metric(
+            "AI Cost",
+            f"${report.total_cost:.2f}"
+            if report.total_cost > 0
+            else (
+                f"~${ledger.total_allocated_usd:.2f}"
+                if ledger is not None and ledger.total_allocated_usd > 0
+                else "$0.00"
+            ),
+            "captured API cost"
+            if report.total_cost > 0
+            else (
+                "allocated from plans"
+                if ledger is not None and ledger.total_allocated_usd > 0
+                else "captured API cost"
+            ),
+            "money",
+        )
+    }
     </section>
 
     <section class="grid">
@@ -544,7 +603,9 @@ def _render_state(state: DashboardState) -> str:
             <p class="eyebrow">Usage Analytics</p>
             <h2>Overview</h2>
           </div>
-          <div class="pill-group"><span class="pill">30d</span><span class="pill">{_e(usage.summary.active_days)} active days</span></div>
+          <div class="pill-group"><span class="pill">30d</span><span class="pill">{
+        _e(usage.summary.active_days)
+    } active days</span></div>
         </div>
         {_usage_panel(usage)}
       </article>
@@ -567,7 +628,9 @@ def _render_state(state: DashboardState) -> str:
             <h2>Health</h2>
           </div>
         </div>
-        <div class="health-list">{"".join(_health_row(check.label, check.status, check.detail) for check in state.health)}</div>
+        <div class="health-list">{
+        "".join(_health_row(check.label, check.status, check.detail) for check in state.health)
+    }</div>
       </article>
 
       <article class="panel span-12 attention-{_e("on" if report.unattributed_count else "off")}">
@@ -653,14 +716,18 @@ def _render_state(state: DashboardState) -> str:
             <p class="eyebrow">Cost Allocation</p>
             <h2>Costs</h2>
           </div>
-          <div class="pill-group"><span class="pill">{_e(report.period_label)}</span>{costs_trust_pill}</div>
+          <div class="pill-group"><span class="pill">{_e(report.period_label)}</span>{
+        costs_trust_pill
+    }</div>
         </div>
         {_costs_panel(ledger, report.by_project, report.sessions)}
       </article>
     </section>
 
     <footer>
-      Latest session: {_latest_label(latest)} · Generated {_e(state.generated_at.strftime("%Y-%m-%d %H:%M:%S"))}
+      Latest session: {_latest_label(latest)} · Generated {
+        _e(state.generated_at.strftime("%Y-%m-%d %H:%M:%S"))
+    }
     </footer>
   </main>
   {_celebration_script()}

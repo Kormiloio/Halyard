@@ -582,8 +582,9 @@ def register(app: typer.Typer) -> None:
         """Start the local Halyard Glass Cockpit dashboard."""
         from halyard.ai_log import find_project_dir
         from halyard.dashboard import run_dashboard
+        from halyard.hub import find_hub
 
-        project_dir = project_dir_opt or find_project_dir()
+        project_dir = project_dir_opt or find_hub() or find_project_dir()
         if project_dir is None:
             console.print(
                 "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."

@@ -65,6 +65,8 @@ class HumanTimeReport:
     today_minutes: int
     month_minutes: int
     by_project: list[TimeBucket]
+    presence_minutes: int = 0
+    presence_label: str = "manual"
 
 
 @dataclass(frozen=True)
@@ -82,6 +84,7 @@ class DashboardState:
     active_timer: ActiveTimer | None
     health: list[HealthCheck]
     latest_session: AiSession | None
+    all_sessions: list[AiSession] = field(default_factory=list)
     generated_at: datetime = field(default_factory=datetime.now)
 
 
@@ -270,6 +273,24 @@ def parse_timeclock(
     return entries
 
 
+def _compute_presence_today(sessions: list[AiSession], now: datetime) -> tuple[int, str]:
+    """Return (presence_minutes, label) from today's AI session windows, merged at 30-min gap."""
+    today = now.date()
+    windows = [(s.start, s.end) for s in sessions if s.start.date() == today and s.end > s.start]
+    if not windows:
+        return 0, "auto-detected"
+    windows.sort(key=lambda w: w[0])
+    merged: list[tuple[datetime, datetime]] = [windows[0]]
+    for start, end in windows[1:]:
+        last_start, last_end = merged[-1]
+        if (start - last_end).total_seconds() / 60 <= 30:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+    total_minutes = int(sum((e - s).total_seconds() / 60 for s, e in merged))
+    return total_minutes, "auto-detected"
+
+
 def build_dashboard_state(project_dir: Path) -> DashboardState:
     """Build all data needed for the local Glass Cockpit."""
     from contextlib import suppress
@@ -279,9 +300,19 @@ def build_dashboard_state(project_dir: Path) -> DashboardState:
 
         import_codex_sessions()
 
+    all_sessions = parse_sessions(project_dir)
     report = build_ai_report(project_dir, all_time=False)
     active_timer = read_active_timer()
-    human_time = build_human_time_report(project_dir)
+    raw_human = build_human_time_report(project_dir)
+    now = datetime.now()
+    presence_minutes, presence_label = _compute_presence_today(all_sessions, now)
+    human_time = HumanTimeReport(
+        today_minutes=raw_human.today_minutes,
+        month_minutes=raw_human.month_minutes,
+        by_project=raw_human.by_project,
+        presence_minutes=presence_minutes,
+        presence_label=presence_label,
+    )
     latest_session = max(report.sessions, key=lambda session: session.end, default=None)
 
     return DashboardState(
@@ -290,6 +321,7 @@ def build_dashboard_state(project_dir: Path) -> DashboardState:
         human_time=human_time,
         active_timer=active_timer,
         latest_session=latest_session,
+        all_sessions=all_sessions,
         health=build_health_checks(project_dir, report=report, active_timer=active_timer),
     )
 
