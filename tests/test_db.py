@@ -15,8 +15,9 @@ runner = CliRunner()
 
 @pytest.fixture(autouse=True)
 def _isolate_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Redirect registry to tmp_path so tests don't read the real ~/.halyard/projects."""
+    """Redirect registry and hub so tests don't read real user data."""
     monkeypatch.setattr("halyard.registry.REGISTRY_PATH", tmp_path / ".halyard" / "projects")
+    monkeypatch.setattr("halyard.hub.find_hub", lambda: None)
 
 
 _SESSION_LINE_A = (
@@ -267,3 +268,42 @@ def test_db_reset_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert result.exit_code == 0
     assert not (tmp_path / "cache.db").exists()
+
+
+# ---------------------------------------------------------------------------
+# Cache upsert — amendment data is written on re-sync (INSERT OR REPLACE)
+# ---------------------------------------------------------------------------
+
+
+def test_sync_applies_amendment_on_resync(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Re-syncing after an amendment record is written updates the cached row."""
+    from halyard.ai_log import session_hash
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("halyard.db._DB_PATH", tmp_path / "cache.db")
+    _setup_project(tmp_path, [_SESSION_LINE_A])
+
+    # First sync — row has no pr_ref
+    sync_all()
+    conn = get_db()
+    row = conn.execute("SELECT pr_ref FROM sessions WHERE project = 'test:proj'").fetchone()
+    assert row["pr_ref"] is None
+    conn.close()
+
+    # Append an amendment record to the log
+    line_hash = session_hash(_SESSION_LINE_A)
+    amendment = (
+        f"a {line_hash} pr_ref=org/repo#7 pr_state=merged outcome_resolved_at=2026-01-01T12:00:00"
+    )
+    log_path = tmp_path / "ai-sessions.log"
+    log_path.write_text(log_path.read_text() + amendment + "\n")
+
+    # Re-sync — amended pr_ref should be reflected in the cache
+    sync_all()
+    conn = get_db()
+    row = conn.execute(
+        "SELECT pr_ref, pr_state FROM sessions WHERE project = 'test:proj'"
+    ).fetchone()
+    assert row["pr_ref"] == "org/repo#7"
+    assert row["pr_state"] == "merged"
+    conn.close()

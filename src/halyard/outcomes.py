@@ -233,7 +233,7 @@ def resolve_sessions(
 
                 resolved_at = datetime.now().isoformat(timespec="seconds")
                 result = ResolutionResult(
-                    session_hash=_session_line_hash(project_dir, s),
+                    session_hash=_session_line_hash(s),
                     pr_ref=pr_ref,
                     pr_state=pr_state,
                     resolved_at=resolved_at,
@@ -252,13 +252,14 @@ def resolve_sessions(
     return results
 
 
-def _session_line_hash(project_dir: Path, session: AiSession) -> str:
-    """Reconstruct the session hash from a parsed AiSession.
+def _session_line_hash(session: AiSession) -> str:
+    """Return the hash of the original raw `s` log line for this session.
 
-    session_hash() operates on raw log lines. We approximate by serializing
-    the session back to its log line and hashing that.
+    Uses AiSession._raw_hash (set at parse time before amendment folding) so
+    that the hash matches the actual line in the file. Falls back to hashing
+    the serialized form for sessions not created by parse_sessions (e.g. tests).
     """
-    return session_hash(session.to_log_line())
+    return session._raw_hash or session_hash(session.to_log_line())
 
 
 def _write_amendment(project_dir: Path, result: ResolutionResult) -> None:
@@ -382,9 +383,7 @@ def attribute_session(
     from halyard.git_context import current_remote
 
     sessions = parse_sessions(project_dir)
-    matched = [
-        s for s in sessions if _session_line_hash(project_dir, s).startswith(session_id_prefix)
-    ]
+    matched = [s for s in sessions if _session_line_hash(s).startswith(session_id_prefix)]
     if not matched:
         return False, f"No session found with ID starting '{session_id_prefix}'"
     if len(matched) > 1:
@@ -404,7 +403,7 @@ def attribute_session(
 
     resolved_at = datetime.now().isoformat(timespec="seconds")
     result = ResolutionResult(
-        session_hash=_session_line_hash(project_dir, session),
+        session_hash=_session_line_hash(session),
         pr_ref=pr_ref,
         pr_state=pr_state,
         resolved_at=resolved_at,

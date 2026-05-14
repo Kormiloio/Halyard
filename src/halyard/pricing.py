@@ -175,7 +175,11 @@ def pricing_table_age_days() -> int | None:
     return int(age / 86400)
 
 
-def update_pricing(timeout: int = 5) -> tuple[int, int]:
+class PricingHashChangedError(Exception):
+    """Raised when the remote pricing table has a different hash than the stored one."""
+
+
+def update_pricing(timeout: int = 5, accept_changed: bool = False) -> tuple[int, int]:
     """Fetch remote table, validate, save locally.
 
     Returns (new_count, updated_count) — models added or updated.
@@ -232,9 +236,15 @@ def update_pricing(timeout: int = 5) -> tuple[int, int]:
                 raise PricingFetchError(f"Model {model_name!r} has invalid {field}: {val!r}")
 
     # D-5: check hash before accepting the table.
-    # _check_pricing_hash prints a warning if the table has changed.
+    # Raise PricingHashChangedError if the table has changed and accept_changed is False.
     # The hash is persisted below only after the table is written successfully.
-    _check_pricing_hash(body)
+    hash_ok = _check_pricing_hash(body)
+    if not hash_ok and not accept_changed:
+        raise PricingHashChangedError(
+            "Remote pricing table has changed since the last accepted update.\n"
+            "Run 'halyard update-pricing --accept-changed' to accept the new table,\n"
+            "or review the changes first."
+        )
 
     # Count new vs updated relative to bundled table
     new_count = sum(1 for m in fetched if m not in PRICING)

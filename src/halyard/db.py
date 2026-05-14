@@ -16,7 +16,7 @@ from pathlib import Path
 _DB_PATH = Path.home() / ".halyard" / "cache.db"
 
 # Schema version this code expects. Bump whenever a migration is added.
-_CURRENT_VERSION = 3
+_CURRENT_VERSION = 4
 
 # Initial schema for a fresh database — always reflects _CURRENT_VERSION.
 _CREATE_SCHEMA_V1 = """
@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     source_file         TEXT NOT NULL,
     branch              TEXT,
     commit_count        INTEGER,
+    code_added          INTEGER,
     code_removed        INTEGER,
     pr_ref              TEXT,
     pr_state            TEXT,
@@ -106,6 +107,8 @@ CREATE TABLE IF NOT EXISTS pr_cache (
 );
 """,
     ),
+    # v3 → v4: add code_added column (was in AiSession but omitted from the v3 migration).
+    (3, "ALTER TABLE sessions ADD COLUMN code_added INTEGER;"),
 ]
 
 
@@ -272,19 +275,15 @@ def _session_id(
 
 
 def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
-    from halyard.ai_log import _parse_line
+    # Use parse_sessions (not _parse_line) so amendment records are folded in.
+    # INSERT OR REPLACE ensures re-syncing after an amendment updates the cache row.
+    from halyard.ai_log import parse_sessions
 
-    added = 0
+    upserted = 0
     source = str(log_path.resolve())
+    sessions = parse_sessions(log_path.parent)
 
-    for raw_line in log_path.read_text().splitlines():
-        line = raw_line.strip()
-        if not line.startswith("s "):
-            continue
-        session = _parse_line(line)
-        if session is None:
-            continue
-
+    for session in sessions:
         sid = _session_id(
             session.start.isoformat(),
             session.end.isoformat(),
@@ -294,15 +293,17 @@ def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
             session.output_tokens,
         )
 
-        result = conn.execute(
+        is_new = conn.execute("SELECT 1 FROM sessions WHERE id = ?", (sid,)).fetchone() is None
+
+        conn.execute(
             """
-            INSERT OR IGNORE INTO sessions
+            INSERT OR REPLACE INTO sessions
                 (id, project, tool, model, started_at, ended_at,
                  input_tok, output_tok, cache_read, cache_write,
                  cost_usd, tool_calls, tool_errors, source_file,
-                 branch, commit_count, code_removed,
+                 branch, commit_count, code_added, code_removed,
                  pr_ref, pr_state, outcome_resolved_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 sid,
@@ -321,15 +322,17 @@ def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
                 source,
                 session.branch,
                 session.commit_count,
+                session.code_added,
                 session.code_removed,
                 session.pr_ref,
                 session.pr_state,
                 session.outcome_resolved_at,
             ),
         )
-        added += result.rowcount
+        if is_new:
+            upserted += 1
 
-    return added
+    return upserted
 
 
 def _sync_timeclock(conn: sqlite3.Connection, tc_path: Path) -> int:

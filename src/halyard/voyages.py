@@ -97,19 +97,24 @@ def read_voyages(project_dir: Path) -> list[VoyageEntry]:
 
 
 def write_voyages(project_dir: Path, entries: list[VoyageEntry]) -> None:
-    lines = ["# Halyard voyages — one entry per tracked project slug\n"]
-    for e in entries:
-        lines.append("[[voyage]]")
-        lines.append(f'slug = "{e.slug}"')
-        lines.append(f"target_sessions = {e.target_sessions}")
-        lines.append(f"inactivity_days = {e.inactivity_days}")
-        lines.append(f'stage = "{e.stage}"')
-        lines.append(f'started_at = "{e.started_at}"')
-        lines.append(f'completed_at = "{e.completed_at}"')
-        lines.append(f'creature = "{e.creature}"')
-        lines.append(f'creature_trait = "{e.creature_trait}"')
-        lines.append("")
-    content = "\n".join(lines)
+    import tomli_w
+
+    data: dict[str, list[dict[str, object]]] = {
+        "voyage": [
+            {
+                "slug": e.slug,
+                "target_sessions": e.target_sessions,
+                "inactivity_days": e.inactivity_days,
+                "stage": e.stage,
+                "started_at": e.started_at,
+                "completed_at": e.completed_at,
+                "creature": e.creature,
+                "creature_trait": e.creature_trait,
+            }
+            for e in entries
+        ]
+    }
+    content = "# Halyard voyages — one entry per tracked project slug\n\n" + tomli_w.dumps(data)
 
     path = project_dir / VOYAGES_FILENAME
     fd, tmp = tempfile.mkstemp(dir=project_dir, prefix=".voyages-", suffix=".tmp")

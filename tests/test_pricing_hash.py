@@ -14,6 +14,7 @@ import pytest
 import halyard.pricing as pricing_mod
 from halyard.pricing import (
     PricingFetchError,
+    PricingHashChangedError,
     _check_pricing_hash,
     update_pricing,
 )
@@ -240,6 +241,7 @@ def test_changed_table_warning_on_update(
     with (
         patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
         patch("urllib.request.urlopen", return_value=mock),
+        pytest.raises(PricingHashChangedError),
     ):
         update_pricing()
 
