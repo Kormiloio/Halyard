@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 
 import typer
@@ -21,8 +22,24 @@ app = typer.Typer(
 console = Console()
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"halyard {pkg_version('halyard')}")
+        raise typer.Exit()
+
+
 @app.callback(invoke_without_command=True)
-def default(ctx: typer.Context) -> None:
+def default(
+    ctx: typer.Context,
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit.",
+    ),
+) -> None:
     """Drop into the interactive REPL when invoked with no subcommand."""
     if ctx.invoked_subcommand is None:
         from halyard.ai_log import find_project_dir
