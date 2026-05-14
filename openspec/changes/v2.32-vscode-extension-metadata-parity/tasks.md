@@ -22,12 +22,12 @@
 
 - [x] Extend `record-session` with metadata flags or a JSON payload mode.
 - [x] Add `source=vscode-extension` support.
-- [ ] Add clear error messages for invalid metadata payloads.
+- [x] Add clear error messages for invalid metadata payloads.
 - [x] Preserve current manual VS Code task behavior.
 
 ## Collector Parity
 
-- [ ] Add collector coverage table documentation.
+- [x] Add collector coverage table documentation.
 - [x] Update Claude Code collector to populate safe interaction counts where available.
 - [x] Update Cursor collector to populate safe interaction counts where available.
 - [x] Update Gemini CLI collector to normalize existing telemetry into shared fields.
@@ -55,5 +55,5 @@
 ## Documentation
 
 - [x] Update README technical section with metadata parity coverage.
-- [ ] Update troubleshooting docs for VS Code extension setup.
+- [x] Update troubleshooting docs for VS Code extension setup.
 - [x] Add privacy note explaining metadata-only VS Code capture.

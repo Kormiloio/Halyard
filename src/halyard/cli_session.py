@@ -481,6 +481,27 @@ def register(app: typer.Typer) -> None:
             )
             raise typer.Exit(code=1)
 
+        valid_status = {"pass", "fail", "unknown"}
+        valid_trust = {"observed", "estimated", "manual"}
+        if test_status is not None and test_status not in valid_status:
+            console.print(
+                f"[bold red]Error:[/] --test-status must be pass, fail, or unknown"
+                f" (got '{test_status}')."
+            )
+            raise typer.Exit(code=1)
+        if build_status is not None and build_status not in valid_status:
+            console.print(
+                f"[bold red]Error:[/] --build-status must be pass, fail, or unknown"
+                f" (got '{build_status}')."
+            )
+            raise typer.Exit(code=1)
+        if telemetry_trust is not None and telemetry_trust not in valid_trust:
+            console.print(
+                f"[bold red]Error:[/] --telemetry-trust must be observed, estimated, or manual"
+                f" (got '{telemetry_trust}')."
+            )
+            raise typer.Exit(code=1)
+
         attributed_project = project or get_active_project(project_dir)
         end = datetime.now()
         start_time = end - timedelta(minutes=max(0, minutes))
