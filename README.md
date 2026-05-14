@@ -83,7 +83,69 @@ without showing prompts, transcripts, source code, or file contents.
 
 ---
 
+## For technical readers
+
+Halyard is a Python 3.11+ local-first CLI and dashboard, not a hosted billing
+service. The `halyard` command is a Typer app, reports use Rich, the terminal
+dashboard uses Textual, and the Glass Cockpit is a small `127.0.0.1` HTTP
+server. The durable data model is plain text in the project folder; SQLite is
+only a rebuildable read-model cache for faster queries.
+
+The capture pipeline is intentionally simple:
+
+```text
+AI tool hook/importer/manual command
+  -> normalized AiSession object
+  -> append-focused ai-sessions.log line
+  -> reports, ledger allocation, dashboard, invoice evidence
+```
+
+So: is Halyard "just looking at logs"? Not exactly. It uses the best public
+signal each tool exposes:
+
+- **Claude Code**: installs `UserPromptSubmit` and `Stop` hooks. The start hook
+  records session start time and git SHA. The stop hook reads the structured
+  hook payload; for newer Claude Code formats it can also aggregate token/model
+  metadata from the local transcript JSONL path passed by the hook.
+- **Cursor**: installs `beforeSubmitPrompt` and `stop` hooks. It reads the stop
+  payload and prefers `workspace_roots` for attribution because that is the
+  actual editor workspace, not necessarily the shell CWD.
+- **Gemini CLI**: installs `SessionStart`, `AfterModel`, and `AfterAgent` hooks.
+  `AfterModel` accumulates token usage from `usageMetadata`; `AfterAgent`
+  finalizes the session and can enrich from Gemini's local history file for
+  multi-model breakdowns, tool-call counts, errors, and cost.
+- **Codex Desktop**: imports local `~/.codex/sessions/.../rollout-*.jsonl`
+  files, extracts timing/model/token metadata, and records imported session IDs
+  so repeated imports do not duplicate entries.
+- **VS Code / GitHub Copilot**: uses a VS Code task and `halyard record-session`
+  because there is no public Copilot session hook yet.
+
+Every collector writes the same normalized record shape: timestamps, tool,
+model, tokens when available, cache tokens, cost, billing type, project,
+branch, capture source, and attribution provenance. Halyard does not store
+prompts, source code, file contents, or full transcripts in `ai-sessions.log`.
+When a collector temporarily reads a local transcript or history file, it is
+only to extract session metadata.
+
+The log is append-focused. Session records are `s ...` lines; corrections are
+separate amendment records keyed by a hash of the original line. Writers use
+POSIX `flock` so concurrent hooks do not interleave writes. Malformed records
+are quarantined instead of crashing report generation.
+
+Cost handling is explicit about trust. Direct API usage can be captured or
+calculated from tokens and the local pricing table. Seat or credit plans are
+allocated at report time from `ai-plans.toml` by active minutes, session count,
+or credits. Reports label the result as captured, calculated, allocated,
+inferred, mixed, or unallocated so client-facing evidence does not pretend an
+estimate is a measurement.
+
+---
+
 ## Quickstart
+
+> **Platform:** macOS and Linux. Windows is not yet supported (file locking
+> requires POSIX `fcntl`). WSL2 works. The `halyard install-service` command
+> is macOS-only (uses `launchctl`).
 
 ```bash
 pipx install halyard
