@@ -15,6 +15,7 @@ from halyard.reports import (
     format_minutes,
     parse_timeclock,
     read_active_timer,
+    summarize_ai_sessions,
 )
 
 
@@ -181,3 +182,94 @@ def test_build_human_time_report_summarizes_today_and_month(tmp_path: Path) -> N
     assert report.month_minutes == 150
     assert report.by_project[0].label == "acme:auth"
     assert format_minutes(report.today_minutes) == "1h 30m"
+
+
+# ---------------------------------------------------------------------------
+# v2.30: by_tool_usage in AiReport
+# ---------------------------------------------------------------------------
+
+
+def _tool_session(
+    tool: str,
+    *,
+    cost: float = 0.0,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    tokens_available: bool = True,
+) -> AiSession:
+    return AiSession(
+        start=datetime(2026, 5, 14, 10, 0),
+        end=datetime(2026, 5, 14, 10, 30),
+        tool=tool,
+        model="claude-sonnet-4-6",
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost,
+        tokens_available=tokens_available,
+    )
+
+
+def test_by_tool_usage_populated_with_session_counts() -> None:
+    sessions = [
+        _tool_session("claude-code", cost=1.0),
+        _tool_session("claude-code", cost=2.0),
+        _tool_session("codex", cost=0.0),
+    ]
+    report = summarize_ai_sessions(sessions, period_label="test")
+
+    tools = {b.tool: b for b in report.by_tool_usage}
+    assert tools["claude-code"].sessions == 2
+    assert tools["codex"].sessions == 1
+
+
+def test_by_tool_usage_zero_cost_tool_appears() -> None:
+    """Codex (free tier) must appear even with $0 cost — the core v2.30 fix."""
+    sessions = [
+        _tool_session("claude-code", cost=5.0),
+        _tool_session("codex", cost=0.0),
+    ]
+    report = summarize_ai_sessions(sessions, period_label="test")
+
+    tool_names = [b.tool for b in report.by_tool_usage]
+    assert "codex" in tool_names
+
+
+def test_by_tool_usage_sorted_by_session_count_descending() -> None:
+    sessions = [
+        _tool_session("codex", cost=0.0),
+        _tool_session("claude-code", cost=1.0),
+        _tool_session("claude-code", cost=2.0),
+    ]
+    report = summarize_ai_sessions(sessions, period_label="test")
+
+    assert report.by_tool_usage[0].tool == "claude-code"
+    assert report.by_tool_usage[1].tool == "codex"
+
+
+def test_by_tool_usage_aggregates_tokens() -> None:
+    sessions = [
+        _tool_session("claude-code", input_tokens=1000, output_tokens=200),
+        _tool_session("claude-code", input_tokens=500, output_tokens=100),
+    ]
+    report = summarize_ai_sessions(sessions, period_label="test")
+
+    bucket = report.by_tool_usage[0]
+    assert bucket.tool == "claude-code"
+    assert bucket.tokens == 1800
+
+
+def test_by_tool_usage_session_share_sums_to_one() -> None:
+    sessions = [
+        _tool_session("claude-code"),
+        _tool_session("codex"),
+        _tool_session("cursor"),
+    ]
+    report = summarize_ai_sessions(sessions, period_label="test")
+
+    total_share = sum(b.session_share for b in report.by_tool_usage)
+    assert abs(total_share - 1.0) < 1e-9
+
+
+def test_by_tool_usage_empty_sessions_returns_empty_list() -> None:
+    report = summarize_ai_sessions([], period_label="test")
+    assert report.by_tool_usage == []

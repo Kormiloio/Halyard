@@ -27,7 +27,7 @@ from halyard.reports import (
     format_minutes,
     parse_timeclock,
 )
-from halyard.usage import UsageAnalytics, build_usage_analytics, compact_number
+from halyard.usage import ToolUsageBucket, UsageAnalytics, build_usage_analytics, compact_number
 
 DASHBOARD_PORT = 7432
 
@@ -633,7 +633,7 @@ def _render_state(state: DashboardState) -> str:
           </div>
           {tools_pill}
         </div>
-        {_bucket_table(report.by_tool, "Tool")}
+        {_tool_table(report.by_tool_usage)}
       </article>
 
       <article class="panel span-4">
@@ -941,6 +941,18 @@ def _sessions_table(sessions: Iterable[AiSession]) -> str:
 
 def _health_badge(session: AiSession) -> str:
     parts: list[str] = []
+    if session.interaction_count is not None:
+        parts.append(f"<span class='trust-captured'>{session.interaction_count}i</span>")
+    elif session.interaction_data_available is False:
+        parts.append("<span class='dim'>i n/a</span>")
+    if session.files_touched_count is not None:
+        parts.append(f"<span class='dim'>{session.files_touched_count}f</span>")
+    if session.test_status:
+        css = "trust-captured" if session.test_status == "pass" else "trust-unallocated"
+        parts.append(f"<span class='{css}'>test:{_e(session.test_status)}</span>")
+    if session.build_status:
+        css = "trust-captured" if session.build_status == "pass" else "trust-unallocated"
+        parts.append(f"<span class='{css}'>build:{_e(session.build_status)}</span>")
     if session.tool_calls is not None:
         calls = session.tool_calls
         errors = session.tool_errors or 0
@@ -1065,13 +1077,14 @@ def _usage_tool_rows(usage: UsageAnalytics) -> str:
     if not usage.by_tool:
         return "<p class='mini-empty'>No tool usage.</p>"
     rows = []
-    for bucket in usage.by_tool[:4]:
+    for bucket in usage.by_tool:
         pct = int(bucket.session_share * 100)
+        tok_label = f" · {compact_number(bucket.tokens)}tok" if bucket.tokens else ""
         rows.append(
             "<div class='usage-row'>"
             f"<span>{_e(bucket.tool)}</span>"
             f"<div class='bar-wrap'><div class='bar bar-ok' style='width:{pct}%'></div></div>"
-            f"<small>{bucket.sessions} · {pct}%</small>"
+            f"<small>{bucket.sessions}{tok_label} · {pct}%</small>"
             "</div>"
         )
     return "<div class='usage-list'>" + "".join(rows) + "</div>"
@@ -1099,6 +1112,33 @@ def _model_table(buckets: Iterable[CostBucket]) -> str:
     return (
         "<table><thead><tr><th>Model</th><th>Sessions</th><th>Cost</th><th>Share</th>"
         "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+    )
+
+
+def _tool_table(buckets: Iterable[ToolUsageBucket]) -> str:
+    bucket_list = list(buckets)
+    if not bucket_list:
+        return '<p class="empty">No tool data yet.</p>'
+    total_sessions = sum(b.sessions for b in bucket_list) or 1
+    rows = []
+    for bucket in bucket_list:
+        pct = int((bucket.sessions / total_sessions) * 100)
+        pct_label = f"{pct}%" if pct > 0 or bucket.sessions == 0 else "<1%"
+        tok_label = compact_number(bucket.tokens) if bucket.tokens else "—"
+        rows.append(
+            "<tr>"
+            f"<td>{_e(bucket.tool)}</td>"
+            f"<td class='num'>{bucket.sessions}</td>"
+            f"<td class='num'>{_e(tok_label)}</td>"
+            f"<td class='num'>${bucket.cost_usd:.2f}</td>"
+            f"<td><div class='bar-cell'>"
+            f"<div class='bar-wrap'><div class='bar' style='width:{pct}%'></div></div>"
+            f"<span>{_e(pct_label)}</span></div></td>"
+            "</tr>"
+        )
+    return (
+        "<table><thead><tr><th>Tool</th><th>Sessions</th><th>Tokens</th>"
+        "<th>Cost</th><th>Share</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
     )
 
 

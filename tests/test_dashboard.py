@@ -117,6 +117,33 @@ def test_render_dashboard_health_column_no_telemetry(tmp_path: Path) -> None:
     assert "—" in html
 
 
+def test_render_dashboard_health_column_with_metadata_counts(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 8, 10, 0),
+            end=datetime(2026, 5, 8, 10, 30),
+            tool="vscode",
+            model="github-copilot",
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=0.0,
+            project="acme:auth",
+            tokens_available=False,
+            interaction_count=4,
+            files_touched_count=3,
+            test_status="pass",
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "4i" in html
+    assert "3f" in html
+    assert "test:pass" in html
+
+
 def test_render_dashboard_marks_unattributed_sessions(tmp_path: Path) -> None:
     _init_project(tmp_path)
     append_session(

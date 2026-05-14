@@ -11,6 +11,7 @@ from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, parse_sessions
 from halyard.pricing import pricing_table_age_days
+from halyard.usage import ToolUsageBucket
 
 _HALYARD_ACTIVE = Path.home() / ".halyard" / "active"
 
@@ -40,6 +41,7 @@ class AiReport:
     by_project: list[CostBucket]
     by_model: list[CostBucket]
     by_tool: list[CostBucket]
+    by_tool_usage: list[ToolUsageBucket]
     unattributed_count: int
     unattributed_sessions: list[AiSession]
     total_tool_calls: int = 0
@@ -167,6 +169,7 @@ def summarize_ai_sessions(sessions: list[AiSession], *, period_label: str) -> Ai
         ),
         by_model=_bucket_costs((session.model, session.cost_usd) for session in sessions),
         by_tool=_bucket_costs((session.tool, session.cost_usd) for session in sessions),
+        by_tool_usage=_tool_buckets_for_report(sessions),
         unattributed_count=len(unattributed),
         unattributed_sessions=unattributed,
         total_tool_calls=total_tool_calls,
@@ -337,6 +340,38 @@ def _bucket_costs(items: Iterable[tuple[str, float]]) -> list[CostBucket]:
         CostBucket(label=label, cost_usd=sum(costs), sessions=len(costs))
         for label, costs in sorted(totals.items(), key=lambda item: -sum(item[1]))
     ]
+
+
+def _tool_buckets_for_report(sessions: list[AiSession]) -> list[ToolUsageBucket]:
+    totals: dict[str, dict[str, float | int]] = {}
+    for session in sessions:
+        row = totals.setdefault(session.tool, {"sessions": 0, "tokens": 0, "cost": 0.0})
+        row["sessions"] = int(row["sessions"]) + 1
+        tok = (
+            session.input_tokens
+            + session.output_tokens
+            + (session.cache_read or 0)
+            + (session.cache_write or 0)
+            if session.tokens_available
+            else 0
+        )
+        row["tokens"] = int(row["tokens"]) + tok
+        row["cost"] = float(row["cost"]) + session.cost_usd
+    total_sessions = sum(int(r["sessions"]) for r in totals.values())
+    share = (lambda n: n / total_sessions) if total_sessions > 0 else (lambda _: 0.0)
+    return sorted(
+        [
+            ToolUsageBucket(
+                tool=tool,
+                sessions=int(row["sessions"]),
+                tokens=int(row["tokens"]),
+                cost_usd=float(row["cost"]),
+                session_share=share(int(row["sessions"])),
+            )
+            for tool, row in totals.items()
+        ],
+        key=lambda b: (-b.sessions, b.tool),
+    )
 
 
 def _file_check(label: str, path: Path) -> HealthCheck:
