@@ -7,16 +7,16 @@
 - [x] Write OpenSpec proposal.
 - [x] Write OpenSpec design.
 - [x] Write OpenSpec requirements.
-- [ ] Review and approve field vocabulary before implementation.
+- [x] Review and approve field vocabulary before implementation.
 - [x] Decide whether VS Code extension lives in this repo or a separate repo.
 
 ## Schema
 
 - [x] Add optional interaction metadata fields to `AiSession`.
 - [x] Serialize and parse new fields with backward compatibility.
-- [ ] Validate enum and numeric metadata fields.
-- [ ] Add tests for missing vs zero interaction data.
-- [ ] Add tests preventing unsafe content serialization.
+- [x] Validate enum and numeric metadata fields.
+- [x] Add tests for missing vs zero interaction data.
+- [x] Add tests preventing unsafe content serialization.
 
 ## CLI
 

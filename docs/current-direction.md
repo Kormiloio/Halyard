@@ -129,7 +129,11 @@ Spec: `openspec/changes/v2.24-outcome-metadata/`. 902 tests passing.
    recovery prompt on restart. All four collectors upgraded to emit interaction
    metadata with "unavailable is not zero" semantics. `record-session` gains
    20+ metadata flags. 952 tests passing.
-9. **v2.19** — Attestable AI work appendix. Gated on v2.24 so the appendix
+9. **cli.py refactor** — **shipped**: monolithic 3,352-line `cli.py` split into
+   12 focused modules (`cli_hooks`, `cli_setup`, `cli_session`, `cli_importers`,
+   `cli_report`, `cli_org`, plus six Phase 1 sub-apps). `cli.py` reduced to
+   ~160 lines. No behaviour change; mypy clean on 71 source files, 952 tests.
+10. **v2.19** — Attestable AI work appendix. Gated on v2.24 so the appendix
    can include commit and PR evidence.
 5. **v3.0** — Outcome graph (connect sessions to commits, PRs, tests) only
    if design partners ask for it.

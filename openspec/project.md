@@ -196,6 +196,16 @@ layers must read from this local source of truth; they do not replace it.
     "unavailable is not zero" rule. `record-session` gains 20+ metadata flags.
     Spec in `openspec/changes/v2.32-vscode-extension-metadata-parity/`.
     **Status: complete (952 tests passing).**
+
+    **Refactor (post-v2.32):** `cli.py` split from 3,352 lines into 12 focused
+    modules using a `register(app: typer.Typer) -> None` pattern. Six sub-app
+    modules (`cli_service`, `cli_config`, `cli_db`, `cli_projects`, `cli_voyage`,
+    `cli_outcome`) use `app.add_typer()`; six register-pattern modules
+    (`cli_hooks`, `cli_setup`, `cli_session`, `cli_importers`, `cli_report`,
+    `cli_org`) use `register(app)`. `cli.py` is now ~160 lines: app definition,
+    default callback, register calls, easter eggs. No observable behaviour change;
+    mypy clean on 71 source files, 952 tests passing.
+
 12. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.

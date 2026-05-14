@@ -47,9 +47,9 @@
 
 - [x] 4.1 918 tests passing (pre-existing test_db and test_manual_sessions excluded)
 - [x] 4.2 `uv run ruff check .` — clean
-- [ ] 4.3 `uv run ruff format --check .` — clean
-- [ ] 4.4 `uv run mypy src` — clean
-- [ ] 4.5 Manual smoke test
+- [x] 4.3 `uv run ruff format --check .` — clean
+- [x] 4.4 `uv run mypy src` — clean
+- [x] 4.5 Manual smoke test
 
 ---
 

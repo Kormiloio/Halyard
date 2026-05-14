@@ -34,9 +34,9 @@ Complete in order. Each section builds on the previous.
   - [x] Row format: tool, sessions, tokens (if available), cost
   - [x] Omit the "By tool" section if `report.by_tool_usage` is empty
 
-- [ ] 2.2 Manual smoke test
-  - [ ] Run `halyard report` in the Halyard project dir
-  - [ ] Confirm "By tool" section appears with all tools including zero-cost ones
+- [x] 2.2 Manual smoke test
+  - [x] Run `halyard report` in the Halyard project dir
+  - [x] Confirm "By tool" section appears with all tools including zero-cost ones
 
 ---
 
@@ -65,9 +65,9 @@ Complete in order. Each section builds on the previous.
 
 - [x] 5.1 Run full test suite: 918 passed, 0 failed (pre-existing test_db and test_manual_sessions excluded)
 - [x] 5.2 `uv run ruff check .` — clean
-- [ ] 5.3 `uv run ruff format --check .` — clean
-- [ ] 5.4 `uv run mypy src` — clean
-- [ ] 5.5 Manual dashboard check
+- [x] 5.3 `uv run ruff format --check .` — clean
+- [x] 5.4 `uv run mypy src` — clean
+- [x] 5.5 Manual dashboard check
 
 ---
 
