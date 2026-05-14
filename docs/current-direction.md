@@ -133,7 +133,20 @@ Spec: `openspec/changes/v2.24-outcome-metadata/`. 902 tests passing.
    12 focused modules (`cli_hooks`, `cli_setup`, `cli_session`, `cli_importers`,
    `cli_report`, `cli_org`, plus six Phase 1 sub-apps). `cli.py` reduced to
    ~160 lines. No behaviour change; mypy clean on 71 source files, 952 tests.
-10. **v2.19** — Attestable AI work appendix. Gated on v2.24 so the appendix
+10. **v2.33** — Hub-first dashboard + voyage auto-detection — **shipped**:
+    dashboard defaults to hub scope; voyage stage inferred automatically from
+    session history (no voyages.toml required); timeclock missing no longer
+    shows "Error". 952 tests.
+11. **v2.34** — Presence-aware human timer — **shipped**: merges today's AI
+    session windows into a presence estimate; "0m today" replaced with
+    auto-detected time for active users. No writes to timeclock. 952 tests.
+12. **v2.35** — Subscription cost allocation — **shipped**: AI Cost card shows
+    allocated plan cost when captured cost is $0.00 and ai-plans.toml is
+    configured. Trust label distinguishes captured vs allocated. 952 tests.
+13. **v2.36** — Proof score transparency — **shipped**: voyage panel shows
+    `attr X% · tokens Y%` breakdown; fix prompt inline when attribution < 100%;
+    sessions column adds all-time sub-label. 952 tests.
+14. **v2.19** — Attestable AI work appendix. Gated on v2.24 so the appendix
    can include commit and PR evidence.
 5. **v3.0** — Outcome graph (connect sessions to commits, PRs, tests) only
    if design partners ask for it.

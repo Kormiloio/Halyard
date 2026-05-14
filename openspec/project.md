@@ -206,7 +206,39 @@ layers must read from this local source of truth; they do not replace it.
     default callback, register calls, easter eggs. No observable behaviour change;
     mypy clean on 71 source files, 952 tests passing.
 
-12. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+12. **v2.33 — Hub-first dashboard + voyage auto-detection:** `halyard dashboard`
+    defaults to hub scope when a hub is configured. Voyage stage auto-inferred
+    from all-time session history (`_infer_voyage_stage`): At anchor → Anchors
+    Aweigh → Making Headway → Rounding the Mark → Flying Colors — no
+    `voyages.toml` required. `DashboardState` gains `all_sessions` to avoid
+    double-reads. Timeclock missing → "neutral" health (not "error") bug fixed.
+    Spec in `openspec/changes/v2.33-hub-first-dashboard/`.
+    **Status: complete (952 tests passing).**
+
+13. **v2.34 — Presence-aware human timer:** `_compute_presence_today()` merges
+    today's AI session windows (30-min gap) into a presence estimate stored on
+    `HumanTimeReport.presence_minutes`. Human Time card shows "auto-detected"
+    time when no manual timer was started — "0m today" no longer the default
+    for active users. No writes to `time.timeclock`; computed on read.
+    Spec in `openspec/changes/v2.34-presence-timer/`.
+    **Status: complete (952 tests passing).**
+
+14. **v2.35 — Subscription cost allocation:** AI Cost card shows
+    `~$X.XX · allocated from plans` when captured API cost is $0.00 and
+    `ai-plans.toml` defines a plan, using the existing ledger total. Trust label
+    distinguishes captured vs allocated cost. No new data formats.
+    Spec in `openspec/changes/v2.35-subscription-cost/`.
+    **Status: complete (952 tests passing).**
+
+15. **v2.36 — Proof score transparency:** Voyage panel proof score now shows
+    `attr X% · tokens Y%` component breakdown inline so users understand a
+    score of 40% with zero attribution. Fix prompt "run halyard
+    assign-unattributed" shown when attribution < 100%. Sessions column adds
+    all-time sub-label.
+    Spec in `openspec/changes/v2.36-proof-score-transparency/`.
+    **Status: complete (952 tests passing).**
+
+16. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 
