@@ -23,7 +23,8 @@ def register(app: typer.Typer) -> None:
         agent: str | None = typer.Option(
             None,
             "--agent",
-            help="Query provider: local | claude | openai. Defaults to ~/.halyard/config.toml value.",
+            help="Query provider: local | claude | openai. Defaults to ~/.halyard/config.toml"
+            " value.",
         ),
         model: str | None = typer.Option(
             None, "--model", help="Provider model for model-backed agents."
@@ -139,7 +140,9 @@ def register(app: typer.Typer) -> None:
             raise typer.Exit(code=1) from e
 
         console.print(f"[bold green]Started[/] [bold]{timer.slug}[/] at {timer.started}.")
-        console.print("[dim]AI sessions captured automatically — [bold]halyard stop[/] when done.[/]")
+        console.print(
+            "[dim]AI sessions captured automatically — [bold]halyard stop[/] when done.[/]"
+        )
 
     @app.command()
     def stop() -> None:
@@ -218,7 +221,8 @@ def register(app: typer.Typer) -> None:
         windows = parse_timeclock(project_dir / "time.timeclock")
         if not windows:
             console.print(
-                "[yellow]No timeclock data found.[/] Run [bold]halyard start[/] to begin tracking time."
+                "[yellow]No timeclock data found.[/] Run [bold]halyard start[/]"
+                " to begin tracking time."
             )
             return
 
@@ -266,7 +270,9 @@ def register(app: typer.Typer) -> None:
         if not unambiguous:
             console.print("[yellow]No sessions to attribute.[/]")
             if skipped_no_window:
-                console.print(f"  {skipped_no_window} session(s) have no matching timeclock window.")
+                console.print(
+                    f"  {skipped_no_window} session(s) have no matching timeclock window."
+                )
             if ambiguous:
                 console.print(
                     f"  {len(ambiguous)} session(s) are ambiguous"
@@ -385,9 +391,7 @@ def register(app: typer.Typer) -> None:
             return
 
         if result.path is not None:
-            console.print(
-                f"[bold green]Invoice written:[/] {result.path.relative_to(project_dir)}"
-            )
+            console.print(f"[bold green]Invoice written:[/] {result.path.relative_to(project_dir)}")
             if pdf:
                 warning = render_pdf(result.path)
                 if warning:
@@ -441,13 +445,9 @@ def register(app: typer.Typer) -> None:
         files_touched_count: int | None = typer.Option(
             None, "--files-touched-count", help="Number of touched files."
         ),
-        test_run_count: int | None = typer.Option(
-            None, "--test-run-count", help="Test run count."
-        ),
+        test_run_count: int | None = typer.Option(None, "--test-run-count", help="Test run count."),
         test_status: str | None = typer.Option(None, "--test-status", help="pass|fail|unknown."),
-        build_status: str | None = typer.Option(
-            None, "--build-status", help="pass|fail|unknown."
-        ),
+        build_status: str | None = typer.Option(None, "--build-status", help="pass|fail|unknown."),
         human_active_seconds: int | None = typer.Option(
             None, "--human-active-seconds", help="Human-active seconds."
         ),
@@ -666,7 +666,7 @@ def register(app: typer.Typer) -> None:
             ("acme:auth",          "claude-code", 0.38, 15500, 2400, 23, 27,   3,  61,  9, 16),
             (None,                 "claude-code", 1.35, 52000, 7800, 65, 88,   5, None, None, 17),
             (None,                 "gemini-cli",  0.88, 34000, 5200, 43, 57,   3, None, None, 18),
-            (None,                 "cursor",      0.14,  6000,  900,  9, None, None, None, None, 19),
+            (None,                 "cursor",      0.14,  6000,  900,  9, None, None, None, None, 19),  # noqa: E501
             ("acme:api",           "claude-code", 0.56, 22000, 3600, 28, 39,   2, 163, 21, 20),
             ("acme:api",           "gemini-cli",  0.44, 18000, 2800, 22, 33,   1, 108, 15, 21),
             ("globex:ml-pipeline", "claude-code", 0.79, 30000, 4800, 38, 53,   3, 205, 31, 22),

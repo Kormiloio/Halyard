@@ -51,9 +51,7 @@ def register(app: typer.Typer) -> None:
         hub: Path = typer.Option(
             None, "--hub", help="Hub directory containing org.toml and org.db."
         ),
-        project: Path = typer.Option(
-            None, "--project", help="Project dir to sync (default: CWD)."
-        ),
+        project: Path = typer.Option(None, "--project", help="Project dir to sync (default: CWD)."),
         all_projects: bool = typer.Option(False, "--all", help="Sync all projects under hub."),
     ) -> None:
         """Push local ai-sessions.log records to the org store."""
@@ -198,9 +196,7 @@ def register(app: typer.Typer) -> None:
         if not rows:
             console.print("[yellow]No audit events recorded yet.[/]")
             return
-        t = Table(
-            "When", "By", "Event", "Inserted", "Skipped", "Source", box=None, padding=(0, 2)
-        )
+        t = Table("When", "By", "Event", "Inserted", "Skipped", "Source", box=None, padding=(0, 2))
         for r in rows:
             t.add_row(
                 r["synced_at"][:19],

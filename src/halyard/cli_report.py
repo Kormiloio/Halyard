@@ -236,9 +236,7 @@ def register(app: typer.Typer) -> None:
                 branch_sessions_list = [s for b, s in branch_sessions if b == branch_name]
                 commits = sum(s.commit_count or 0 for s in branch_sessions_list)
                 added = sum(s.code_added or 0 for s in branch_sessions_list)
-                meta = (
-                    f"  [dim]{commits} commits  +{added} lines[/]" if commits or added else ""
-                )
+                meta = f"  [dim]{commits} commits  +{added} lines[/]" if commits or added else ""
                 console.print(
                     f"  {branch_name:<32} [dim]{count} session{'s' if count != 1 else ''}[/]{meta}"
                 )
@@ -287,12 +285,8 @@ def register(app: typer.Typer) -> None:
                     f"Total  [bold green]${summary.total_usd:.2f}[/]"
                 )
                 for entry in summary.entries:
-                    trust_color = (
-                        "yellow" if entry.trust in ("allocated", "mixed") else "green"
-                    )
-                    inferred_note = (
-                        " [dim](inferred)[/]" if entry.has_inferred_attribution else ""
-                    )
+                    trust_color = "yellow" if entry.trust in ("allocated", "mixed") else "green"
+                    inferred_note = " [dim](inferred)[/]" if entry.has_inferred_attribution else ""
                     console.print(
                         f"  {entry.project:<32} "
                         f"[{trust_color}]${entry.total_usd:.2f}[/]  "
@@ -346,9 +340,7 @@ def register(app: typer.Typer) -> None:
             sessions = [s for s in sessions if s.start.date() >= week_start.date()]
         elif p == "month":
             sessions = [
-                s
-                for s in sessions
-                if s.start.year == now.year and s.start.month == now.month
+                s for s in sessions if s.start.year == now.year and s.start.month == now.month
             ]
         elif p != "all":
             console.print("[bold red]Error:[/] --period must be one of: today, week, month, all")
@@ -403,9 +395,7 @@ def register(app: typer.Typer) -> None:
             sessions = [s for s in sessions if s.start.date() >= week_start.date()]
         elif p == "month":
             sessions = [
-                s
-                for s in sessions
-                if s.start.year == now.year and s.start.month == now.month
+                s for s in sessions if s.start.year == now.year and s.start.month == now.month
             ]
         elif p != "all":
             console.print("[bold red]Error:[/] --period must be: today, week, month, all")
@@ -509,9 +499,7 @@ def register(app: typer.Typer) -> None:
             sessions = [s for s in sessions if s.start.date() >= week_start.date()]
         elif p == "month":
             sessions = [
-                s
-                for s in sessions
-                if s.start.year == now.year and s.start.month == now.month
+                s for s in sessions if s.start.year == now.year and s.start.month == now.month
             ]
 
         summary = build_org_summary(sessions, org, cost_centers, period=p)
@@ -528,16 +516,16 @@ def register(app: typer.Typer) -> None:
             dest = project_dir / "exports" / f"{period_slug}-{org.org.id}.csv"
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(csv_content, encoding="utf-8")
-        console.print(
-            f"[bold green]Exported[/] {len(summary.finance_rows)} rows → [bold]{dest}[/]"
-        )
+        console.print(f"[bold green]Exported[/] {len(summary.finance_rows)} rows → [bold]{dest}[/]")
 
     @app.command()
     def schedule(
         period: str = typer.Option("month", "--period", help="today | week | month | all"),
         project: str | None = typer.Option(None, "--project", help="Filter to a project slug."),
         output: str | None = typer.Option(None, "--output", help="Output file path."),
-        stdout: bool = typer.Option(False, "--stdout", help="Write ICS to stdout instead of a file."),
+        stdout: bool = typer.Option(
+            False, "--stdout", help="Write ICS to stdout instead of a file."
+        ),
     ) -> None:
         """Export AI sessions as a .ics calendar file."""
         from datetime import datetime, timedelta
@@ -563,9 +551,7 @@ def register(app: typer.Typer) -> None:
             sessions = [s for s in sessions if s.start.date() >= week_start.date()]
         elif p == "month":
             sessions = [
-                s
-                for s in sessions
-                if s.start.year == now.year and s.start.month == now.month
+                s for s in sessions if s.start.year == now.year and s.start.month == now.month
             ]
         elif p != "all":
             console.print("[bold red]Error:[/] --period must be one of: today, week, month, all")
@@ -716,9 +702,7 @@ def register(app: typer.Typer) -> None:
                     f"    This month ${s.month_spend:.2f} / ${s.month_limit:.2f}{mark}{pct}"
                 )
             else:
-                console.print(
-                    f"    This month ${s.month_spend:.2f}  [dim](no limit)[/dim]"
-                )
+                console.print(f"    This month ${s.month_spend:.2f}  [dim](no limit)[/dim]")
             console.print()
         console.print("─" * 52)
 
@@ -726,9 +710,7 @@ def register(app: typer.Typer) -> None:
     def set_budget_cmd(
         slug: str = typer.Argument(..., help="Project slug (e.g. acme:auth-migration)."),
         daily: float | None = typer.Option(None, "--daily", help="Daily spend limit in USD."),
-        monthly: float | None = typer.Option(
-            None, "--monthly", help="Monthly spend limit in USD."
-        ),
+        monthly: float | None = typer.Option(None, "--monthly", help="Monthly spend limit in USD."),
     ) -> None:
         """Add or update a budget limit for a project."""
         from halyard.budget import set_budget

@@ -50,8 +50,12 @@ def test_setup_all_yes_installs_all_tools(monkeypatch, tmp_path: Path) -> None: 
         "halyard.cli_hooks._do_install_hook_claude",
         lambda global_=False: calls.append(("claude", global_)),
     )
-    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_cursor", lambda: calls.append(("cursor", None)))
-    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_gemini", lambda: calls.append(("gemini", None)))
+    monkeypatch.setattr(
+        "halyard.cli_hooks._do_install_hook_cursor", lambda: calls.append(("cursor", None))
+    )
+    monkeypatch.setattr(
+        "halyard.cli_hooks._do_install_hook_gemini", lambda: calls.append(("gemini", None))
+    )
 
     result = CliRunner().invoke(app, ["setup", "--all", "--yes"])
 
@@ -63,7 +67,9 @@ def test_setup_all_yes_installs_all_tools(monkeypatch, tmp_path: Path) -> None: 
 def test_setup_selected_tools(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     calls: list[str] = []
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_claude", lambda global_=False: calls.append("claude"))
+    monkeypatch.setattr(
+        "halyard.cli_hooks._do_install_hook_claude", lambda global_=False: calls.append("claude")
+    )
     monkeypatch.setattr("halyard.cli_hooks._do_install_hook_cursor", lambda: calls.append("cursor"))
     monkeypatch.setattr("halyard.cli_hooks._do_install_hook_gemini", lambda: calls.append("gemini"))
 
@@ -76,7 +82,10 @@ def test_setup_selected_tools(monkeypatch, tmp_path: Path) -> None:  # type: ign
 def test_setup_global_claude_forwards_flag(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     calls: list[bool] = []
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_claude", lambda global_=False: calls.append(global_))
+    monkeypatch.setattr(
+        "halyard.cli_hooks._do_install_hook_claude",
+        lambda global_=False: calls.append(global_),
+    )
 
     result = CliRunner().invoke(app, ["setup", "--claude", "--global-claude", "--yes"])
 

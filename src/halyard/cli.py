@@ -43,7 +43,7 @@ def default(ctx: typer.Context) -> None:
 # Top-level command groups (register pattern)
 # ---------------------------------------------------------------------------
 
-from halyard import cli_hooks, cli_importers, cli_org, cli_report, cli_session, cli_setup
+from halyard import cli_hooks, cli_importers, cli_org, cli_report, cli_session, cli_setup  # noqa: E402, I001
 
 cli_hooks.register(app)
 cli_setup.register(app)
@@ -57,7 +57,7 @@ cli_org.register(app)
 # Sub-app command groups (Typer sub-apps — Phase 1)
 # ---------------------------------------------------------------------------
 
-from halyard import cli_config, cli_db, cli_outcome, cli_projects, cli_service, cli_voyage
+from halyard import cli_config, cli_db, cli_outcome, cli_projects, cli_service, cli_voyage  # noqa: E402, I001
 
 app.add_typer(cli_service.app)
 app.add_typer(cli_config.app)

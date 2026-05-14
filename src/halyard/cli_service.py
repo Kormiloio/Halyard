@@ -7,9 +7,7 @@ from rich.console import Console
 
 console = Console()
 
-app = typer.Typer(
-    name="service", help="Manage the Halyard Glass Cockpit background service."
-)
+app = typer.Typer(name="service", help="Manage the Halyard Glass Cockpit background service.")
 
 
 @app.command(name="install")

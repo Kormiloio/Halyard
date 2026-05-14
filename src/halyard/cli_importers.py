@@ -137,9 +137,7 @@ def register(app: typer.Typer) -> None:
             target_dir = pd if pd and (pd / "halyard.toml").exists() else hub
 
             if target_dir is None:
-                console.print(
-                    f"  [dim]skip {summary.session_id[:8]} — no project dir or hub[/dim]"
-                )
+                console.print(f"  [dim]skip {summary.session_id[:8]} — no project dir or hub[/dim]")
                 continue
 
             tags: list[str] = []
