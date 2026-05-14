@@ -279,7 +279,24 @@ def setup_cmd(
         for selected in tools:
             try:
                 if selected == "claude":
-                    install_hook(global_=global_claude)
+                    use_global = global_claude
+                    if not use_global and not yes and sys.stdin.isatty():
+                        use_global = typer.confirm(
+                            "Do you work on more than one project?",
+                            default=False,
+                        )
+                        if use_global:
+                            console.print(
+                                "[dim]Installing globally — all Claude Code sessions "
+                                "will be captured regardless of working directory.[/]"
+                            )
+                        else:
+                            console.print(
+                                "[dim]Installing for this project. "
+                                "Run [bold]halyard install-hook --global[/] "
+                                "to expand coverage later.[/]"
+                            )
+                    install_hook(global_=use_global)
                 elif selected == "cursor":
                     install_cursor_hook()
                 elif selected == "gemini":
@@ -781,11 +798,41 @@ def cursor_hook() -> None:
     raise typer.Exit(code=handle_stop_hook())
 
 
+def _cc_hook_cmd_key(cmd: str) -> str:
+    """Normalise hook command to subcommand name so absolute paths don't create false duplicates."""
+    parts = cmd.split()
+    return f"{Path(parts[0]).name} {' '.join(parts[1:])}" if parts else cmd
+
+
+def _cc_hook_commands_from_path(path: Path) -> set[str]:
+    """Return normalised command keys from a Claude settings file."""
+    if not path.exists():
+        return set()
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, ValueError, OSError):
+        return set()
+    keys: set[str] = set()
+    hooks = data.get("hooks", {}) if isinstance(data, dict) else {}
+    for entries in hooks.values():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            for h in entry.get("hooks", []):
+                if isinstance(h, dict) and isinstance(h.get("command"), str):
+                    keys.add(_cc_hook_cmd_key(h["command"]))
+    return keys
+
+
 def _do_install_hook_claude(global_: bool = False) -> None:
     if global_:
         settings_path = Path.home() / ".claude" / "settings.json"
+        other_path = Path.cwd() / ".claude" / "settings.json"
     else:
         settings_path = Path.cwd() / ".claude" / "settings.json"
+        other_path = Path.home() / ".claude" / "settings.json"
 
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -796,24 +843,35 @@ def _do_install_hook_claude(global_: bool = False) -> None:
         except (json.JSONDecodeError, ValueError):
             existing = {}
 
+    exe = _halyard_exe()
+
+    # Collect normalised keys for every hook we intend to add.
+    proposed_keys: set[str] = set()
+    for entries in _CC_HOOKS.values():
+        resolved = json.loads(json.dumps(entries).replace("halyard ", f"{exe} ", 1))
+        cmd = resolved[0]["hooks"][0]["command"]
+        proposed_keys.add(_cc_hook_cmd_key(cmd))
+
+    # Cross-file dedup: refuse to install if the same hooks already live in the other file.
+    other_keys = _cc_hook_commands_from_path(other_path)
+    if proposed_keys & other_keys:
+        console.print(
+            f"[yellow]Claude Code hooks already present in {other_path} — skipping.[/]\n"
+            f"Having hooks in both files records every session twice.\n"
+            f"To expand to global coverage run: [bold]halyard install-hook --global[/]"
+        )
+        return
+
     hooks = existing.setdefault("hooks", {})
     added: list[str] = []
-    exe = _halyard_exe()
 
     for event, entries in _CC_HOOKS.items():
         resolved = json.loads(json.dumps(entries).replace("halyard ", f"{exe} ", 1))
         current = hooks.setdefault(event, [])
         command = resolved[0]["hooks"][0]["command"]
-
-        # Normalise to subcommand name (e.g. "halyard cc-hook") so that absolute
-        # paths like "/venv/bin/halyard cc-hook" are not registered as duplicates.
-        def _cmd_key(cmd: str) -> str:
-            parts = cmd.split()
-            return f"{Path(parts[0]).name} {' '.join(parts[1:])}" if parts else cmd
-
-        new_key = _cmd_key(command)
+        new_key = _cc_hook_cmd_key(command)
         already = any(
-            _cmd_key(h.get("command", "")) == new_key
+            _cc_hook_cmd_key(h.get("command", "")) == new_key
             for entry in current
             for h in entry.get("hooks", [])
         )
@@ -1043,6 +1101,59 @@ def record_session(
     cost: float | None = typer.Option(None, "--cost", help="Explicit USD cost."),
     minutes: int = typer.Option(1, "--minutes", help="Session duration in minutes."),
     note: str | None = typer.Option(None, "--note", help="Short note, spaces are allowed."),
+    source: str = typer.Option("manual", "--source", help="Capture source label."),
+    branch: str | None = typer.Option(None, "--branch", help="Git branch name, if known."),
+    commit_count: int | None = typer.Option(None, "--commit-count", help="Commits in window."),
+    tool_calls: int | None = typer.Option(None, "--tool-calls", help="Tool call count."),
+    tool_errors: int | None = typer.Option(None, "--tool-errors", help="Tool error count."),
+    wall_seconds: int | None = typer.Option(None, "--wall-seconds", help="Wall-clock seconds."),
+    agent_active_seconds: int | None = typer.Option(
+        None, "--agent-active-seconds", help="Agent-active seconds."
+    ),
+    code_added: int | None = typer.Option(None, "--code-added", help="Lines added."),
+    code_removed: int | None = typer.Option(None, "--code-removed", help="Lines removed."),
+    interaction_count: int | None = typer.Option(
+        None, "--interaction-count", help="Total safe interaction count."
+    ),
+    user_message_count: int | None = typer.Option(
+        None, "--user-message-count", help="User message count."
+    ),
+    assistant_message_count: int | None = typer.Option(
+        None, "--assistant-message-count", help="Assistant message count."
+    ),
+    prompt_count: int | None = typer.Option(None, "--prompt-count", help="Prompt count."),
+    accepted_suggestion_count: int | None = typer.Option(
+        None, "--accepted-suggestion-count", help="Accepted suggestion count."
+    ),
+    rejected_suggestion_count: int | None = typer.Option(
+        None, "--rejected-suggestion-count", help="Rejected suggestion count."
+    ),
+    files_touched_count: int | None = typer.Option(
+        None, "--files-touched-count", help="Number of touched files."
+    ),
+    test_run_count: int | None = typer.Option(None, "--test-run-count", help="Test run count."),
+    test_status: str | None = typer.Option(None, "--test-status", help="pass|fail|unknown."),
+    build_status: str | None = typer.Option(None, "--build-status", help="pass|fail|unknown."),
+    human_active_seconds: int | None = typer.Option(
+        None, "--human-active-seconds", help="Human-active seconds."
+    ),
+    idle_seconds: int | None = typer.Option(None, "--idle-seconds", help="Idle seconds."),
+    interaction_data_available: bool | None = typer.Option(
+        None,
+        "--interaction-data-available/--interaction-data-unavailable",
+        help="Whether interaction metadata was available.",
+    ),
+    outcome_data_available: bool | None = typer.Option(
+        None,
+        "--outcome-data-available/--outcome-data-unavailable",
+        help="Whether outcome metadata was available.",
+    ),
+    telemetry_source: str | None = typer.Option(
+        None, "--telemetry-source", help="Telemetry producer label."
+    ),
+    telemetry_trust: str | None = typer.Option(
+        None, "--telemetry-trust", help="observed|estimated|manual."
+    ),
 ) -> None:
     """Append a manual/Codex AI session record to ai-sessions.log."""
     from halyard.ai_log import AiSession, append_session, find_project_dir
@@ -1075,8 +1186,32 @@ def record_session(
         cost_usd=session_cost,
         project=attributed_project,
         tokens_available=input_tokens > 0 or output_tokens > 0,
-        source="manual",
+        source=source,
         note=note,
+        branch=branch,
+        commit_count=commit_count,
+        tool_calls=tool_calls,
+        tool_errors=tool_errors,
+        wall_seconds=wall_seconds,
+        agent_active_seconds=agent_active_seconds,
+        code_added=code_added,
+        code_removed=code_removed,
+        interaction_count=interaction_count,
+        user_message_count=user_message_count,
+        assistant_message_count=assistant_message_count,
+        prompt_count=prompt_count,
+        accepted_suggestion_count=accepted_suggestion_count,
+        rejected_suggestion_count=rejected_suggestion_count,
+        files_touched_count=files_touched_count,
+        test_run_count=test_run_count,
+        test_status=test_status,
+        build_status=build_status,
+        human_active_seconds=human_active_seconds,
+        idle_seconds=idle_seconds,
+        interaction_data_available=interaction_data_available,
+        outcome_data_available=outcome_data_available,
+        telemetry_source=telemetry_source,
+        telemetry_trust=telemetry_trust,
     )
     append_session(project_dir, session)
 
@@ -1104,6 +1239,31 @@ def sample_session(
         cost=None,
         minutes=6,
         note="dashboard sample",
+        source="manual",
+        branch=None,
+        commit_count=None,
+        tool_calls=None,
+        tool_errors=None,
+        wall_seconds=None,
+        agent_active_seconds=None,
+        code_added=None,
+        code_removed=None,
+        interaction_count=None,
+        user_message_count=None,
+        assistant_message_count=None,
+        prompt_count=None,
+        accepted_suggestion_count=None,
+        rejected_suggestion_count=None,
+        files_touched_count=None,
+        test_run_count=None,
+        test_status=None,
+        build_status=None,
+        human_active_seconds=None,
+        idle_seconds=None,
+        interaction_data_available=None,
+        outcome_data_available=None,
+        telemetry_source=None,
+        telemetry_trust=None,
     )
 
 
@@ -1716,6 +1876,15 @@ def report(
         for bucket in report.by_model:
             console.print(
                 f"  {bucket.label:<32} [green]${bucket.cost_usd:.2f}[/]  {bucket.sessions} sessions"
+            )
+
+    if report.by_tool_usage:
+        console.print("\n[bold]By tool[/]")
+        for bucket in report.by_tool_usage:
+            tok_label = f"{bucket.tokens:,} tokens  " if bucket.tokens else ""
+            console.print(
+                f"  {bucket.tool:<32} [green]${bucket.cost_usd:.2f}[/]"
+                f"  {bucket.sessions} sessions  {tok_label}"
             )
 
     # By branch — only shown when at least one session has branch data
@@ -2390,7 +2559,12 @@ def projects_add(
 
 
 @app.command(name="tui")
-def tui_cmd() -> None:
+def tui_cmd(
+    hub: bool = typer.Option(False, "--hub", help="Use the configured hub log instead of CWD."),
+    project_dir_opt: Path = typer.Option(
+        None, "--project-dir", help="Halyard project directory (default: auto-detect)."
+    ),
+) -> None:
     """Launch the interactive Textual terminal dashboard."""
     from halyard.ai_log import AI_LOG_FILENAME, find_project_dir
     from halyard.hub import find_hub
@@ -2401,14 +2575,16 @@ def tui_cmd() -> None:
         console.print(f"[bold red]Error:[/] {escape(str(exc))}")
         raise typer.Exit(code=1) from None
 
-    project_dir = find_project_dir()
+    project_dir = project_dir_opt or find_project_dir()
     hub_dir = find_hub()
 
     header_note: str | None = None
-    if hub_dir is not None:
+    if hub and hub_dir is not None:
         log_path = hub_dir / AI_LOG_FILENAME
     elif project_dir is not None:
         log_path = project_dir / AI_LOG_FILENAME
+    elif hub_dir is not None:
+        log_path = hub_dir / AI_LOG_FILENAME
     else:
         log_path = Path.cwd() / AI_LOG_FILENAME
         header_note = "No project or hub found - run 'halyard init' or 'halyard set-hub'"
@@ -2423,13 +2599,22 @@ def tui_cmd() -> None:
 
 
 @app.command(name="update-pricing")
-def update_pricing_cmd() -> None:
+def update_pricing_cmd(
+    accept_changed: bool = typer.Option(
+        False,
+        "--accept-changed",
+        help="Accept a changed pricing table without prompting.",
+    ),
+) -> None:
     """Fetch the latest model pricing table from GitHub and save locally."""
-    from halyard.pricing import PricingFetchError, update_pricing
+    from halyard.pricing import PricingFetchError, PricingHashChangedError, update_pricing
 
     console.print("Fetching pricing table from github.com/Kormiloio/Halyard...")
     try:
-        new_count, updated_count = update_pricing()
+        new_count, updated_count = update_pricing(accept_changed=accept_changed)
+    except PricingHashChangedError as exc:
+        console.print(f"[bold yellow]Warning:[/] {exc}")
+        raise typer.Exit(code=1) from None
     except PricingFetchError as exc:
         console.print(f"[bold red]Error:[/] {exc}")
         console.print("[dim]Bundled pricing table is still active.[/]")

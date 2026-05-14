@@ -92,7 +92,16 @@ def test_extract_uuid_returns_none_for_non_matching() -> None:
 
 def test_parse_iso_utc_z() -> None:
     dt = _parse_iso("2026-05-06T19:40:14.799Z")
-    assert dt == datetime(2026, 5, 6, 19, 40, 14, 799000)
+    # Result must be local-naive (no tzinfo)
+    assert dt is not None
+    assert dt.tzinfo is None
+    # Value must equal the UTC input converted to local time
+    expected = (
+        datetime.fromisoformat("2026-05-06T19:40:14.799+00:00")
+        .astimezone(tz=None)
+        .replace(tzinfo=None)
+    )
+    assert dt == expected
 
 
 def test_parse_iso_empty_returns_none() -> None:
@@ -132,7 +141,12 @@ def test_parse_session_start_from_session_meta(tmp_path: Path) -> None:
     assert result is not None
     session, _ = result
     # Should use session_meta.payload.timestamp, not first event timestamp
-    assert session.start == datetime(2026, 5, 6, 19, 40, 14, 799000)
+    expected = (
+        datetime.fromisoformat("2026-05-06T19:40:14.799+00:00")
+        .astimezone(tz=None)
+        .replace(tzinfo=None)
+    )
+    assert session.start == expected
 
 
 def test_parse_session_end_is_last_event_timestamp(tmp_path: Path) -> None:
@@ -140,7 +154,12 @@ def test_parse_session_end_is_last_event_timestamp(tmp_path: Path) -> None:
     result = _parse_session_file(path)
     assert result is not None
     session, _ = result
-    assert session.end == datetime(2026, 5, 6, 19, 41, 2, 787000)
+    expected_end = (
+        datetime.fromisoformat("2026-05-06T19:41:02.787+00:00")
+        .astimezone(tz=None)
+        .replace(tzinfo=None)
+    )
+    assert session.end == expected_end
 
 
 def test_parse_skips_zero_output_tokens(tmp_path: Path) -> None:
@@ -180,6 +199,59 @@ def test_parse_uses_last_token_count_event(tmp_path: Path) -> None:
     session, _ = result
     assert session.output_tokens == 220
     assert session.input_tokens == 29776 - 23936
+
+
+def test_parse_session_file_records_safe_metadata_counts(tmp_path: Path) -> None:
+    events = _real_session_events()
+    events.insert(
+        2,
+        {
+            "timestamp": "2026-05-06T19:40:55.000Z",
+            "type": "event_msg",
+            "payload": {"type": "user_message", "message": "do not log this content"},
+        },
+    )
+    events.insert(
+        3,
+        {
+            "timestamp": "2026-05-06T19:40:56.000Z",
+            "type": "event_msg",
+            "payload": {"type": "agent_message", "message": "do not log this either"},
+        },
+    )
+    events.insert(
+        4,
+        {
+            "timestamp": "2026-05-06T19:40:57.000Z",
+            "type": "event_msg",
+            "payload": {"type": "exec_command_begin", "cmd": "secret command text"},
+        },
+    )
+    events.insert(
+        5,
+        {
+            "timestamp": "2026-05-06T19:40:58.000Z",
+            "type": "event_msg",
+            "payload": {"type": "exec_command_end", "exit_code": 1},
+        },
+    )
+    path = _make_session_file(tmp_path, events)
+    result = _parse_session_file(path)
+
+    assert result is not None
+    session, _ = result
+    assert session.user_message_count == 1
+    assert session.assistant_message_count == 1
+    assert session.prompt_count == 1
+    assert session.interaction_count == 2
+    assert session.tool_calls == 1
+    assert session.tool_errors == 1
+    assert session.interaction_data_available is True
+    assert session.telemetry_source == "codex-jsonl"
+    assert session.telemetry_trust == "observed"
+    line = session.to_log_line()
+    assert "do not log this content" not in line
+    assert "secret command text" not in line
 
 
 # ---------------------------------------------------------------------------

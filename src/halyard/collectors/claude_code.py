@@ -57,7 +57,7 @@ def record_session_start() -> int:
     cwd = Path.cwd()
     _CC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
     state: dict[str, Any] = {
-        "start": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "start": datetime.now().isoformat(timespec="seconds"),
         "sha_at_start": head_sha(cwd),
     }
     _CC_SESSION_FILE.write_text(json.dumps(state))
@@ -119,17 +119,22 @@ def handle_stop_hook() -> int:
     )
 
     branch = current_branch(cwd)
+    assistant_message_count: int | None = None
+    interaction_count: int | None = None
 
     # Fallback: read model + tokens from transcript (Claude Code ≥2.x format)
     if not (input_tokens or output_tokens):
         transcript_path = payload.get("transcript_path", "")
         if transcript_path:
-            t_model, t_in, t_out, t_cr, t_cw, t_branch = _read_from_transcript(
+            t_model, t_in, t_out, t_cr, t_cw, t_branch, t_assistant_count = _read_from_transcript(
                 transcript_path, since=start
             )
             if t_in or t_out:
                 input_tokens, output_tokens = t_in, t_out
                 cache_read, cache_write = t_cr, t_cw
+            if t_assistant_count:
+                assistant_message_count = t_assistant_count
+                interaction_count = t_assistant_count
             if not model and t_model:
                 model = t_model
             if not branch and t_branch:
@@ -183,6 +188,13 @@ def handle_stop_hook() -> int:
         commit_count=commit_count,
         code_added=code_added,
         code_removed=code_removed,
+        interaction_count=interaction_count,
+        assistant_message_count=assistant_message_count,
+        interaction_data_available=assistant_message_count is not None,
+        telemetry_source="claude-code-transcript"
+        if assistant_message_count is not None
+        else "claude-code-hook",
+        telemetry_trust="observed",
     )
 
     if can_append_project_log and project_dir is not None:
@@ -234,13 +246,16 @@ def _read_session_state() -> dict[str, Any]:
         raw_start = data.get("start", "")
         with suppress(ValueError, TypeError):
             if raw_start.endswith("Z"):
-                # UTC timestamp written by current version — keep as UTC-naive
-                start_dt = datetime.fromisoformat(raw_start[:-1])
+                # Legacy UTC timestamp — convert to local naive for consistency
+                start_dt = (
+                    datetime.fromisoformat(raw_start[:-1])
+                    .replace(tzinfo=UTC)
+                    .astimezone(tz=None)
+                    .replace(tzinfo=None)
+                )
             elif raw_start:
-                # Legacy local-time ISO string — convert to UTC-naive
-                local = datetime.fromisoformat(raw_start)
-                utc_offset = datetime.now() - datetime.now(UTC).replace(tzinfo=None)
-                start_dt = local - utc_offset
+                # Current format: plain local ISO string
+                start_dt = datetime.fromisoformat(raw_start)
         return {"start_dt": start_dt, "sha": data.get("sha_at_start")}
     except (json.JSONDecodeError, ValueError):
         # Legacy format: plain ISO timestamp string
@@ -256,27 +271,29 @@ def _clear_session_start() -> None:
 def _read_from_transcript(
     transcript_path: str,
     since: datetime | None = None,
-) -> tuple[str | None, int, int, int, int, str | None]:
+) -> tuple[str | None, int, int, int, int, str | None, int]:
     """Aggregate model, token totals, and branch from a Claude Code transcript JSONL.
 
     Claude Code ≥2.x passes transcript_path in the Stop payload instead of
     embedding usage directly. Each assistant event looks like:
       {"type":"assistant","timestamp":"...Z","message":{"model":"...","usage":{...}},"gitBranch":"..."}
 
-    `since` is a UTC-naive datetime; messages timestamped before it are skipped so
+    `since` is a local-naive datetime; messages timestamped before it are skipped so
     that accumulated turns from earlier sessions in the same conversation file are
     excluded from the current session's totals.
 
-    Returns (model, input_tokens, output_tokens, cache_read, cache_write, branch).
+    Returns (model, input_tokens, output_tokens, cache_read, cache_write, branch,
+    assistant_message_count).
     """
     try:
         path = Path(transcript_path)
         if not path.exists():
-            return None, 0, 0, 0, 0, None
+            return None, 0, 0, 0, 0, None, 0
 
         model: str | None = None
         branch: str | None = None
         total_in = total_out = total_cr = total_cw = 0
+        assistant_count = 0
 
         for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
             raw = raw.strip()
@@ -295,10 +312,17 @@ def _read_from_transcript(
                 ts_str = obj.get("timestamp", "")
                 if ts_str.endswith("Z"):
                     with suppress(ValueError):
-                        ts = datetime.fromisoformat(ts_str[:-1])
+                        # Transcript timestamps are UTC — convert to local naive
+                        ts = (
+                            datetime.fromisoformat(ts_str[:-1])
+                            .replace(tzinfo=UTC)
+                            .astimezone(tz=None)
+                            .replace(tzinfo=None)
+                        )
                         if ts < since:
                             continue
 
+            assistant_count += 1
             msg = obj.get("message") or {}
             if msg.get("model"):
                 model = str(msg["model"])
@@ -311,9 +335,9 @@ def _read_from_transcript(
             total_cr += int(usage.get("cache_read_input_tokens", 0))
             total_cw += int(usage.get("cache_creation_input_tokens", 0))
 
-        return model, total_in, total_out, total_cr, total_cw, branch
+        return model, total_in, total_out, total_cr, total_cw, branch, assistant_count
     except Exception:
-        return None, 0, 0, 0, 0, None
+        return None, 0, 0, 0, 0, None, 0
 
 
 def _read_model_from_settings(project_dir: Path) -> str | None:

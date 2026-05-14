@@ -65,6 +65,24 @@ def test_session_roundtrip_all_fields() -> None:
         code_added=200,
         code_removed=50,
         model_breakdown="claude-sonnet-4-6:3|claude-haiku-4-5:2",
+        branch="main",
+        commit_count=2,
+        interaction_count=9,
+        user_message_count=4,
+        assistant_message_count=5,
+        prompt_count=4,
+        accepted_suggestion_count=3,
+        rejected_suggestion_count=1,
+        files_touched_count=6,
+        test_run_count=2,
+        test_status="pass",
+        build_status="unknown",
+        human_active_seconds=1200,
+        idle_seconds=60,
+        interaction_data_available=True,
+        outcome_data_available=True,
+        telemetry_source="vscode-extension",
+        telemetry_trust="observed",
     )
     p = _rt(s)
 
@@ -94,6 +112,24 @@ def test_session_roundtrip_all_fields() -> None:
     assert p.code_added == s.code_added
     assert p.code_removed == s.code_removed
     assert p.model_breakdown == s.model_breakdown
+    assert p.branch == s.branch
+    assert p.commit_count == s.commit_count
+    assert p.interaction_count == s.interaction_count
+    assert p.user_message_count == s.user_message_count
+    assert p.assistant_message_count == s.assistant_message_count
+    assert p.prompt_count == s.prompt_count
+    assert p.accepted_suggestion_count == s.accepted_suggestion_count
+    assert p.rejected_suggestion_count == s.rejected_suggestion_count
+    assert p.files_touched_count == s.files_touched_count
+    assert p.test_run_count == s.test_run_count
+    assert p.test_status == s.test_status
+    assert p.build_status == s.build_status
+    assert p.human_active_seconds == s.human_active_seconds
+    assert p.idle_seconds == s.idle_seconds
+    assert p.interaction_data_available == s.interaction_data_available
+    assert p.outcome_data_available == s.outcome_data_available
+    assert p.telemetry_source == s.telemetry_source
+    assert p.telemetry_trust == s.telemetry_trust
 
 
 def test_session_roundtrip_optional_fields_none() -> None:
@@ -123,6 +159,24 @@ def test_session_roundtrip_optional_fields_none() -> None:
         "code_removed",
         "model_breakdown",
         "resume_command",
+        "branch",
+        "commit_count",
+        "interaction_count",
+        "user_message_count",
+        "assistant_message_count",
+        "prompt_count",
+        "accepted_suggestion_count",
+        "rejected_suggestion_count",
+        "files_touched_count",
+        "test_run_count",
+        "test_status",
+        "build_status",
+        "human_active_seconds",
+        "idle_seconds",
+        "interaction_data_available",
+        "outcome_data_available",
+        "telemetry_source",
+        "telemetry_trust",
     ):
         assert f"{key}=" not in line, f"unexpected field in line: {key}={line}"
 
@@ -147,6 +201,24 @@ def test_session_roundtrip_optional_fields_none() -> None:
     assert p.code_removed is None
     assert p.model_breakdown is None
     assert p.resume_command is None
+    assert p.branch is None
+    assert p.commit_count is None
+    assert p.interaction_count is None
+    assert p.user_message_count is None
+    assert p.assistant_message_count is None
+    assert p.prompt_count is None
+    assert p.accepted_suggestion_count is None
+    assert p.rejected_suggestion_count is None
+    assert p.files_touched_count is None
+    assert p.test_run_count is None
+    assert p.test_status is None
+    assert p.build_status is None
+    assert p.human_active_seconds is None
+    assert p.idle_seconds is None
+    assert p.interaction_data_available is None
+    assert p.outcome_data_available is None
+    assert p.telemetry_source is None
+    assert p.telemetry_trust is None
 
 
 def test_session_roundtrip_note_with_spaces() -> None:

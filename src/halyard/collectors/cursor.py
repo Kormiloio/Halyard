@@ -102,10 +102,15 @@ def handle_stop_hook() -> int:
     commit_count = commits_in_window(cwd_for_git, start, now) if cwd_for_git else None
     code_added: int | None = None
     code_removed: int | None = None
+    files_touched_count: int | None = None
     if sha_at_start and cwd_for_git:
         delta = numstat_delta(cwd_for_git, sha_at_start)
         if delta is not None:
             code_added, code_removed = delta
+    files_touched_count = _optional_int(payload, "files_touched_count", "filesTouchedCount")
+
+    interaction_counts = _safe_interaction_counts(payload)
+    payload_tool_calls, payload_tool_errors = _safe_tool_counts(payload)
 
     _active = read_active_project()
     _project: str | None
@@ -146,6 +151,21 @@ def handle_stop_hook() -> int:
         commit_count=commit_count,
         code_added=code_added,
         code_removed=code_removed,
+        tool_calls=payload_tool_calls,
+        tool_errors=payload_tool_errors,
+        interaction_count=interaction_counts["interaction_count"],
+        user_message_count=interaction_counts["user_message_count"],
+        assistant_message_count=interaction_counts["assistant_message_count"],
+        prompt_count=interaction_counts["prompt_count"],
+        accepted_suggestion_count=interaction_counts["accepted_suggestion_count"],
+        rejected_suggestion_count=interaction_counts["rejected_suggestion_count"],
+        files_touched_count=files_touched_count,
+        interaction_data_available=interaction_counts["interaction_data_available"],
+        outcome_data_available=any(
+            value is not None for value in (branch, commit_count, code_added, code_removed)
+        ),
+        telemetry_source="cursor-hook",
+        telemetry_trust="observed",
     )
 
     if can_append_project_log and project_dir is not None:
@@ -187,6 +207,84 @@ def _read_payload() -> dict:  # type: ignore[type-arg]
         return json.loads(raw) if raw.strip() else {}
     except (json.JSONDecodeError, ValueError):
         return {}
+
+
+def _safe_interaction_counts(payload: dict) -> dict[str, int | bool | None]:  # type: ignore[type-arg]
+    prompt_count = _optional_int(payload, "prompt_count", "promptCount")
+    if prompt_count is None and "prompt" in payload:
+        prompt_count = 1
+
+    user_message_count = _optional_int(payload, "user_message_count", "userMessageCount")
+    if user_message_count is None:
+        user_message_count = prompt_count
+
+    assistant_message_count = _optional_int(
+        payload, "assistant_message_count", "assistantMessageCount"
+    )
+    interaction_count = _optional_int(payload, "interaction_count", "interactionCount")
+    if interaction_count is None:
+        known = [user_message_count, assistant_message_count]
+        if any(value is not None for value in known):
+            interaction_count = sum(value or 0 for value in known)
+
+    accepted = _optional_int(
+        payload,
+        "accepted_suggestion_count",
+        "acceptedSuggestionCount",
+        "accepted_suggestions",
+    )
+    rejected = _optional_int(
+        payload,
+        "rejected_suggestion_count",
+        "rejectedSuggestionCount",
+        "rejected_suggestions",
+    )
+    has_data = any(
+        value is not None
+        for value in (
+            interaction_count,
+            user_message_count,
+            assistant_message_count,
+            prompt_count,
+            accepted,
+            rejected,
+        )
+    )
+    return {
+        "interaction_count": interaction_count,
+        "user_message_count": user_message_count,
+        "assistant_message_count": assistant_message_count,
+        "prompt_count": prompt_count,
+        "accepted_suggestion_count": accepted,
+        "rejected_suggestion_count": rejected,
+        "interaction_data_available": has_data,
+    }
+
+
+def _safe_tool_counts(payload: dict) -> tuple[int | None, int | None]:  # type: ignore[type-arg]
+    explicit_calls = _optional_int(payload, "tool_calls", "toolCallsCount")
+    explicit_errors = _optional_int(payload, "tool_errors", "toolErrorsCount")
+    tool_calls_raw = payload.get("toolCalls") or payload.get("tool_calls")
+    if not isinstance(tool_calls_raw, list):
+        return explicit_calls, explicit_errors
+
+    calls = len([item for item in tool_calls_raw if isinstance(item, dict)])
+    errors = sum(
+        1
+        for item in tool_calls_raw
+        if isinstance(item, dict) and str(item.get("status") or "").lower() == "error"
+    )
+    return calls, errors
+
+
+def _optional_int(payload: dict, *keys: str) -> int | None:  # type: ignore[type-arg]
+    for key in keys:
+        value = payload.get(key)
+        if value is None:
+            continue
+        with suppress(TypeError, ValueError):
+            return max(0, int(value))
+    return None
 
 
 def _read_session_state() -> dict[str, Any]:

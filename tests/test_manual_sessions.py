@@ -106,6 +106,70 @@ def test_record_session_vscode_tool_gets_preserved(
     assert session.note == "Copilot chat"
 
 
+def test_record_session_preserves_metadata_counts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _init_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "record-session",
+            "--project",
+            "acme:auth",
+            "--tool",
+            "vscode",
+            "--model",
+            "github-copilot",
+            "--source",
+            "vscode-extension",
+            "--interaction-count",
+            "6",
+            "--user-message-count",
+            "3",
+            "--assistant-message-count",
+            "3",
+            "--accepted-suggestion-count",
+            "2",
+            "--rejected-suggestion-count",
+            "1",
+            "--files-touched-count",
+            "4",
+            "--test-run-count",
+            "1",
+            "--test-status",
+            "pass",
+            "--human-active-seconds",
+            "900",
+            "--interaction-data-available",
+            "--outcome-data-available",
+            "--telemetry-source",
+            "vscode-extension",
+            "--telemetry-trust",
+            "observed",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    session = parse_sessions(tmp_path)[0]
+    assert session.source == "vscode-extension"
+    assert session.interaction_count == 6
+    assert session.user_message_count == 3
+    assert session.assistant_message_count == 3
+    assert session.accepted_suggestion_count == 2
+    assert session.rejected_suggestion_count == 1
+    assert session.files_touched_count == 4
+    assert session.test_run_count == 1
+    assert session.test_status == "pass"
+    assert session.human_active_seconds == 900
+    assert session.interaction_data_available is True
+    assert session.outcome_data_available is True
+    assert session.telemetry_source == "vscode-extension"
+    assert session.telemetry_trust == "observed"
+
+
 def test_sample_session_appends_realistic_session(
     tmp_path: Path,
     monkeypatch: object,

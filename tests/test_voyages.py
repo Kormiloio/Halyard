@@ -397,3 +397,28 @@ def test_build_voyage_summaries_moored_stage_preserved(tmp_path: Path) -> None:
     proj = next(s for s in summaries if s.slug == "proj")
     assert proj.stage == "moored"
     assert proj.creature == "🐋"
+
+
+# ---------------------------------------------------------------------------
+# TOML injection safety — slugs with hostile characters round-trip cleanly
+# ---------------------------------------------------------------------------
+
+
+def test_write_voyages_slug_with_quotes_roundtrips(tmp_path: Path) -> None:
+    """A slug containing quotes must not corrupt the TOML file."""
+    hostile_slug = 'my-proj"injected = true\n[evil]'
+    entry = VoyageEntry(slug=hostile_slug, stage="departing")
+    write_voyages(tmp_path, [entry])
+    loaded = read_voyages(tmp_path)
+    assert len(loaded) == 1
+    assert loaded[0].slug == hostile_slug
+
+
+def test_write_voyages_slug_with_backslash_roundtrips(tmp_path: Path) -> None:
+    """A slug with backslashes round-trips without TOML parse error."""
+    hostile_slug = "proj\\ninjected"
+    entry = VoyageEntry(slug=hostile_slug, stage="departing")
+    write_voyages(tmp_path, [entry])
+    loaded = read_voyages(tmp_path)
+    assert len(loaded) == 1
+    assert loaded[0].slug == hostile_slug

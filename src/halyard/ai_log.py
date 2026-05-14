@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import re
+import sys
 import threading
 import traceback
 from collections import defaultdict
@@ -14,6 +14,19 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO
+
+if sys.platform == "win32":
+    import warnings
+
+    warnings.warn(
+        "Halyard: file locking (fcntl) is not available on Windows. "
+        "Concurrent writes are unsafe. Consider using WSL2.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+    _fcntl = None
+else:
+    import fcntl as _fcntl
 
 SPEC_URL = "https://halyard.dev/spec/ai-sessions/v1"
 HEADER = (
@@ -74,11 +87,13 @@ def locked_file(path: Path, mode: str) -> Generator[IO[str], None, None]:
     with _PATH_LOCKS_GUARD:
         thread_lock = _PATH_LOCKS.setdefault(lock_key, threading.RLock())
     with thread_lock, open(path, mode) as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        if _fcntl is not None:
+            _fcntl.flock(f.fileno(), _fcntl.LOCK_EX)
         try:
             yield f
         finally:
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            if _fcntl is not None:
+                _fcntl.flock(f.fileno(), _fcntl.LOCK_UN)
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +184,29 @@ class AiSession:
     pr_ref: str | None = None  # e.g. "owner/repo#42"; written by outcome sync
     pr_state: str | None = None  # merged | closed | open | none
     outcome_resolved_at: str | None = None  # ISO timestamp when pr_ref was resolved
+    # v2.32 privacy-safe interaction and outcome metadata.
+    # These fields intentionally store counts/statuses only. They must never
+    # contain prompts, code, chat text, file names, or file contents.
+    interaction_count: int | None = None
+    user_message_count: int | None = None
+    assistant_message_count: int | None = None
+    prompt_count: int | None = None
+    accepted_suggestion_count: int | None = None
+    rejected_suggestion_count: int | None = None
+    files_touched_count: int | None = None
+    test_run_count: int | None = None
+    test_status: str | None = None
+    build_status: str | None = None
+    human_active_seconds: int | None = None
+    idle_seconds: int | None = None
+    interaction_data_available: bool | None = None
+    outcome_data_available: bool | None = None
+    telemetry_source: str | None = None
+    telemetry_trust: str | None = None
+    # v2.29: hash of the original raw `s` line, set at parse time before amendment
+    # folding. Excluded from serialization and equality checks. Used by outcome sync
+    # to produce amendment records that reference the correct log-line hash.
+    _raw_hash: str | None = field(default=None, repr=False, compare=False)
 
     @classmethod
     def from_log_line(cls, line: str) -> AiSession | None:
@@ -286,6 +324,38 @@ class AiSession:
             kvs.append(f"pr_state={self.pr_state}")
         if self.outcome_resolved_at:
             kvs.append(f"outcome_resolved_at={self.outcome_resolved_at}")
+        if self.interaction_count is not None:
+            kvs.append(f"interaction_count={self.interaction_count}")
+        if self.user_message_count is not None:
+            kvs.append(f"user_message_count={self.user_message_count}")
+        if self.assistant_message_count is not None:
+            kvs.append(f"assistant_message_count={self.assistant_message_count}")
+        if self.prompt_count is not None:
+            kvs.append(f"prompt_count={self.prompt_count}")
+        if self.accepted_suggestion_count is not None:
+            kvs.append(f"accepted_suggestion_count={self.accepted_suggestion_count}")
+        if self.rejected_suggestion_count is not None:
+            kvs.append(f"rejected_suggestion_count={self.rejected_suggestion_count}")
+        if self.files_touched_count is not None:
+            kvs.append(f"files_touched_count={self.files_touched_count}")
+        if self.test_run_count is not None:
+            kvs.append(f"test_run_count={self.test_run_count}")
+        if self.test_status:
+            kvs.append(f"test_status={_safe_field(self.test_status)}")
+        if self.build_status:
+            kvs.append(f"build_status={_safe_field(self.build_status)}")
+        if self.human_active_seconds is not None:
+            kvs.append(f"human_active_seconds={self.human_active_seconds}")
+        if self.idle_seconds is not None:
+            kvs.append(f"idle_seconds={self.idle_seconds}")
+        if self.interaction_data_available is not None:
+            kvs.append(f"interaction_data_available={str(self.interaction_data_available).lower()}")
+        if self.outcome_data_available is not None:
+            kvs.append(f"outcome_data_available={str(self.outcome_data_available).lower()}")
+        if self.telemetry_source:
+            kvs.append(f"telemetry_source={_safe_field(self.telemetry_source)}")
+        if self.telemetry_trust:
+            kvs.append(f"telemetry_trust={_safe_field(self.telemetry_trust)}")
         return " ".join(parts + kvs)
 
 
@@ -335,6 +405,7 @@ def parse_sessions(project_dir: Path) -> list[AiSession]:
             parsed = AiSession.from_log_line(line)
             if parsed is not None:
                 h = session_hash(line)
+                parsed._raw_hash = h
                 if h not in sessions_by_hash:
                     sessions_by_hash[h] = parsed
                 sessions.append(parsed)
@@ -507,6 +578,48 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
                 session.pr_state = v
             case "outcome_resolved_at":
                 session.outcome_resolved_at = v
+            case "interaction_count":
+                with suppress(ValueError):
+                    session.interaction_count = int(v)
+            case "user_message_count":
+                with suppress(ValueError):
+                    session.user_message_count = int(v)
+            case "assistant_message_count":
+                with suppress(ValueError):
+                    session.assistant_message_count = int(v)
+            case "prompt_count":
+                with suppress(ValueError):
+                    session.prompt_count = int(v)
+            case "accepted_suggestion_count":
+                with suppress(ValueError):
+                    session.accepted_suggestion_count = int(v)
+            case "rejected_suggestion_count":
+                with suppress(ValueError):
+                    session.rejected_suggestion_count = int(v)
+            case "files_touched_count":
+                with suppress(ValueError):
+                    session.files_touched_count = int(v)
+            case "test_run_count":
+                with suppress(ValueError):
+                    session.test_run_count = int(v)
+            case "test_status":
+                session.test_status = v
+            case "build_status":
+                session.build_status = v
+            case "human_active_seconds":
+                with suppress(ValueError):
+                    session.human_active_seconds = int(v)
+            case "idle_seconds":
+                with suppress(ValueError):
+                    session.idle_seconds = int(v)
+            case "interaction_data_available":
+                session.interaction_data_available = v.lower() == "true"
+            case "outcome_data_available":
+                session.outcome_data_available = v.lower() == "true"
+            case "telemetry_source":
+                session.telemetry_source = v
+            case "telemetry_trust":
+                session.telemetry_trust = v
 
     # v2.24 backward-compat: promote legacy "branch:<name>" tag to branch field
     if session.branch is None and session.tags:

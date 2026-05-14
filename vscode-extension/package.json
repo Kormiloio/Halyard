@@ -1,0 +1,78 @@
+{
+  "name": "halyard-vscode",
+  "displayName": "Halyard",
+  "description": "Privacy-safe Halyard session capture for VS Code AI work.",
+  "version": "0.1.0",
+  "publisher": "kormilo",
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:halyard.startAIWork",
+    "onCommand:halyard.stopAndRecordAIWork",
+    "onCommand:halyard.recordAISession",
+    "onCommand:halyard.openDashboard",
+    "onCommand:halyard.showCurrentScope"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "halyard.startAIWork",
+        "title": "Halyard: Start AI Work"
+      },
+      {
+        "command": "halyard.stopAndRecordAIWork",
+        "title": "Halyard: Stop and Record AI Work"
+      },
+      {
+        "command": "halyard.recordAISession",
+        "title": "Halyard: Record AI Session"
+      },
+      {
+        "command": "halyard.openDashboard",
+        "title": "Halyard: Open Dashboard"
+      },
+      {
+        "command": "halyard.showCurrentScope",
+        "title": "Halyard: Show Current Scope"
+      }
+    ],
+    "configuration": {
+      "title": "Halyard",
+      "properties": {
+        "halyard.executable": {
+          "type": "string",
+          "default": "halyard",
+          "description": "Halyard CLI executable or wrapper command."
+        },
+        "halyard.defaultModel": {
+          "type": "string",
+          "default": "github-copilot",
+          "description": "Model label used for VS Code AI sessions when tokens are unavailable."
+        },
+        "halyard.idleAfterSeconds": {
+          "type": "number",
+          "default": 300,
+          "minimum": 30,
+          "description": "Seconds without editor activity before time is counted as idle."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.92.0",
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.0"
+  }
+}

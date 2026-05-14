@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
@@ -71,6 +71,9 @@ def import_codex_sessions(
                 session.project = infer_project(cwd_path)
             session.branch = current_branch(cwd_path)
             session.commit_count = commits_in_window(cwd_path, session.start, session.end)
+            session.outcome_data_available = (
+                session.branch is not None or session.commit_count is not None
+            )
 
         if not dry_run and target_dir is not None:
             append_session(target_dir, session)
@@ -101,6 +104,10 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
     cwd: str | None = None
     model: str = "codex"
     last_token_usage: dict | None = None  # type: ignore[type-arg]
+    user_message_count = 0
+    assistant_message_count = 0
+    tool_calls = 0
+    tool_errors = 0
 
     for raw in lines:
         raw = raw.strip()
@@ -143,6 +150,15 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
                 usage = info.get("total_token_usage")
                 if usage:
                     last_token_usage = usage
+            elif msg_type in {"user_message", "user_input", "input_text"}:
+                user_message_count += 1
+            elif msg_type in {"agent_message", "assistant_message", "assistant"}:
+                assistant_message_count += 1
+            elif msg_type in {"exec_command_begin", "apply_patch_begin", "tool_call_begin"}:
+                tool_calls += 1
+            elif msg_type in {"exec_command_end", "apply_patch_end", "tool_call_end"}:
+                if _payload_failed(payload):
+                    tool_errors += 1
 
     if session_start is None or session_end is None:
         return None
@@ -184,6 +200,20 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
         tokens_available=tokens_available,
         billing="credits",
         source="sdk",
+        tool_calls=tool_calls if tool_calls else None,
+        tool_errors=tool_errors if tool_errors else None,
+        wall_seconds=max(0, int((session_end - session_start).total_seconds())),
+        interaction_count=(
+            user_message_count + assistant_message_count
+            if user_message_count or assistant_message_count
+            else None
+        ),
+        user_message_count=user_message_count if user_message_count else None,
+        assistant_message_count=assistant_message_count if assistant_message_count else None,
+        prompt_count=user_message_count if user_message_count else None,
+        interaction_data_available=bool(user_message_count or assistant_message_count),
+        telemetry_source="codex-jsonl",
+        telemetry_trust="observed",
     )
     return session, cwd
 
@@ -219,9 +249,22 @@ def _parse_iso(ts: str) -> datetime | None:
         return None
     try:
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        # Normalise to naive UTC for consistent comparison
+        # Normalise to local naive for consistency with the rest of Halyard
         if dt.tzinfo is not None:
-            dt = dt.astimezone(UTC).replace(tzinfo=None)
+            dt = dt.astimezone(tz=None).replace(tzinfo=None)
         return dt
     except ValueError:
         return None
+
+
+def _payload_failed(payload: dict) -> bool:  # type: ignore[type-arg]
+    exit_code = payload.get("exit_code")
+    if exit_code is None:
+        exit_code = payload.get("exitCode")
+    if exit_code is not None:
+        try:
+            return int(exit_code) != 0
+        except (TypeError, ValueError):
+            return False
+    status = str(payload.get("status") or "").lower()
+    return status in {"error", "failed", "failure"}

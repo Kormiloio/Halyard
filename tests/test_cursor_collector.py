@@ -206,6 +206,49 @@ def test_handle_stop_hook_cache_tokens(tmp_path: Path, monkeypatch: pytest.Monke
     assert "cache_write=100" in data_lines[0]
 
 
+def test_handle_stop_hook_records_safe_metadata_counts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _halyard_project(tmp_path / "project")
+    state_file = tmp_path / "cursor-session"
+    state_file.write_text("2026-05-07T10:00:00")
+    monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
+    monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
+
+    payload = _stop_payload(workspace_roots=[str(project)])
+    payload.update(
+        {
+            "prompt": "do not log this content",
+            "assistantMessageCount": 2,
+            "acceptedSuggestionCount": 3,
+            "rejectedSuggestionCount": 1,
+            "toolCalls": [
+                {"name": "read_file", "status": "success"},
+                {"name": "run_command", "status": "error"},
+            ],
+        }
+    )
+
+    with _patch_stdin(payload):
+        handle_stop_hook()
+
+    from halyard.ai_log import parse_sessions
+
+    session = parse_sessions(project)[0]
+    assert session.prompt_count == 1
+    assert session.user_message_count == 1
+    assert session.assistant_message_count == 2
+    assert session.interaction_count == 3
+    assert session.accepted_suggestion_count == 3
+    assert session.rejected_suggestion_count == 1
+    assert session.tool_calls == 2
+    assert session.tool_errors == 1
+    assert session.interaction_data_available is True
+    assert session.telemetry_source == "cursor-hook"
+    assert session.telemetry_trust == "observed"
+    assert "do not log this content" not in (project / "ai-sessions.log").read_text()
+
+
 def test_handle_stop_hook_tokens_available_false_when_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

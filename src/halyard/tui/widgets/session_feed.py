@@ -36,6 +36,7 @@ class SessionFeed(Static):
             marker = "▶" if index == selected_index else ("+" if is_new else " ")
             err_badge = f" ⚠{session.tool_errors}e" if session.tool_errors else ""
             branch_badge = f" [{session.branch}]" if session.branch else ""
+            meta_badge = _metadata_badge(session)
             line = (
                 f"{marker} {tool_icon(session.tool)} "
                 f"{truncate(session.model, 20):20} "
@@ -43,8 +44,23 @@ class SessionFeed(Static):
                 f"{duration_str(session.end - session.start):>7} "
                 f"{tokens:>8} tok "
                 f"{cost_str(session.cost_usd):>9}"
-                f"{err_badge}{branch_badge}"
+                f"{err_badge}{meta_badge}{branch_badge}"
             )
             lines.append(line)
         self.last_rendered_text = "\n".join(lines)
         self.update(self.last_rendered_text)
+
+
+def _metadata_badge(session: AiSession) -> str:
+    bits: list[str] = []
+    if session.interaction_count is not None:
+        bits.append(f"{session.interaction_count}i")
+    elif session.interaction_data_available is False:
+        bits.append("i n/a")
+    if session.files_touched_count is not None:
+        bits.append(f"{session.files_touched_count}f")
+    if session.test_status:
+        bits.append(f"test:{session.test_status}")
+    if not bits:
+        return ""
+    return " " + " ".join(bits)

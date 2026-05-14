@@ -89,6 +89,19 @@ def numstat_delta(cwd: Path, sha_at_start: str) -> tuple[int, int] | None:
     Binary files (reported as '-') are skipped. Returns None on any git error,
     timeout, or non-zero exit. Never raises.
     """
+    summary = numstat_summary(cwd, sha_at_start)
+    if summary is None:
+        return None
+    added, removed, _files = summary
+    return added, removed
+
+
+def numstat_summary(cwd: Path, sha_at_start: str) -> tuple[int, int, int] | None:
+    """Return (lines_added, lines_removed, files_touched) from git numstat.
+
+    File names are read only to count changed rows and are never returned.
+    Binary files count as touched files, but their line counts are ignored.
+    """
     try:
         result = subprocess.run(
             ["git", "-C", str(cwd), "diff", "--numstat", sha_at_start, "HEAD"],
@@ -99,16 +112,20 @@ def numstat_delta(cwd: Path, sha_at_start: str) -> tuple[int, int] | None:
         if result.returncode != 0:
             return None
         added = removed = 0
+        files = 0
         for line in result.stdout.splitlines():
             parts = line.split("\t")
-            if len(parts) < 2 or parts[0] == "-" or parts[1] == "-":
+            if len(parts) < 2:
+                continue
+            files += 1
+            if parts[0] == "-" or parts[1] == "-":
                 continue
             try:
                 added += int(parts[0])
                 removed += int(parts[1])
             except ValueError:
                 continue
-        return added, removed
+        return added, removed, files
     except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
         return None
 
@@ -172,11 +189,11 @@ def _load_repos_config() -> dict[str, str]:
 
 
 def _write_repos_config(mapping: dict[str, str]) -> None:
+    import tomli_w
+
     _REPOS_CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    lines = ["[repos]"]
-    for k, v in sorted(mapping.items()):
-        lines.append(f'"{k}" = "{v}"')
-    _REPOS_CONFIG.write_text("\n".join(lines) + "\n")
+    data: dict[str, dict[str, str]] = {"repos": dict(sorted(mapping.items()))}
+    _REPOS_CONFIG.write_bytes(tomli_w.dumps(data).encode())
 
 
 def _normalize_remote(url: str) -> str:

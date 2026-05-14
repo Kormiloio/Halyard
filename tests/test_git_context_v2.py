@@ -7,6 +7,9 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
+import halyard.git_context as git_context_mod
 from halyard.git_context import commits_in_window, head_sha, numstat_delta
 
 # ---------------------------------------------------------------------------
@@ -175,3 +178,40 @@ def test_numstat_delta_returns_none_on_timeout(tmp_path: Path) -> None:
 def test_numstat_delta_returns_none_on_file_not_found(tmp_path: Path) -> None:
     with patch("halyard.git_context.subprocess.run", side_effect=FileNotFoundError):
         assert numstat_delta(tmp_path, "abc123") is None
+
+
+# ---------------------------------------------------------------------------
+# TOML injection safety — _write_repos_config with hostile keys/values
+# ---------------------------------------------------------------------------
+
+
+def test_write_repos_config_hostile_key_roundtrips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A remote URL with TOML-hostile characters in the key must round-trip."""
+    from halyard.git_context import _load_repos_config, _write_repos_config
+
+    config_path = tmp_path / "repos.toml"
+    monkeypatch.setattr(git_context_mod, "_REPOS_CONFIG", config_path)
+
+    hostile_key = 'github.com/org/repo"]\n[evil'
+    mapping = {hostile_key: "myproject"}
+    _write_repos_config(mapping)
+    loaded = _load_repos_config()
+    assert loaded.get(hostile_key) == "myproject"
+
+
+def test_write_repos_config_hostile_value_roundtrips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A project slug with backslash/quote characters round-trips without TOML error."""
+    from halyard.git_context import _load_repos_config, _write_repos_config
+
+    config_path = tmp_path / "repos.toml"
+    monkeypatch.setattr(git_context_mod, "_REPOS_CONFIG", config_path)
+
+    hostile_value = "proj\\ninjected = true"
+    mapping = {"github.com/org/repo": hostile_value}
+    _write_repos_config(mapping)
+    loaded = _load_repos_config()
+    assert loaded.get("github.com/org/repo") == hostile_value

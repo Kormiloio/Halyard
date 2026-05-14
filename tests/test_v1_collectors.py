@@ -196,6 +196,7 @@ def test_stop_hook_captures_cache_tokens(tmp_path: Path) -> None:
 
 def test_install_hook_creates_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
     result = runner.invoke(app, ["install-hook"])
 
     assert result.exit_code == 0
@@ -206,6 +207,7 @@ def test_install_hook_creates_settings(tmp_path: Path, monkeypatch: pytest.Monke
 
 def test_install_hook_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
     runner.invoke(app, ["install-hook"])
     runner.invoke(app, ["install-hook"])
 
@@ -218,6 +220,7 @@ def test_install_hook_preserves_existing_settings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
     settings_dir = tmp_path / ".claude"
     settings_dir.mkdir()
     (settings_dir / "settings.json").write_text(json.dumps({"model": "claude-opus-4-7"}))
@@ -333,11 +336,12 @@ def test_read_from_transcript_no_since(tmp_path: Path) -> None:
             _turn("2026-05-09T11:00:00.000Z", 200, 80),
         ],
     )
-    model, t_in, t_out, _cr, _cw, branch = _read_from_transcript(transcript)
+    model, t_in, t_out, _cr, _cw, branch, assistant_count = _read_from_transcript(transcript)
     assert model == "claude-sonnet-4-6"
     assert t_in == 300
     assert t_out == 130
     assert branch == "main"
+    assert assistant_count == 2
 
 
 def test_read_from_transcript_since_filters_earlier_turns(tmp_path: Path) -> None:
@@ -351,10 +355,14 @@ def test_read_from_transcript_since_filters_earlier_turns(tmp_path: Path) -> Non
             _turn("2026-05-09T11:30:00.000Z", 200, 80),
         ],
     )
-    since = datetime(2026, 5, 9, 11, 0, 0)  # 11:00 UTC-naive — first turn is before this
-    _m, t_in, t_out, _cr, _cw, _br = _read_from_transcript(transcript, since=since)
+    # since is local-naive; use UTC→local conversion to match what the stop hook provides
+    since = (
+        datetime.fromisoformat("2026-05-09T11:00:00+00:00").astimezone(tz=None).replace(tzinfo=None)
+    )
+    _m, t_in, t_out, _cr, _cw, _br, assistant_count = _read_from_transcript(transcript, since=since)
     assert t_in == 200
     assert t_out == 80
+    assert assistant_count == 1
 
 
 def test_read_from_transcript_since_includes_boundary_turn(tmp_path: Path) -> None:
@@ -365,10 +373,13 @@ def test_read_from_transcript_since_includes_boundary_turn(tmp_path: Path) -> No
         tmp_path,
         [_turn("2026-05-09T11:00:00.000Z", 42, 7)],
     )
-    since = datetime(2026, 5, 9, 11, 0, 0)
-    _m, t_in, t_out, _cr, _cw, _br = _read_from_transcript(transcript, since=since)
+    since = (
+        datetime.fromisoformat("2026-05-09T11:00:00+00:00").astimezone(tz=None).replace(tzinfo=None)
+    )
+    _m, t_in, t_out, _cr, _cw, _br, assistant_count = _read_from_transcript(transcript, since=since)
     assert t_in == 42
     assert t_out == 7
+    assert assistant_count == 1
 
 
 def test_read_from_transcript_since_excludes_all(tmp_path: Path) -> None:
@@ -380,9 +391,10 @@ def test_read_from_transcript_since_excludes_all(tmp_path: Path) -> None:
         [_turn("2026-05-09T10:00:00.000Z", 999, 500)],
     )
     since = datetime(2026, 5, 9, 23, 0, 0)
-    _m, t_in, t_out, _cr, _cw, _br = _read_from_transcript(transcript, since=since)
+    _m, t_in, t_out, _cr, _cw, _br, assistant_count = _read_from_transcript(transcript, since=since)
     assert t_in == 0
     assert t_out == 0
+    assert assistant_count == 0
 
 
 # ---------------------------------------------------------------------------
@@ -391,18 +403,21 @@ def test_read_from_transcript_since_excludes_all(tmp_path: Path) -> None:
 
 
 def test_read_session_state_utc_format() -> None:
-    """Z-suffixed start string is parsed as UTC-naive datetime."""
+    """Z-suffixed start string (legacy) is converted to local-naive datetime."""
     from halyard.collectors.claude_code import _read_session_state
 
     state = {"start": "2026-05-09T14:30:00Z", "sha_at_start": "abc123"}
     CC_SESSION_FILE.write_text(json.dumps(state))
     result = _read_session_state()
-    assert result["start_dt"] == datetime(2026, 5, 9, 14, 30, 0)
+    expected = (
+        datetime.fromisoformat("2026-05-09T14:30:00+00:00").astimezone(tz=None).replace(tzinfo=None)
+    )
+    assert result["start_dt"] == expected
     assert result["sha"] == "abc123"
 
 
-def test_record_session_start_writes_utc_z_suffix(tmp_path: Path) -> None:
-    """record_session_start writes an ISO timestamp ending in Z."""
+def test_record_session_start_writes_local_iso(tmp_path: Path) -> None:
+    """record_session_start writes a plain local ISO timestamp (no Z suffix)."""
     with (
         patch("halyard.collectors.claude_code.find_project_dir", return_value=None),
         patch("halyard.collectors.claude_code.read_active_project", return_value=None),
@@ -411,7 +426,6 @@ def test_record_session_start_writes_utc_z_suffix(tmp_path: Path) -> None:
         record_session_start()
 
     raw = json.loads(CC_SESSION_FILE.read_text())
-    assert raw["start"].endswith("Z"), f"Expected Z suffix, got: {raw['start']}"
-    # Must be parseable as UTC-naive
-    dt = datetime.fromisoformat(raw["start"][:-1])
+    assert not raw["start"].endswith("Z"), f"Expected no Z suffix, got: {raw['start']}"
+    dt = datetime.fromisoformat(raw["start"])
     assert dt.tzinfo is None

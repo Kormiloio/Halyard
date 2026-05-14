@@ -68,24 +68,50 @@ class ProjectPane(Static):
 
 def _health_lines(sessions: list[AiSession]) -> list[str]:
     """Aggregate work-health signals across sessions. Signals, not scores."""
-    rich = [s for s in sessions if s.tool_calls is not None]
+    rich = [
+        s
+        for s in sessions
+        if s.tool_calls is not None
+        or s.interaction_count is not None
+        or s.files_touched_count is not None
+        or s.test_status
+        or s.build_status
+    ]
     if not rich:
         return ["  No tool telemetry captured yet."]
-    total_calls = sum(s.tool_calls or 0 for s in rich)
-    total_errors = sum(s.tool_errors or 0 for s in rich)
+    tool_rich = [s for s in rich if s.tool_calls is not None]
+    total_calls = sum(s.tool_calls or 0 for s in tool_rich)
+    total_errors = sum(s.tool_errors or 0 for s in tool_rich)
     error_rate = (total_errors / total_calls * 100) if total_calls else 0.0
-    wall_list = [s.wall_seconds for s in rich if s.wall_seconds is not None]
+    wall_list = [s.wall_seconds for s in sessions if s.wall_seconds is not None]
     avg_wall = sum(wall_list) / len(wall_list) if wall_list else None
-    lines = [
-        f"  Tool calls:  {total_calls}  |  Errors: {total_errors}  ({error_rate:.0f}%)",
-    ]
+    lines: list[str] = []
+    if tool_rich:
+        lines.append(
+            f"  Tool calls:  {total_calls}  |  Errors: {total_errors}  ({error_rate:.0f}%)"
+        )
+    interaction_sessions = [s for s in sessions if s.interaction_count is not None]
+    if interaction_sessions:
+        interactions = sum(s.interaction_count or 0 for s in interaction_sessions)
+        lines.append(f"  Interactions: {interactions} across {len(interaction_sessions)} sessions")
+    unavailable = sum(1 for s in sessions if s.interaction_data_available is False)
+    if unavailable:
+        lines.append(f"  Interaction metadata unavailable: {unavailable} sessions")
     if avg_wall is not None:
         lines.append(f"  Avg wall time: {int(avg_wall)}s across {len(wall_list)} sessions")
     # Code delta — aggregate across sessions that have it
     added = sum(s.code_added for s in sessions if s.code_added is not None)
     removed = sum(s.code_removed for s in sessions if s.code_removed is not None)
+    touched = sum(s.files_touched_count for s in sessions if s.files_touched_count is not None)
     if added or removed:
         lines.append(f"  Code delta:  +{added} / -{removed} lines")
+    if touched:
+        lines.append(f"  Files touched: {touched}")
+    test_runs = sum(s.test_run_count or 0 for s in sessions if s.test_run_count is not None)
+    passed = sum(1 for s in sessions if s.test_status == "pass")
+    failed = sum(1 for s in sessions if s.test_status == "fail")
+    if test_runs or passed or failed:
+        lines.append(f"  Tests: {test_runs} runs  pass:{passed} fail:{failed}")
     return lines
 
 

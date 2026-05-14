@@ -63,6 +63,70 @@ def test_tui_import_error_without_textual(monkeypatch: pytest.MonkeyPatch) -> No
     assert "pip install halyard[tui]" in result.output
 
 
+def test_tui_prefers_current_project_over_hub(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+    import types
+
+    project_dir = tmp_path / "project"
+    hub_dir = tmp_path / "hub"
+    project_dir.mkdir()
+    hub_dir.mkdir()
+    captured: dict[str, object] = {}
+
+    class FakeHalyardApp:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+        def run(self) -> None:
+            captured["ran"] = True
+
+    module = types.ModuleType("halyard.tui.app")
+    module.HalyardApp = FakeHalyardApp
+    monkeypatch.setitem(sys.modules, "halyard.tui.app", module)
+    monkeypatch.setattr("halyard.ai_log.find_project_dir", lambda: project_dir)
+    monkeypatch.setattr("halyard.hub.find_hub", lambda: hub_dir)
+
+    result = runner.invoke(app, ["tui"])
+
+    assert result.exit_code == 0
+    assert captured["log_path"] == project_dir / "ai-sessions.log"
+    assert captured["project_slug"] == "project"
+    assert captured["ran"] is True
+
+
+def test_tui_hub_flag_uses_configured_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+    import types
+
+    project_dir = tmp_path / "project"
+    hub_dir = tmp_path / "hub"
+    project_dir.mkdir()
+    hub_dir.mkdir()
+    captured: dict[str, object] = {}
+
+    class FakeHalyardApp:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+        def run(self) -> None:
+            captured["ran"] = True
+
+    module = types.ModuleType("halyard.tui.app")
+    module.HalyardApp = FakeHalyardApp
+    monkeypatch.setitem(sys.modules, "halyard.tui.app", module)
+    monkeypatch.setattr("halyard.ai_log.find_project_dir", lambda: project_dir)
+    monkeypatch.setattr("halyard.hub.find_hub", lambda: hub_dir)
+
+    result = runner.invoke(app, ["tui", "--hub"])
+
+    assert result.exit_code == 0
+    assert captured["log_path"] == hub_dir / "ai-sessions.log"
+    assert captured["project_slug"] == "project"
+    assert captured["ran"] is True
+
+
 def test_session_store_load(tmp_path: Path) -> None:
     from halyard.tui.store import SessionStore
 
@@ -721,3 +785,55 @@ def test_project_pane_health_no_telemetry() -> None:
     pane.render_project("acme:auth", sessions)
 
     assert "No tool telemetry captured yet" in pane.last_rendered_text
+
+
+def test_project_pane_health_shows_metadata_counts() -> None:
+    from halyard.ai_log import AiSession
+    from halyard.tui.widgets.project_pane import ProjectPane
+
+    sessions = [
+        AiSession(
+            start=datetime(2026, 5, 8, 10, 0),
+            end=datetime(2026, 5, 8, 10, 30),
+            tool="vscode",
+            model="github-copilot",
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=0.0,
+            project="acme:auth",
+            tokens_available=False,
+            interaction_count=4,
+            files_touched_count=3,
+            test_run_count=1,
+            test_status="pass",
+        )
+    ]
+    pane = ProjectPane()
+    pane.render_project("acme:auth", sessions)
+
+    text = pane.last_rendered_text
+    assert "Interactions: 4" in text
+    assert "Files touched: 3" in text
+    assert "Tests: 1 runs" in text
+
+
+def test_session_feed_shows_metadata_badges() -> None:
+    from halyard.tui.widgets.session_feed import SessionFeed
+
+    session = _session(
+        tool="vscode",
+        model="github-copilot",
+        input_tokens=0,
+        output_tokens=0,
+        tokens_available=False,
+    )
+    session.interaction_count = 4
+    session.files_touched_count = 3
+    session.test_status = "pass"
+    feed = SessionFeed()
+
+    feed.render_sessions([session])
+
+    assert "4i" in feed.last_rendered_text
+    assert "3f" in feed.last_rendered_text
+    assert "test:pass" in feed.last_rendered_text

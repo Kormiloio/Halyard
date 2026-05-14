@@ -48,6 +48,10 @@ class GeminiSessionSummary:
     code_added: int | None = None
     code_removed: int | None = None
     resume_command: str | None = None
+    interaction_count: int | None = None
+    user_message_count: int | None = None
+    assistant_message_count: int | None = None
+    prompt_count: int | None = None
 
     def _derive(self) -> None:
         if not self.model_stats:
@@ -94,8 +98,17 @@ def parse_session_file(path: Path) -> GeminiSessionSummary | None:
 
         # Aggregate per-model stats
         stats_by_model: dict[str, GeminiModelStats] = {}
+        user_message_count = 0
+        assistant_message_count = 0
         for msg in messages:
-            if not isinstance(msg, dict) or msg.get("type") != "gemini":
+            if not isinstance(msg, dict):
+                continue
+            msg_type = str(msg.get("type") or "")
+            if msg_type == "user":
+                user_message_count += 1
+            elif msg_type == "gemini":
+                assistant_message_count += 1
+            if msg_type != "gemini":
                 continue
             model = str(msg.get("model") or "unknown")
             tokens = msg.get("tokens") or {}
@@ -129,6 +142,10 @@ def parse_session_file(path: Path) -> GeminiSessionSummary | None:
             end=end,
             model_stats=list(stats_by_model.values()),
         )
+        summary.user_message_count = user_message_count
+        summary.assistant_message_count = assistant_message_count
+        summary.interaction_count = user_message_count + assistant_message_count
+        summary.prompt_count = user_message_count
         summary._derive()
 
         # Code delta — session-level field, graceful fallback if absent

@@ -68,6 +68,7 @@ def test_parse_session_file_single_model(tmp_path: Path) -> None:
         json.dumps(
             _make_session(
                 messages=[
+                    {"type": "user", "content": "hello"},
                     _gemini_msg(model="gemini-2.5-flash", inp=10000, out=500, cached=2000),
                 ]
             )
@@ -84,6 +85,10 @@ def test_parse_session_file_single_model(tmp_path: Path) -> None:
     assert s.total_input == 8000
     assert s.total_output == 500
     assert s.total_cache == 2000
+    assert s.interaction_count == 2
+    assert s.user_message_count == 1
+    assert s.assistant_message_count == 1
+    assert s.prompt_count == 1
 
 
 def test_parse_session_file_multi_model(tmp_path: Path) -> None:
@@ -171,6 +176,9 @@ def test_parse_session_file_no_gemini_messages(tmp_path: Path) -> None:
     assert s.model_stats == []
     assert s.dominant_model == ""
     assert s.cost_usd == 0.0
+    assert s.interaction_count == 1
+    assert s.user_message_count == 1
+    assert s.assistant_message_count == 0
 
 
 def test_parse_session_file_malformed_json(tmp_path: Path) -> None:

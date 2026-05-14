@@ -158,6 +158,11 @@ def handle_agent_stop() -> int:
     rich_code_added: int | None = None
     rich_code_removed: int | None = None
     rich_resume_command: str | None = None
+    rich_interaction_count: int | None = None
+    rich_user_message_count: int | None = None
+    rich_assistant_message_count: int | None = None
+    rich_prompt_count: int | None = None
+    rich_interaction_data_available: bool | None = None
 
     if history_summary:
         model = history_summary.dominant_model or "gemini-unknown"
@@ -177,6 +182,11 @@ def handle_agent_stop() -> int:
         rich_code_added = history_summary.code_added
         rich_code_removed = history_summary.code_removed
         rich_resume_command = history_summary.resume_command
+        rich_interaction_count = history_summary.interaction_count
+        rich_user_message_count = history_summary.user_message_count
+        rich_assistant_message_count = history_summary.assistant_message_count
+        rich_prompt_count = history_summary.prompt_count
+        rich_interaction_data_available = True
     else:
         # Fall back to accumulated hook state
         model = (state or {}).get("model") or payload.get("model") or "gemini-unknown"
@@ -214,6 +224,13 @@ def handle_agent_stop() -> int:
         resume_command=rich_resume_command,
         branch=branch,
         commit_count=commit_count,
+        interaction_count=rich_interaction_count,
+        user_message_count=rich_user_message_count,
+        assistant_message_count=rich_assistant_message_count,
+        prompt_count=rich_prompt_count,
+        interaction_data_available=rich_interaction_data_available,
+        telemetry_source="gemini-history" if history_summary else "gemini-hook",
+        telemetry_trust="observed",
     )
 
     if can_append_project_log and project_dir is not None:
