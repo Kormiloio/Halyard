@@ -160,7 +160,7 @@ def handle_stop_hook() -> int:
         accepted_suggestion_count=interaction_counts["accepted_suggestion_count"],
         rejected_suggestion_count=interaction_counts["rejected_suggestion_count"],
         files_touched_count=files_touched_count,
-        interaction_data_available=interaction_counts["interaction_data_available"],
+        interaction_data_available=bool(interaction_counts["interaction_data_available"]),
         outcome_data_available=any(
             value is not None for value in (branch, commit_count, code_added, code_removed)
         ),

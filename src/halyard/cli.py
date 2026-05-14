@@ -1880,11 +1880,11 @@ def report(
 
     if report.by_tool_usage:
         console.print("\n[bold]By tool[/]")
-        for bucket in report.by_tool_usage:
-            tok_label = f"{bucket.tokens:,} tokens  " if bucket.tokens else ""
+        for tbucket in report.by_tool_usage:
+            tok_label = f"{tbucket.tokens:,} tokens  " if tbucket.tokens else ""
             console.print(
-                f"  {bucket.tool:<32} [green]${bucket.cost_usd:.2f}[/]"
-                f"  {bucket.sessions} sessions  {tok_label}"
+                f"  {tbucket.tool:<32} [green]${tbucket.cost_usd:.2f}[/]"
+                f"  {tbucket.sessions} sessions  {tok_label}"
             )
 
     # By branch — only shown when at least one session has branch data
