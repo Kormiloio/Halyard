@@ -721,11 +721,16 @@ def register(app: typer.Typer) -> None:
             "--project",
             help="Project slug as client:project. Defaults to the active timer project.",
         ),
+        project_dir: Path | None = typer.Option(
+            None,
+            "--project-dir",
+            help="Halyard project directory to validate against (default: hub, then cwd).",
+        ),
     ) -> None:
         """Assign unattributed AI sessions to a project."""
         from halyard.orchestration import interactive_assign_unattributed
 
-        interactive_assign_unattributed(explicit_project=project)
+        interactive_assign_unattributed(explicit_project=project, project_dir=project_dir)
 
     @app.command(name="confirm-attribution")
     def confirm_attribution() -> None:

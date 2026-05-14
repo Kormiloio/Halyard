@@ -280,8 +280,22 @@ def scaffold_project(target_dir: Path, hub: bool = False) -> None:
 
 def interactive_assign_unattributed(
     explicit_project: str | None = None,
+    project_dir: Path | None = None,
 ) -> None:
     """Interactive loop to assign or discard unattributed AI sessions."""
+    # Resolve and validate once up front when a project is specified.
+    resolved_dir: Path | None = project_dir or find_hub() or find_project_dir()
+    if explicit_project is not None:
+        if resolved_dir is None:
+            console.print("[bold red]No hub or project found.[/] Run halyard hub set <path> first.")
+            return
+        if not _is_valid_project(explicit_project, resolved_dir):
+            console.print(
+                f"[bold red]Error:[/] Project '[bold]{explicit_project}[/]' not found "
+                f"in {resolved_dir / 'projects.toml'}."
+            )
+            raise typer.Exit(code=1)
+
     global_log = unattributed_log_path()
     if global_log.exists() and any(
         line.strip().startswith("s ") for line in global_log.read_text().splitlines()
@@ -317,13 +331,13 @@ def interactive_assign_unattributed(
 
             if choice == "a":
                 target_project = explicit_project or typer.prompt("Project slug").strip()
-                target_dir = find_hub() or find_project_dir()
+                target_dir = resolved_dir if explicit_project else find_hub() or find_project_dir()
                 if target_dir is None:
                     console.print("[bold red]No current project or hub found.[/] Skipping session.")
                     skipped += 1
                     continue
 
-                if not _is_valid_project(target_project, target_dir):
+                if not explicit_project and not _is_valid_project(target_project, target_dir):
                     console.print(
                         f"[bold red]Error:[/] Project '[bold]{target_project}[/]' not found "
                         f"in {target_dir / 'projects.toml'}."
@@ -476,9 +490,12 @@ def _is_valid_project(slug: str, project_dir: Path) -> bool:
         for entry in data.get("project", []):
             if entry.get("slug") == slug:
                 return True
-            if ":" in slug:
-                if entry.get("client_slug") == client_part and entry.get("slug") == project_part:
-                    return True
+            if (
+                ":" in slug
+                and entry.get("client_slug") == client_part
+                and entry.get("slug") == project_part
+            ):
+                return True
     except Exception as e:
         _log_error("projects.toml parse failed in _is_valid_project", e)
         console.print(
