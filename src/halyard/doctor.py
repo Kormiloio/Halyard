@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -47,6 +48,7 @@ def build_doctor_report(
     hub_dir = find_hub()
     checks: list[DoctorCheck] = []
 
+    checks.extend(_platform_checks())
     checks.extend(_project_checks(project_dir, hub_dir))
     checks.extend(_hub_checks(project_dir, hub_dir))
     checks.extend(_hook_checks(tool, current))
@@ -57,11 +59,17 @@ def build_doctor_report(
     return DoctorReport(status=_report_status(checks), checks=checks)
 
 
+def _shorten(text: str) -> str:
+    """Replace the home directory prefix with ~ for compact display."""
+    home = str(Path.home())
+    return text.replace(home, "~") if home in text else text
+
+
 def render_text(report: DoctorReport) -> str:
     lines = ["Halyard Doctor", "─" * 48]
     for check in report.checks:
         status = check.status.upper()
-        lines.append(f"{status:<7} {check.label:<18} {check.detail}")
+        lines.append(f"{status:<7} {check.label:<18} {_shorten(check.detail)}")
         if check.fix:
             lines.append(f"        fix: {check.fix}")
     lines.append("─" * 48)
@@ -75,6 +83,22 @@ def render_json(report: DoctorReport) -> str:
 
 def has_errors(report: DoctorReport) -> bool:
     return any(check.status == "error" for check in report.checks)
+
+
+def _platform_checks() -> list[DoctorCheck]:
+    if sys.platform == "win32":
+        return [
+            DoctorCheck(
+                id="platform",
+                label="platform",
+                status="warning",
+                detail="Windows is not fully supported — file locking requires POSIX fcntl.",
+                fix="Use WSL2 for full support. Concurrent writes are unsafe on Windows.",
+            )
+        ]
+    return [
+        DoctorCheck(id="platform", label="platform", status="ok", detail=f"POSIX ({sys.platform})")
+    ]
 
 
 def _project_checks(project_dir: Path | None, hub_dir: Path | None) -> list[DoctorCheck]:
@@ -114,7 +138,7 @@ def _project_checks(project_dir: Path | None, hub_dir: Path | None) -> list[Doct
                 id="project.log.exists",
                 label="AI log",
                 status="error",
-                detail=f"{log_path} missing",
+                detail="missing",
                 fix="halyard init",
             )
         )
@@ -124,7 +148,7 @@ def _project_checks(project_dir: Path | None, hub_dir: Path | None) -> list[Doct
                 id="project.log.writable",
                 label="AI log",
                 status="ok",
-                detail=f"{log_path} writable",
+                detail="writable",
             )
         )
     else:
@@ -133,7 +157,7 @@ def _project_checks(project_dir: Path | None, hub_dir: Path | None) -> list[Doct
                 id="project.log.writable",
                 label="AI log",
                 status="error",
-                detail=f"{log_path} is not writable",
+                detail="not writable",
                 fix="check file permissions",
             )
         )
@@ -179,6 +203,9 @@ def _hook_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
         required = tool != "all"
         if scope == "claude":
             checks.append(_claude_hook_check(current, required=required))
+            dup = _claude_hook_duplicate_check(current)
+            if dup is not None:
+                checks.append(dup)
         elif scope == "cursor":
             checks.append(_cursor_hook_check(required=required))
         elif scope == "gemini":
@@ -203,6 +230,22 @@ def _claude_hook_check(current: Path, *, required: bool) -> DoctorCheck:
         detail="hooks missing",
         fix="halyard install-hook",
     )
+
+
+def _claude_hook_duplicate_check(current: Path) -> DoctorCheck | None:
+    local_path = current / ".claude" / "settings.json"
+    global_path = Path.home() / ".claude" / "settings.json"
+    local_keys = {_cmd_key(c) for c in _commands_from_claude_settings([local_path])}
+    global_keys = {_cmd_key(c) for c in _commands_from_claude_settings([global_path])}
+    if local_keys & global_keys:
+        return DoctorCheck(
+            id="hook.claude.duplicate",
+            label="Claude Code (duplicate hooks)",
+            status="warning",
+            detail="hooks in both local and global settings — sessions recorded twice",
+            fix=f"remove hooks from {local_path} or {global_path}",
+        )
+    return None
 
 
 def _cursor_hook_check(*, required: bool) -> DoctorCheck:
@@ -390,6 +433,12 @@ def _latest_recent_session_file(path: Path, cutoff: datetime) -> AiSession | Non
 def _session_detail(session: AiSession) -> str:
     project = session.project or "(unattributed)"
     return f"{session.tool} {session.model} {project} at {session.end:%Y-%m-%d %H:%M:%S}"
+
+
+def _cmd_key(cmd: str) -> str:
+    """Normalise a hook command to subcommand name for cross-path comparison."""
+    parts = cmd.split()
+    return f"{Path(parts[0]).name} {' '.join(parts[1:])}" if parts else cmd
 
 
 def _commands_from_claude_settings(paths: list[Path]) -> list[str]:

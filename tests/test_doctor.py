@@ -6,11 +6,12 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession
 from halyard.cli import app
-from halyard.doctor import build_doctor_report, render_json
+from halyard.doctor import _claude_hook_duplicate_check, build_doctor_report, render_json
 
 
 def _project(path: Path) -> Path:
@@ -244,3 +245,70 @@ def test_doctor_cli_invalid_tool_exits_1() -> None:
 
     assert result.exit_code == 1
     assert "--tool must be one of" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# v2.31: Duplicate hook detection
+# ---------------------------------------------------------------------------
+
+
+def _hook_settings_content() -> str:
+    return json.dumps(
+        {
+            "hooks": {
+                "UserPromptSubmit": [
+                    {"hooks": [{"type": "command", "command": "/bin/halyard cc-session"}]}
+                ],
+                "Stop": [{"hooks": [{"type": "command", "command": "/bin/halyard cc-hook"}]}],
+            }
+        }
+    )
+
+
+def test_duplicate_check_warns_when_hooks_in_both_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    project.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: home)
+
+    (home / ".claude").mkdir(parents=True)
+    (home / ".claude" / "settings.json").write_text(_hook_settings_content())
+    (project / ".claude").mkdir(parents=True)
+    (project / ".claude" / "settings.json").write_text(_hook_settings_content())
+
+    result = _claude_hook_duplicate_check(project)
+
+    assert result is not None
+    assert result.status == "warning"
+    assert result.id == "hook.claude.duplicate"
+
+
+def test_duplicate_check_clean_when_only_global(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    project.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: home)
+
+    (home / ".claude").mkdir(parents=True)
+    (home / ".claude" / "settings.json").write_text(_hook_settings_content())
+
+    result = _claude_hook_duplicate_check(project)
+
+    assert result is None
+
+
+def test_duplicate_check_clean_when_neither_file_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    project.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: home)
+
+    result = _claude_hook_duplicate_check(project)
+
+    assert result is None
