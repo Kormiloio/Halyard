@@ -305,7 +305,7 @@ def build_health_checks(
     checks = [
         HealthCheck("Project", "healthy", f"Found {project_dir.name}"),
         _file_check("AI session log", ai_log),
-        _file_check("Timeclock", project_dir / "time.timeclock"),
+        _timeclock_check(project_dir / "time.timeclock"),
         _hook_check(project_dir),
         _cursor_hook_check(),
         _gemini_hook_check(),
@@ -380,6 +380,14 @@ def _file_check(label: str, path: Path) -> HealthCheck:
     if not os.access(path, os.W_OK):
         return HealthCheck(label, "error", f"{path.name} is not writable")
     return HealthCheck(label, "healthy", f"{path.name} ready")
+
+
+def _timeclock_check(path: Path) -> HealthCheck:
+    if not path.exists():
+        return HealthCheck("Timeclock", "neutral", "not started — run halyard start")
+    if not os.access(path, os.W_OK):
+        return HealthCheck("Timeclock", "error", "time.timeclock is not writable")
+    return HealthCheck("Timeclock", "healthy", "time.timeclock ready")
 
 
 def _hook_check(project_dir: Path) -> HealthCheck:
