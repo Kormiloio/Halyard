@@ -317,7 +317,7 @@ def interactive_assign_unattributed(
 
             if choice == "a":
                 target_project = explicit_project or typer.prompt("Project slug").strip()
-                target_dir = find_project_dir() or find_hub()
+                target_dir = find_hub() or find_project_dir()
                 if target_dir is None:
                     console.print("[bold red]No current project or hub found.[/] Skipping session.")
                     skipped += 1
@@ -472,9 +472,13 @@ def _is_valid_project(slug: str, project_dir: Path) -> bool:
         return False
     try:
         data = tomllib.loads(path.read_text())
+        client_part, _, project_part = slug.partition(":")
         for entry in data.get("project", []):
             if entry.get("slug") == slug:
                 return True
+            if ":" in slug:
+                if entry.get("client_slug") == client_part and entry.get("slug") == project_part:
+                    return True
     except Exception as e:
         _log_error("projects.toml parse failed in _is_valid_project", e)
         console.print(
