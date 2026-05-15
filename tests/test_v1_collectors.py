@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, parse_sessions
 from halyard.cli import app
+from halyard.cli_hooks import _CC_HOOKS, _resolve_claude_hook_entries
 from halyard.collectors.claude_code import handle_stop_hook, record_session_start
 
 runner = CliRunner()
@@ -230,6 +231,16 @@ def test_install_hook_preserves_existing_settings(
     settings = json.loads((settings_dir / "settings.json").read_text())
     assert settings["model"] == "claude-opus-4-7"
     assert "hooks" in settings
+
+
+def test_resolve_claude_hook_entries_rewrites_halyard_binary() -> None:
+    entries = _CC_HOOKS["UserPromptSubmit"]
+
+    resolved = _resolve_claude_hook_entries(entries, "/usr/bin/halyard")
+
+    assert resolved is not entries
+    assert resolved[0]["hooks"][0]["command"] == "/usr/bin/halyard cc-session"
+    assert entries[0]["hooks"][0]["command"] == "halyard cc-session"
 
 
 # ---------------------------------------------------------------------------

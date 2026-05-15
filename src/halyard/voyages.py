@@ -122,7 +122,7 @@ def write_voyages(project_dir: Path, entries: list[VoyageEntry]) -> None:
         with os.fdopen(fd, "w") as f:
             f.write(content)
         os.replace(tmp, path)
-    except Exception:
+    except OSError:
         import contextlib
 
         with contextlib.suppress(OSError):
