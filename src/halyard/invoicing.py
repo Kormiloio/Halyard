@@ -579,7 +579,7 @@ def _render_invoice(
         template_dir = override.parent
         template_name = override.name
     else:
-        template_dir = Path(__file__).resolve().parents[2] / "templates"
+        template_dir = Path(__file__).parent / "templates"
         template_name = "invoice.md.j2"
 
     # L-1: autoescape=False is intentional — output is Markdown, not HTML.

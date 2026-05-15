@@ -9,7 +9,7 @@ stored as plain text on your machine, owned by you. No account. No cloud service
 prompt or code capture. Ever. MIT licensed.
 
 **Status:** alpha, open source — capture loop, reports, invoices, Glass Cockpit, and TUI
-in daily use. v0.2.0 just shipped.
+in daily use.
 
 ---
 

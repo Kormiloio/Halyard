@@ -15,7 +15,18 @@ from rich.console import Console
 
 app = typer.Typer(
     name="halyard",
-    help="AI work intelligence infrastructure. Plain text. Owned by you.",
+    help=(
+        "Your AI work leaves a trail. Halyard makes that trail legible, auditable, "
+        "and client-safe. Plain text on your machine, owned by you."
+    ),
+    epilog=(
+        "Getting started:\n"
+        "  halyard init                    # scaffold a project in the current directory\n"
+        "  halyard setup                   # guided hook install + readiness check\n"
+        "  halyard dashboard               # local Glass Cockpit at http://127.0.0.1:7432\n"
+        "\n"
+        "Docs: https://github.com/Kormiloio/Halyard"
+    ),
     no_args_is_help=False,
     context_settings={"help_option_names": ["-h", "--help"]},
 )

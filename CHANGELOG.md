@@ -6,7 +6,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Gemini phantom sessions:** a stale `~/.halyard/gc-session` file from a
+  prior session could be re-read on every `gc-hook` invocation, producing
+  multi-day phantom entries with absurd `wall_seconds`. `handle_agent_stop()`
+  now refuses to write a session whose implied wall time exceeds 12 hours
+  and deletes the stale state file.
+- **VS Code extension auto-tracking:** the v2.32 extension required users
+  to manually run `halyard.startAIWork` before any editing time was
+  captured. New `halyard.autoTrack` setting (default `true`) auto-starts a
+  session on activation and on the first activity event in an idle
+  workspace.
+- **v2.16 — Templates not packaged in wheel (C1):** `pip install halyard &&
+  halyard invoice <client>` raised `TemplateNotFound` because
+  `templates/invoice.md.j2` lived outside `src/halyard/` and was never
+  declared as package data. Templates moved to `src/halyard/templates/`;
+  the loader now resolves via `Path(__file__).parent / "templates"`.
+  CI now installs the wheel in a clean venv and renders an invoice on
+  every push to catch this class of bug going forward.
+- **v2.16 — `service_status` reported the wrong port:** when a user
+  installed the dashboard with `halyard service install --port 7777`,
+  `halyard service status` still reported `:7432`. `service_status` now
+  parses the installed plist's `ProgramArguments` and reports the actual
+  port; falls back to the default with a one-line warning if the plist
+  is malformed.
+
+### Changed
+
+- **Cross-platform file locking:** `locked_file()` now dispatches between
+  `fcntl.flock` (POSIX), `msvcrt.locking` (Windows), and a thread-only
+  fallback (with a one-time warning) at import time. The README's
+  Windows-not-supported note has been removed.
+- **`ai-sessions.log` reader streams line-by-line:** `parse_sessions()`
+  and `unattributed_log_count()` no longer load the whole log into memory;
+  memory is bounded by the longest single line. Behaviour-equivalent;
+  same quarantine semantics.
+- **Free-text encoding for `note` and `resume_command`:** new writes use
+  percent-encoding (`urllib.parse.quote`) instead of underscore substitution,
+  so literal underscores in user input no longer collide with encoded
+  spaces. Pre-existing log lines without `%` characters continue to decode
+  with the legacy rule. `session_hash` of historical lines is unchanged
+  so amendment records keep working.
+- **Metadata field escaping in `to_log_line`:** the previously-unescaped
+  `project`, `user`, `billing`, `job_id`, `source`, `attr_method`, `tags`,
+  `session_id`, `model_breakdown`, `branch`, `pr_ref`, `pr_state`, and
+  `outcome_resolved_at` fields are now sanitised through `_safe_field`.
+  Whitespace and `=` in any of these can no longer split or smuggle into
+  the space-delimited log line.
+- **Narrow exception types in collectors:** the five `except Exception:`
+  swallows in `collectors/gemini_history.py` were tightened to specific
+  tuples (`OSError`, `json.JSONDecodeError`, `UnicodeDecodeError`,
+  `KeyError`, `TypeError`, `ValueError`, `AttributeError`). Programmer
+  bugs no longer hide as silent `None` returns.
+- **Repositioned framing:** README lead, `pyproject.toml` description, and
+  the root CLI `--help` epilog now all read *"Your AI work leaves a trail.
+  Halyard makes that trail legible, auditable, and client-safe."*
+
 ### Added
+
+- **State integrity (opt-in):** new `halyard.state_integrity` module adds
+  optional SHA-256 verification of trusted state files
+  (`~/.halyard/active`, `~/.halyard/hub`). Off by default — enable with
+  `state_integrity = "hash"` in `halyard.toml` or
+  `HALYARD_STATE_INTEGRITY=hash`. Tampered files raise `IntegrityError`,
+  which `read_active_project()` and `find_hub()` catch and fail soft on
+  (return `None` and log) so a corrupt state file does not crash every
+  collector hook. `halyard doctor` reports the active mode.
+- **`halyard init --no-interactive`:** skip hook auto-installation in CI
+  and unattended setup.
+- **CI install-test workflow:** `.github/workflows/install-test.yml`
+  builds the wheel and exercises `halyard --version`, `halyard init`, and
+  `halyard invoice` in a clean venv on Python 3.11/3.12/3.13.
+- **Dashboard pre-v2.16 POST integrations note:** any external script
+  POSTing to `http://127.0.0.1:7432/api/{start,stop}` must now present
+  the per-install token from `~/.halyard/dashboard.token` via cookie or
+  `X-Halyard-Token` header, with a matching `Host` value of
+  `127.0.0.1:<port>`. Scripts written against the unauthenticated
+  pre-v2.16 dashboard will fail with HTTP 401/400 until updated.
 
 - **v2.26 — Friends of the Sea:** One sea creature per completed project,
   auto-assigned by personality (Whale, Sea Turtle, Dolphin, Octopus, Clownfish,

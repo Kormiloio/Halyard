@@ -92,3 +92,84 @@ def test_uninstall_service_noop_when_plist_absent(
     uninstall_service()
 
     mock_run.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# v2.16 §3 — service_status reports the actual installed port
+# ---------------------------------------------------------------------------
+
+
+def test_service_status_reports_custom_port(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A plist installed with a non-default port surfaces in service_status."""
+    import halyard.service as svc
+
+    fake_plist = tmp_path / "io.kormilo.halyard.plist"
+    monkeypatch.setattr(svc, "PLIST_PATH", fake_plist)
+
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    fake_plist.write_text(svc._plist("halyard", project_dir, 7777))
+
+    # Simulate launchctl reporting the service as loaded.
+    monkeypatch.setattr(
+        "halyard.service.subprocess.run",
+        lambda *a, **kw: subprocess.CompletedProcess(args=a[0], returncode=0, stdout=""),
+    )
+
+    is_running, msg = svc.service_status()
+    assert is_running
+    assert "http://127.0.0.1:7777/" in msg
+
+
+def test_installed_port_falls_back_on_malformed_plist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Malformed plist → warning + DASHBOARD_PORT fallback, not a crash."""
+    import halyard.service as svc
+    from halyard.dashboard import DASHBOARD_PORT
+
+    fake_plist = tmp_path / "io.kormilo.halyard.plist"
+    fake_plist.write_text("<not valid xml")  # garbage
+    monkeypatch.setattr(svc, "PLIST_PATH", fake_plist)
+
+    port = svc._installed_port()
+    assert port == DASHBOARD_PORT
+    captured = capsys.readouterr()
+    assert "Warning" in captured.err
+
+
+def test_installed_port_returns_default_when_plist_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If the plist doesn't exist, _installed_port returns the default constant."""
+    import halyard.service as svc
+    from halyard.dashboard import DASHBOARD_PORT
+
+    fake_plist = tmp_path / "missing.plist"
+    monkeypatch.setattr(svc, "PLIST_PATH", fake_plist)
+    assert svc._installed_port() == DASHBOARD_PORT
+
+
+# ---------------------------------------------------------------------------
+# v2.16 §1 — Jinja template is reachable via the package path
+# ---------------------------------------------------------------------------
+
+
+def test_invoice_template_resolves_via_package_path() -> None:
+    """The Jinja template ships inside the installed package, not the source tree.
+
+    Regression test for the v2.16 C1 bug: previously _template_dir() resolved
+    to `Path(__file__).resolve().parents[2] / "templates"`, which only works
+    when running from a source checkout. After packaging, that path is
+    outside the wheel and `halyard invoice` raised TemplateNotFound.
+    """
+    from pathlib import Path as _Path
+
+    import halyard
+    from halyard import invoicing  # noqa: F401  (just to load the module)
+
+    pkg_root = _Path(halyard.__file__).parent
+    template = pkg_root / "templates" / "invoice.md.j2"
+    assert template.exists(), f"invoice.md.j2 missing at {template}"

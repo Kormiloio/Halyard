@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import plistlib
 import secrets
 import shutil
 import subprocess
@@ -78,6 +79,36 @@ def uninstall_service() -> None:
         PLIST_PATH.unlink()
 
 
+def _installed_port() -> int:
+    """Read the port written into the installed plist's ProgramArguments.
+
+    Returns the parsed port on success.  On any failure (missing file,
+    malformed XML, --port flag absent, non-integer value) falls back to the
+    DASHBOARD_PORT constant and emits a one-line warning so the user knows
+    the reported URL may not match a previously-customized install.
+    """
+    from halyard.dashboard import DASHBOARD_PORT
+
+    if not PLIST_PATH.exists():
+        return DASHBOARD_PORT
+    try:
+        with PLIST_PATH.open("rb") as fh:
+            data = plistlib.load(fh)
+        if not isinstance(data, dict):
+            return DASHBOARD_PORT
+        args = data.get("ProgramArguments") or []
+        for i, token in enumerate(args):
+            if token == "--port" and i + 1 < len(args):
+                return int(args[i + 1])
+    except (OSError, plistlib.InvalidFileException, ValueError) as exc:
+        print(
+            f"[halyard] Warning: could not parse port from {PLIST_PATH} "
+            f"({type(exc).__name__}); reporting default {DASHBOARD_PORT}.",
+            file=sys.stderr,
+        )
+    return DASHBOARD_PORT
+
+
 def service_status() -> tuple[bool, str]:
     """Return (is_running, message).
 
@@ -95,10 +126,9 @@ def service_status() -> tuple[bool, str]:
     )
     if result.returncode != 0:
         return False, "installed but not running — run: launchctl load -w " + str(PLIST_PATH)
-    from halyard.dashboard import DASHBOARD_PORT
-
+    port = _installed_port()
     token_note = f" | token: {_token_path()}"
-    return True, f"http://127.0.0.1:{DASHBOARD_PORT}/{token_note}"
+    return True, f"http://127.0.0.1:{port}/{token_note}"
 
 
 def _plist(halyard_exe: str, project_dir: Path, port: int) -> str:

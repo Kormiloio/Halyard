@@ -17,13 +17,20 @@ def register(app: typer.Typer) -> None:
         hub: bool = typer.Option(
             False, "--hub", help="Also designate this directory as the global hub for all tools."
         ),
+        no_interactive: bool = typer.Option(
+            False,
+            "--no-interactive",
+            help="Skip hook auto-installation and any future interactive prompts. "
+            "Use in CI or unattended setup.",
+        ),
     ) -> None:
         """Scaffold a new Halyard project in the current directory."""
         from halyard.cli_hooks import _auto_install_detected_hooks
         from halyard.orchestration import scaffold_project
 
         scaffold_project(Path.cwd(), hub=hub)
-        _auto_install_detected_hooks()
+        if not no_interactive:
+            _auto_install_detected_hooks()
 
     @app.command()
     def hub(
