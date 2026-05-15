@@ -21,12 +21,16 @@ def test_status_bar_shows_chip_when_a_check_fails(tmp_path: Path) -> None:
     from halyard.tui.app import HalyardApp
     from halyard.tui.store import SessionStore
 
-    # No ai-sessions.log in tmp_path → build_health_checks yields an error.
     store = SessionStore(tmp_path / "ai-sessions.log")
     app = HalyardApp(store=store)
+    # Drive the chip from a controlled health result, not from whatever
+    # build_health_checks decides about a temp dir on CI.
+    app._health_checks = lambda: [  # type: ignore[method-assign]
+        HealthCheck("AI session log", "error", "Missing ai-sessions.log"),
+        HealthCheck("Project", "healthy", "ok"),
+    ]
     txt = app._status_text()
-    assert "⚠" in txt
-    assert "press h" in txt
+    assert "⚠ 1 issue — press h" in txt
 
 
 def test_status_bar_clean_when_healthy(tmp_path: Path) -> None:
@@ -34,9 +38,12 @@ def test_status_bar_clean_when_healthy(tmp_path: Path) -> None:
     from halyard.tui.app import HalyardApp
     from halyard.tui.store import SessionStore
 
-    _good_project(tmp_path)
     store = SessionStore(tmp_path / "ai-sessions.log")
     app = HalyardApp(store=store)
+    app._health_checks = lambda: [  # type: ignore[method-assign]
+        HealthCheck("Project", "healthy", "ok"),
+        HealthCheck("Timeclock", "neutral", "not started"),
+    ]
     assert "⚠" not in app._status_text()
 
 
