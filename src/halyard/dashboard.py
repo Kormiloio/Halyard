@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import hmac
 import html
 import socket
 import webbrowser
@@ -149,7 +150,7 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
 
             # 2.5: Validate token via Cookie or X-Halyard-Token header
             submitted_token = self._extract_token()
-            if submitted_token != _token:
+            if not hmac.compare_digest(submitted_token, _token):
                 self._send_json_error(HTTPStatus.UNAUTHORIZED, "missing or invalid token")
                 return
 

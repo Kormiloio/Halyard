@@ -282,7 +282,20 @@ layers must read from this local source of truth; they do not replace it.
     in `openspec/changes/v2.40-authenticated-state/`.
     **Status: complete (1003 tests passing).**
 
-20. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+20. **v2.41 — Trust hardening:** residual security-review items. Pricing
+    fetch origin-pinned (final URL must be `https://raw.githubusercontent.com`
+    or the body is rejected before parsing); `_halyard_exe()` resolves via
+    `which` first and only trusts `argv[0]` under a venv/site/system
+    prefix (no writable-dir wrapper persisted into tool configs);
+    dashboard token compared in constant time; `cli_hooks` refuses to
+    overwrite an existing-but-unparseable user config (raises the
+    actionable `HookWriteError` instead of clobbering); `docs/trust-model.md`
+    now documents the dashboard-local-only posture and every user config
+    file Halyard writes. Spec in
+    `openspec/changes/v2.41-trust-hardening/`.
+    **Status: complete (1014 tests passing).**
+
+21. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

@@ -15,19 +15,41 @@ from rich.console import Console
 console = Console()
 
 
-def _halyard_exe() -> str:
-    """Return the absolute path to the running halyard executable.
+def _is_trusted_exe_path(path: Path) -> bool:
+    """True if *path* lives under a trusted install prefix.
 
-    Prefers the resolved sys.argv[0] so that hooks embed the exact binary that
-    ran `install-*-hook`, rather than relying on PATH being set up correctly
-    in the hook execution environment (e.g. Gemini CLI, Cursor, Claude Code).
+    `argv[0]` is only trustworthy when it resolves into a real
+    venv/site/system install — not a writable or temp dir where a
+    `halyard`-named wrapper could be dropped and then persisted into
+    tool configs as a per-session executed command.
     """
-    candidate = Path(sys.argv[0]).resolve()
-    if candidate.name in ("halyard", "halyard.exe") and candidate.exists():
-        return str(candidate)
+    trusted_roots = {
+        Path(sys.prefix).resolve(),
+        Path(sys.base_prefix).resolve(),
+        Path(sys.executable).resolve().parent,
+    }
+    return any(root == path or root in path.parents for root in trusted_roots)
+
+
+def _halyard_exe() -> str:
+    """Return the path hooks should use to invoke halyard.
+
+    Resolution order (most→least trustworthy):
+    1. ``shutil.which("halyard")`` — the normal installed entrypoint.
+    2. resolved ``sys.argv[0]`` *only if* it lies under a trusted prefix
+       (venv/site/system), so a writable-dir wrapper can't be embedded.
+    3. the literal ``"halyard"`` — trust PATH at hook-run time.
+    """
     found = shutil.which("halyard")
     if found:
         return str(Path(found).resolve())
+    candidate = Path(sys.argv[0]).resolve()
+    if (
+        candidate.name in ("halyard", "halyard.exe")
+        and candidate.exists()
+        and _is_trusted_exe_path(candidate)
+    ):
+        return str(candidate)
     return "halyard"  # fallback: trust PATH at hook-run time
 
 
@@ -81,6 +103,27 @@ def _cc_hook_cmd_key(cmd: str) -> str:
     return f"{Path(parts[0]).name} {' '.join(parts[1:])}" if parts else cmd
 
 
+def _resolve_claude_hook_entries(entries: list[dict[str, Any]], exe: str) -> list[dict[str, Any]]:
+    """Return a deep copy of Claude hook entries with the halyard binary resolved."""
+    resolved_entries: list[dict[str, Any]] = []
+    for entry in entries:
+        resolved_entry: dict[str, Any] = {**entry}
+        raw_hooks = entry.get("hooks")
+        if isinstance(raw_hooks, list):
+            resolved_hooks: list[dict[str, Any]] = []
+            for hook in raw_hooks:
+                if isinstance(hook, dict) and isinstance(hook.get("command"), str):
+                    command = hook["command"]
+                    if command.startswith("halyard "):
+                        command = command.replace("halyard ", f"{exe} ", 1)
+                    resolved_hooks.append({**hook, "command": command})
+                else:
+                    resolved_hooks.append(hook)
+            resolved_entry["hooks"] = resolved_hooks
+        resolved_entries.append(resolved_entry)
+    return resolved_entries
+
+
 def _cc_hook_commands_from_path(path: Path) -> set[str]:
     """Return normalised command keys from a Claude settings file."""
     if not path.exists():
@@ -113,15 +156,18 @@ class HookWriteError(OSError):
     commands catch this specifically and surface the actionable message.
     """
 
-    def __init__(self, settings_path: Path, original: OSError) -> None:
+    def __init__(self, settings_path: Path, original: OSError, message: str | None = None) -> None:
         self.settings_path = settings_path
         self.original = original
-        super().__init__(
-            f"could not write {settings_path} — {original.strerror}. "
-            "The file may be read-only, or managed by an MDM, "
-            "config-management, or dotfile tool that deploys it read-only. "
-            "Fix the file's write permission, or add the hook manually."
-        )
+        if message is not None:
+            super().__init__(message)
+        else:
+            super().__init__(
+                f"could not write {settings_path} — {original.strerror}. "
+                "The file may be read-only, or managed by an MDM, "
+                "config-management, or dotfile tool that deploys it read-only. "
+                "Fix the file's write permission, or add the hook manually."
+            )
 
 
 def _write_settings(settings_path: Path, content: str) -> None:
@@ -135,6 +181,44 @@ def _write_settings(settings_path: Path, content: str) -> None:
         settings_path.write_text(content)
     except OSError as exc:
         raise HookWriteError(settings_path, exc) from exc
+
+
+def _load_existing_settings(settings_path: Path) -> dict[str, Any]:
+    """Return the parsed settings dict, or {} for absent/empty files.
+
+    A non-empty file that does not parse as JSON (or is unreadable) is
+    NOT silently reset to {} — that would overwrite a user's
+    hand-maintained config (e.g. JSONC with comments). Raise
+    HookWriteError instead: the explicit installer surfaces a clean
+    message, and the best-effort auto-install path (except OSError)
+    simply skips rather than destroying the file.
+    """
+    if not settings_path.exists():
+        return {}
+    try:
+        text = settings_path.read_text()
+    except OSError as exc:
+        raise HookWriteError(settings_path, exc) from exc
+    if not text.strip():
+        return {}
+    try:
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HookWriteError(
+            settings_path,
+            exc if isinstance(exc, OSError) else OSError(str(exc)),
+            message=(
+                f"{settings_path} exists but is not valid JSON ({exc}); "
+                "refusing to overwrite it. Fix or remove the file, then re-run."
+            ),
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise HookWriteError(
+            settings_path,
+            OSError("not a JSON object"),
+            message=(f"{settings_path} is not a JSON object; refusing to overwrite it."),
+        )
+    return parsed
 
 
 def _run_installer(fn: Callable[[], None]) -> None:
@@ -163,18 +247,13 @@ def _do_install_hook_claude(global_: bool = False) -> None:
 
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
-    existing: dict[str, Any] = {}
-    if settings_path.exists():
-        try:
-            existing = json.loads(settings_path.read_text())
-        except (json.JSONDecodeError, ValueError):
-            existing = {}
+    existing: dict[str, Any] = _load_existing_settings(settings_path)
 
     exe = _halyard_exe()
 
     proposed_keys: set[str] = set()
     for entries in _CC_HOOKS.values():
-        resolved = json.loads(json.dumps(entries).replace("halyard ", f"{exe} ", 1))
+        resolved = _resolve_claude_hook_entries(entries, exe)
         cmd = resolved[0]["hooks"][0]["command"]
         proposed_keys.add(_cc_hook_cmd_key(cmd))
 
@@ -191,7 +270,7 @@ def _do_install_hook_claude(global_: bool = False) -> None:
     added: list[str] = []
 
     for event, entries in _CC_HOOKS.items():
-        resolved = json.loads(json.dumps(entries).replace("halyard ", f"{exe} ", 1))
+        resolved = _resolve_claude_hook_entries(entries, exe)
         current = hooks.setdefault(event, [])
         command = resolved[0]["hooks"][0]["command"]
         new_key = _cc_hook_cmd_key(command)
@@ -216,12 +295,7 @@ def _do_install_hook_gemini() -> None:
     settings_path = Path.home() / ".gemini" / "settings.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
-    existing: dict[str, Any] = {}
-    if settings_path.exists():
-        try:
-            existing = json.loads(settings_path.read_text())
-        except (json.JSONDecodeError, ValueError):
-            existing = {}
+    existing: dict[str, Any] = _load_existing_settings(settings_path)
 
     hooks = existing.setdefault("hooks", {})
     added: list[str] = []
@@ -254,12 +328,7 @@ def _do_install_hook_cursor() -> None:
     settings_path = Path.home() / ".cursor" / "hooks.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
-    existing: dict[str, Any] = {}
-    if settings_path.exists():
-        try:
-            existing = json.loads(settings_path.read_text())
-        except (json.JSONDecodeError, ValueError):
-            existing = {}
+    existing: dict[str, Any] = _load_existing_settings(settings_path)
 
     existing.setdefault("version", 1)
     hooks = existing.setdefault("hooks", {})
@@ -320,12 +389,7 @@ def _do_install_vscode_tasks() -> Path:
     settings_path = Path.cwd() / ".vscode" / "tasks.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
-    existing: dict[str, Any] = {}
-    if settings_path.exists():
-        try:
-            existing = json.loads(settings_path.read_text())
-        except (json.JSONDecodeError, ValueError):
-            existing = {}
+    existing: dict[str, Any] = _load_existing_settings(settings_path)
 
     existing.setdefault("version", "2.0.0")
     tasks = existing.setdefault("tasks", [])

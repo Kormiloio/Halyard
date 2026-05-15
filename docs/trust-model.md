@@ -120,3 +120,46 @@ crashing) and the next write through the Halyard CLI regenerates the key
 and sidecar. To reset deliberately, set `state_integrity = "off"`, run a
 command that rewrites the state (e.g. start/stop the timer), then
 re-enable `hmac`.
+
+## Local dashboard
+
+`halyard dashboard` / the background service run a small HTTP server that
+is **bound to `127.0.0.1` only** — it is never exposed beyond the
+loopback interface. It is not a remote service and must not be put behind
+a public reverse proxy.
+
+Protections on that server:
+
+- `Host` is validated against `127.0.0.1`/`localhost` (blocks
+  DNS-rebinding); `Origin`/`Referer` are checked when present.
+- State-changing actions are POST-only and require a 256-bit token,
+  delivered via an `HttpOnly; SameSite=Strict` cookie or the
+  `X-Halyard-Token` header, compared in constant time. The token lives
+  in a `0600` file under `~/.halyard/`.
+- POST bodies are size-capped.
+
+Residual risk: because it is a local server, **another process running
+as your user can still reach it** and read the token file. The dashboard
+is a convenience surface for the local user, not a security boundary
+against local-account compromise.
+
+## Files Halyard writes
+
+Halyard creates or appends to these user-owned files. It **preserves
+existing keys** (it merges, it does not template over your config) and
+**refuses to overwrite a file that exists but does not parse as JSON**
+(it errors with an actionable message instead of destroying it):
+
+- `~/.claude/settings.json` and `<project>/.claude/settings.json` —
+  Claude Code hook entries.
+- `~/.gemini/settings.json` — Gemini CLI hook entries.
+- `~/.cursor/hooks.json` — Cursor hook entries.
+- `<project>/.vscode/tasks.json` — VS Code manual-capture tasks.
+- `<project>/halyard.toml`, `clients.toml`, `projects.toml`,
+  `time.timeclock`, `ai-sessions.log`, `ai-plans.toml`,
+  `.gitignore` — created by `halyard init` in the project directory.
+- `~/.halyard/` — `active`, `hub`, optional integrity sidecars/key,
+  the dashboard token, the SQLite read cache.
+
+Halyard never writes outside the user's home, the project directory, or
+the system temp dir.

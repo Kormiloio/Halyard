@@ -200,6 +200,7 @@ def test_update_pricing_success(tmp_path: Path) -> None:
     mock_resp.read.return_value = _VALID_TOML.encode()
     mock_resp.__enter__ = lambda s: s
     mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.geturl.return_value = pricing_mod._REMOTE_URL
 
     with (
         patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
@@ -235,6 +236,7 @@ def test_update_pricing_validation_too_few_models(tmp_path: Path) -> None:
     mock_resp.read.return_value = toml.encode()
     mock_resp.__enter__ = lambda s: s
     mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.geturl.return_value = pricing_mod._REMOTE_URL
 
     with (
         patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
@@ -258,6 +260,7 @@ def test_update_pricing_validation_non_positive_price(tmp_path: Path) -> None:
     mock_resp.read.return_value = toml.encode()
     mock_resp.__enter__ = lambda s: s
     mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.geturl.return_value = pricing_mod._REMOTE_URL
 
     with (
         patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
@@ -277,6 +280,7 @@ def test_update_pricing_missing_models_table(tmp_path: Path) -> None:
     mock_resp.read.return_value = toml.encode()
     mock_resp.__enter__ = lambda s: s
     mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.geturl.return_value = pricing_mod._REMOTE_URL
 
     with (
         patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
@@ -296,6 +300,7 @@ def test_update_pricing_atomic_replaces_existing(tmp_path: Path) -> None:
     mock_resp.read.return_value = _VALID_TOML.encode()
     mock_resp.__enter__ = lambda s: s
     mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.geturl.return_value = pricing_mod._REMOTE_URL
 
     with (
         patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
@@ -364,6 +369,7 @@ def test_update_pricing_rejects_oversized_multiplier(tmp_path: Path) -> None:
     mock_resp.read.return_value = bad.encode()
     mock_resp.__enter__ = lambda s: s
     mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.geturl.return_value = pricing_mod._REMOTE_URL
     with (
         patch.object(pricing_mod, "_LOCAL_PRICING_FILE", tmp_path / "p.toml"),
         patch("urllib.request.urlopen", return_value=mock_resp),

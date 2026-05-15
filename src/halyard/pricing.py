@@ -12,6 +12,7 @@ import sys
 import tempfile
 import tomllib
 import urllib.error
+import urllib.parse
 import urllib.request
 from contextlib import suppress
 from datetime import datetime
@@ -55,7 +56,8 @@ _CACHE_WRITE_MULTIPLIER = 1.25  # cache writes = 125% of input price
 _MAX_MULTIPLIER = 10.0
 
 _LOCAL_PRICING_FILE = Path.home() / ".halyard" / "pricing.toml"
-_REMOTE_URL = "https://raw.githubusercontent.com/Kormiloio/Halyard/main/pricing/models.toml"
+_REMOTE_HOST = "raw.githubusercontent.com"
+_REMOTE_URL = f"https://{_REMOTE_HOST}/Kormiloio/Halyard/main/pricing/models.toml"
 
 # Cached merged rate table and per-model multiplier table; computed once per
 # process from a single local-file read. Both are invalidated together via
@@ -254,6 +256,7 @@ def update_pricing(timeout: int = 5, accept_changed: bool = False) -> tuple[int,
             headers={"User-Agent": "halyard/update-pricing"},
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
+            final_url = resp.geturl()
             body = resp.read()
     except urllib.error.URLError as exc:
         raise PricingFetchError(f"could not fetch pricing table — {exc.reason}") from exc
@@ -261,6 +264,13 @@ def update_pricing(timeout: int = 5, accept_changed: bool = False) -> tuple[int,
         raise PricingFetchError("could not fetch pricing table — connection timed out") from exc
     except OSError as exc:
         raise PricingFetchError(f"could not fetch pricing table — {exc}") from exc
+
+    parsed = urllib.parse.urlparse(final_url)
+    if parsed.scheme != "https" or parsed.hostname != _REMOTE_HOST:
+        raise PricingFetchError(
+            f"pricing table served from unexpected origin: {final_url!r} "
+            f"(expected https://{_REMOTE_HOST})"
+        )
 
     try:
         content = body.decode("utf-8")

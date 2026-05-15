@@ -65,6 +65,7 @@ def _mock_resp(body: bytes) -> MagicMock:
     mock.read.return_value = body
     mock.__enter__ = lambda s: s
     mock.__exit__ = MagicMock(return_value=False)
+    mock.geturl.return_value = pricing_mod._REMOTE_URL
     return mock
 
 
