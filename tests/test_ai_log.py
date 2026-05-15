@@ -736,3 +736,59 @@ def test_read_active_project_handles_partial_content(
     active.write_text("")  # simulates truncated write before rename completes
 
     assert read_active_project() is None
+
+
+# ---------------------------------------------------------------------------
+# Streaming parse — equivalence and large-log smoke
+# ---------------------------------------------------------------------------
+
+
+def test_streaming_parse_matches_baseline(tmp_path: Path) -> None:
+    """Streaming parse_sessions() returns the same shape as a hand-built baseline."""
+    log = tmp_path / AI_LOG_FILENAME
+    log.write_text(
+        "; comment line — ignored\n"
+        "\n"
+        "s 2026-05-09T10:00:00 2026-05-09T10:15:00 claude-code sonnet 100 50 0.0010 "
+        "project=p1\n"
+        "s 2026-05-09T11:00:00 2026-05-09T11:30:00 cursor sonnet 200 80 0.0020 "
+        "project=p2\n"
+        "a 0000000bad00 project=spoof\n"  # amendment for nonexistent session — ignored
+    )
+    sessions = parse_sessions(tmp_path)
+    assert len(sessions) == 2
+    assert sessions[0].project == "p1"
+    assert sessions[1].project == "p2"
+
+
+def test_streaming_parse_quarantines_malformed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Streaming parse still quarantines malformed s-lines."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    log = tmp_path / AI_LOG_FILENAME
+    log.write_text(
+        "s 2026-05-09T10:00:00 2026-05-09T10:15:00 claude-code sonnet 100 50 0.0010\n"
+        "s not-a-real-line\n"
+    )
+    sessions = parse_sessions(tmp_path)
+    assert len(sessions) == 1
+    quarantine = tmp_path / ".halyard" / "quarantine.log"
+    assert quarantine.exists()
+    assert "s not-a-real-line" in quarantine.read_text()
+
+
+def test_streaming_parse_large_log_smoke(tmp_path: Path) -> None:
+    """A 5k-line synthetic log parses cleanly and returns the right count."""
+    n = 5000
+    log = tmp_path / AI_LOG_FILENAME
+    with log.open("w", encoding="utf-8") as fh:
+        fh.write("; halyard test log\n")
+        for i in range(n):
+            fh.write(
+                f"s 2026-05-09T10:{i // 60 % 60:02d}:{i % 60:02d} "
+                f"2026-05-09T10:{(i + 1) // 60 % 60:02d}:{(i + 1) % 60:02d} "
+                f"claude-code sonnet 100 50 0.0010 project=p{i % 7}\n"
+            )
+    sessions = parse_sessions(tmp_path)
+    assert len(sessions) == n

@@ -414,6 +414,20 @@ def append_session(project_dir: Path, session: AiSession) -> None:
         pass
 
 
+def _iter_log_lines(path: Path) -> Generator[str, None, None]:
+    """Yield stripped, non-comment, non-empty lines from a log file.
+
+    Streaming reader: memory is bounded by the longest single line, not by
+    total file size. Comment and blank lines are filtered here so callers
+    don't have to repeat the check.
+    """
+    with path.open("r", encoding="utf-8") as fh:
+        for raw_line in fh:
+            line = raw_line.strip()
+            if line and not line.startswith(";"):
+                yield line
+
+
 def parse_sessions(project_dir: Path) -> list[AiSession]:
     # v2.17 task 2.4: fold ``a`` amendment records in file order (last-write-wins per key).
     #
@@ -432,18 +446,17 @@ def parse_sessions(project_dir: Path) -> list[AiSession]:
     sessions_by_hash: dict[str, AiSession] = {}  # first occurrence per hash for amendment lookup
     amendments_by_hash: dict[str, list[Amendment]] = defaultdict(list)
 
-    for raw_line in log_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith(";"):
-            continue
+    for line in _iter_log_lines(log_path):
         if line.startswith("s "):
-            parsed = AiSession.from_log_line(line)
+            parsed, error = _parse_line_result(line)
             if parsed is not None:
                 h = session_hash(line)
                 parsed._raw_hash = h
                 if h not in sessions_by_hash:
                     sessions_by_hash[h] = parsed
                 sessions.append(parsed)
+            elif error is not None:
+                _write_quarantine(line, error)
         elif line.startswith("a "):
             amendment = parse_amendment(line)
             if amendment is not None:
@@ -809,9 +822,12 @@ def unattributed_log_count() -> int:
     path = unattributed_log_path()
     if not path.exists():
         return 0
-    return sum(
-        1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip().startswith("s ")
-    )
+    count = 0
+    with path.open("r", encoding="utf-8") as fh:
+        for raw_line in fh:
+            if raw_line.strip().startswith("s "):
+                count += 1
+    return count
 
 
 def maybe_show_dashboard_hint() -> None:
