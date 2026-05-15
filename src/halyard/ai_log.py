@@ -1,4 +1,9 @@
-"""AI session log — writer, parser, and project discovery for ai-sessions.log."""
+"""AI session log — writer, parser, and project discovery for ai-sessions.log.
+
+File locking is cross-platform: ``fcntl.flock`` on POSIX,
+``msvcrt.locking`` on Windows, and a thread-only fallback elsewhere
+(with a one-time warning). See ``_acquire_lock`` / ``_release_lock``.
+"""
 
 from __future__ import annotations
 
@@ -7,26 +12,56 @@ import re
 import sys
 import threading
 import traceback
+import warnings
 from collections import defaultdict
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO
 
-if sys.platform == "win32":
-    import warnings
+# Lock backend dispatch — selected once at import time.
+_LOCK_LENGTH = 0x7FFFFFFF  # ~2 GiB; covers any plausible log size on Windows.
 
-    warnings.warn(
-        "Halyard: file locking (fcntl) is not available on Windows. "
-        "Concurrent writes are unsafe. Consider using WSL2.",
-        RuntimeWarning,
-        stacklevel=2,
-    )
-    _fcntl = None
+_acquire_lock: Callable[[int], None]
+_release_lock: Callable[[int], None]
+
+if sys.platform == "win32":
+    import msvcrt as _msvcrt
+
+    def _acquire_lock(fd: int) -> None:
+        _msvcrt.locking(fd, _msvcrt.LK_LOCK, _LOCK_LENGTH)
+
+    def _release_lock(fd: int) -> None:
+        _msvcrt.locking(fd, _msvcrt.LK_UNLCK, _LOCK_LENGTH)
+
 else:
-    import fcntl as _fcntl
+    try:
+        import fcntl as _fcntl
+
+        def _acquire_lock(fd: int) -> None:
+            _fcntl.flock(fd, _fcntl.LOCK_EX)
+
+        def _release_lock(fd: int) -> None:
+            _fcntl.flock(fd, _fcntl.LOCK_UN)
+
+    except ImportError:
+        _LOCK_WARNED = False
+
+        def _acquire_lock(fd: int) -> None:
+            global _LOCK_WARNED
+            if not _LOCK_WARNED:
+                warnings.warn(
+                    "Halyard: no OS-level file locking available on this platform; "
+                    "concurrent writes from multiple processes are unsafe.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                _LOCK_WARNED = True
+
+        def _release_lock(fd: int) -> None:
+            pass
 
 SPEC_URL = "https://halyard.dev/spec/ai-sessions/v1"
 HEADER = (
@@ -72,11 +107,13 @@ def _log_error(msg: str, exc: Exception) -> None:
 
 @contextmanager
 def locked_file(path: Path, mode: str) -> Generator[IO[str], None, None]:
-    """Open *path* in *mode* with an exclusive flock held for the duration.
+    """Open *path* in *mode* with an exclusive lock held for the duration.
 
-    The parent directory is created if absent.  flock is advisory but
+    The parent directory is created if absent.  The lock is advisory but
     cooperative — all Halyard writers use this helper, so it is sufficient to
-    prevent concurrent appends from interleaving writes.
+    prevent concurrent appends from interleaving writes. The backend
+    (``fcntl.flock`` on POSIX, ``msvcrt.locking`` on Windows) is selected
+    once at import time.
 
     Read paths do not lock: ``parse_sessions`` is allowed to see any consistent
     prefix of the file; the next refresh picks up any session that landed
@@ -87,13 +124,12 @@ def locked_file(path: Path, mode: str) -> Generator[IO[str], None, None]:
     with _PATH_LOCKS_GUARD:
         thread_lock = _PATH_LOCKS.setdefault(lock_key, threading.RLock())
     with thread_lock, open(path, mode, encoding="utf-8") as f:
-        if _fcntl is not None:
-            _fcntl.flock(f.fileno(), _fcntl.LOCK_EX)
+        fd = f.fileno()
+        _acquire_lock(fd)
         try:
             yield f
         finally:
-            if _fcntl is not None:
-                _fcntl.flock(f.fileno(), _fcntl.LOCK_UN)
+            _release_lock(fd)
 
 
 # ---------------------------------------------------------------------------

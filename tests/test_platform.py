@@ -27,17 +27,48 @@ def test_locked_file_posix_uses_flock(tmp_path: Path) -> None:
     assert path.read_text() == "hello"
 
 
-def test_locked_file_windows_noop(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """On simulated Windows, locked_file still writes without flock."""
+def test_locked_file_with_noop_lock_backend(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When the lock backend is a no-op (unknown platform), writes still succeed."""
     import halyard.ai_log as ai_log_mod
 
-    monkeypatch.setattr(ai_log_mod, "_fcntl", None)
+    monkeypatch.setattr(ai_log_mod, "_acquire_lock", lambda _fd: None)
+    monkeypatch.setattr(ai_log_mod, "_release_lock", lambda _fd: None)
     from halyard.ai_log import locked_file
 
     path = tmp_path / "test.log"
     with locked_file(path, "w") as f:
-        f.write("windows-noop")
-    assert path.read_text() == "windows-noop"
+        f.write("noop-lock")
+    assert path.read_text() == "noop-lock"
+
+
+def test_locked_file_releases_on_exception(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """If the caller raises inside the with block, the lock is still released."""
+    import halyard.ai_log as ai_log_mod
+
+    acquired: list[int] = []
+    released: list[int] = []
+    monkeypatch.setattr(ai_log_mod, "_acquire_lock", lambda fd: acquired.append(fd))
+    monkeypatch.setattr(ai_log_mod, "_release_lock", lambda fd: released.append(fd))
+    from halyard.ai_log import locked_file
+
+    path = tmp_path / "test.log"
+    with pytest.raises(RuntimeError, match="boom"), locked_file(path, "w"):
+        raise RuntimeError("boom")
+
+    assert len(acquired) == 1
+    assert acquired == released
+
+
+def test_lock_backend_is_bound() -> None:
+    """The acquire/release helpers are bound to callables at import time."""
+    import halyard.ai_log as ai_log_mod
+
+    assert callable(ai_log_mod._acquire_lock)
+    assert callable(ai_log_mod._release_lock)
 
 
 # ---------------------------------------------------------------------------
