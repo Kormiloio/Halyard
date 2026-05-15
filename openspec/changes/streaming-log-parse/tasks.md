@@ -9,7 +9,7 @@
 - [x] Rewrite `unattributed_log_count()` (no `_session_count_in` exists; this
   was the only sibling reader still using `read_text().splitlines()`) to
   iterate the file directly.
-- [ ] DROPPED: extracting an amendment-folding helper from
+- [x] DROPPED: extracting an amendment-folding helper from
   `_effective_session_lines()`. Its callers already have `content` fully in
   memory (built inside a `locked_file` block), so the streaming gain doesn't
   apply. Left untouched.

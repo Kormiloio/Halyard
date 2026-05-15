@@ -38,5 +38,5 @@ Implementation checklist for v2.12 — Glass Cockpit Background Service.
 
 ## 6. Documentation
 
-- [ ] 6.1 Update README with `halyard service install` quickstart.
-- [ ] 6.2 Add bookmark tip for `http://localhost:7432`.
+- [x] 6.1 Update README with `halyard service install` quickstart.
+- [x] 6.2 Add bookmark tip for `http://localhost:7432`.

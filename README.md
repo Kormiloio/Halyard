@@ -146,9 +146,9 @@ estimate is a measurement.
 
 ## Quickstart
 
-> **Platform:** macOS and Linux. Windows is not yet supported (file locking
-> requires POSIX `fcntl`). WSL2 works. The `halyard install-service` command
-> is macOS-only (uses `launchctl`).
+> **Platform:** macOS, Linux, and Windows. The `halyard install-service`
+> command is macOS-only (uses `launchctl`); other platforms can run
+> `halyard dashboard` in a long-lived terminal instead.
 
 ```bash
 pipx install halyard
@@ -165,6 +165,10 @@ halyard log "what did I spend this month?"
 halyard log "what did Cursor cost this week?"
 halyard report
 halyard dashboard
+
+# Or run the dashboard as a background launchd service (macOS):
+halyard install-service
+# Dashboard then listens on http://localhost:7432 — bookmark it.
 
 # Interactive REPL — natural-language queries over your work data
 halyard

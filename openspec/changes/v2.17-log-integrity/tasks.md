@@ -85,15 +85,21 @@ Implementation checklist for v2.17 — Log Integrity.
 - [x] 6.1 Add `_log_error(msg, exc)` helper that writes to
   `~/.halyard/halyard.log`.
   — Implemented in `ai_log.py`.
-- [ ] 6.2 Replace `except Exception: pass` in cli.py:478, cli.py:1296,
+- [x] 6.2 Replace `except Exception: pass` in cli.py:478, cli.py:1296,
   cli.py:2432, orchestration.py:345, orchestration.py:361,
   config_history.py:248, sync.py:69, and the gemini collector swallows.
-  — Core CLI/orchestration/config/sync paths are covered; collector parse
-  helpers still intentionally return `None` quietly and need a focused
-  policy pass before this can be closed.
-- [ ] 6.3 Each replacement prints a `[yellow]Warning:[/]` line referencing
+  — Core CLI/orchestration/config/sync paths covered earlier. Collector
+  parse helpers (`gemini_history.py`) now use narrow exception tuples
+  (`OSError`, `json.JSONDecodeError`, `UnicodeDecodeError`, `KeyError`,
+  `TypeError`, `ValueError`, `AttributeError`) so programmer bugs surface
+  as real exceptions instead of being swallowed.
+- [x] 6.3 Each replacement prints a `[yellow]Warning:[/]` line referencing
   the log path.
-  — Core user-facing paths print warnings; collector parse helpers remain open.
+  — Done for user-facing paths. Policy decision for collector parse
+  helpers: they fire on every hook invocation, so a yellow warning per
+  malformed history file would be unacceptable noise. Silent return on
+  the narrowed exception set is the correct behavior; unexpected types
+  now propagate rather than being hidden.
 - [x] 6.4 Test: malformed log line in backfill produces visible warning
   and a log entry.
   — `tests/test_log_integrity.py::test_backfill_error_logs_to_halyard_log_and_warns`

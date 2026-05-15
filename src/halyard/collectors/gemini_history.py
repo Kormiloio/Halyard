@@ -79,7 +79,7 @@ def parse_session_file(path: Path) -> GeminiSessionSummary | None:
     """Parse a Gemini CLI history JSON. Returns None on any error."""
     try:
         data: dict[str, object] = json.loads(path.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
         return None
 
     try:
@@ -166,7 +166,7 @@ def parse_session_file(path: Path) -> GeminiSessionSummary | None:
 
         return summary
 
-    except Exception:
+    except (KeyError, TypeError, ValueError, AttributeError):
         return None
 
 
@@ -193,7 +193,7 @@ def find_session_file(session_id: str) -> Path | None:
             data = json.loads(path.read_text())
             if str(data.get("sessionId") or "") == session_id:
                 exact.append(path)
-        except Exception:
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
             continue
     if exact:
         return max(exact, key=lambda p: p.stat().st_mtime)
@@ -213,7 +213,7 @@ def project_dir_for_slug(slug: str) -> Path | None:
         return None
     try:
         return Path(pointer.read_text().strip())
-    except Exception:
+    except (OSError, UnicodeDecodeError):
         return None
 
 
@@ -225,5 +225,5 @@ def _parse_iso(s: str) -> datetime | None:
             .astimezone(tz=None)
             .replace(tzinfo=None)
         )
-    except Exception:
+    except (TypeError, ValueError):
         return None
