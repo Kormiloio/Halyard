@@ -306,3 +306,68 @@ def test_update_pricing_atomic_replaces_existing(tmp_path: Path) -> None:
     assert local.read_text() == _VALID_TOML
     assert local.read_text() != original_content
     _reset_cache()
+
+
+# ---------------------------------------------------------------------------
+# v2.38 — Review hardening regressions
+# ---------------------------------------------------------------------------
+
+
+def test_cost_is_decimal_deterministic() -> None:
+    """Same inputs → identical cost regardless of accumulation order."""
+    _reset_cache()
+    a = calculate_cost("gemini-3-flash", input_tokens=333_333, output_tokens=777_777)
+    b = calculate_cost("gemini-3-flash", input_tokens=333_333, output_tokens=777_777)
+    assert a == b
+    # Quantized to exactly 4 decimal places, ROUND_HALF_UP.
+    assert a == round(a, 4)
+    _reset_cache()
+
+
+def test_local_pricing_oserror_warns(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    _reset_cache()
+    local = tmp_path / "pricing.toml"
+    local.write_text("[models.x]\ninput=1\noutput=2\n")
+    with (
+        patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
+        patch.object(pricing_mod.Path, "read_text", side_effect=OSError("boom")),
+    ):
+        table = load_pricing_table()
+    assert table == PRICING
+    assert "using bundled prices" in capsys.readouterr().err
+    _reset_cache()
+
+
+def test_local_multiplier_ceiling_rejected(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _reset_cache()
+    local = tmp_path / "pricing.toml"
+    local.write_text(
+        "[models.claude-sonnet-4-6]\ninput=3.0\noutput=15.0\ncache_write_multiplier = 100000\n"
+    )
+    with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local):
+        cost = calculate_cost("claude-sonnet-4-6", 0, 0, cache_write=1_000_000)
+    # Falls back to default 1.25 multiplier → $3.75, not an inflated number.
+    assert cost == pytest.approx(3.75, abs=1e-4)
+    assert "invalid multiplier" in capsys.readouterr().err
+    _reset_cache()
+
+
+def test_update_pricing_rejects_oversized_multiplier(tmp_path: Path) -> None:
+    _reset_cache()
+    bad = (
+        "[models.a]\ninput=1\noutput=2\n[models.b]\ninput=1\noutput=2\n"
+        "[models.c]\ninput=1\noutput=2\ncache_read_multiplier = 999\n"
+    )
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = bad.encode()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    with (
+        patch.object(pricing_mod, "_LOCAL_PRICING_FILE", tmp_path / "p.toml"),
+        patch("urllib.request.urlopen", return_value=mock_resp),
+        pytest.raises(PricingFetchError, match="invalid cache_read_multiplier"),
+    ):
+        update_pricing()
+    _reset_cache()

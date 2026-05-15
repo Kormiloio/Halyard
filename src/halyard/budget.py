@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import tomli_w
@@ -169,18 +169,20 @@ def set_budget(
 
 
 def _sum_api_spend(sessions: list[AiSession], now: datetime) -> tuple[float, float]:
-    """Return (today_spend, month_spend) for billing=api sessions."""
-    today_spend = 0.0
-    month_spend = 0.0
-    for s in sessions:
-        if s.billing != "api":
-            continue
-        if s.cost_usd <= 0:
-            continue
-        if not s.tokens_available:
-            continue
-        if s.start.date() == now.date():
-            today_spend += s.cost_usd
-        if s.start.year == now.year and s.start.month == now.month:
-            month_spend += s.cost_usd
-    return round(today_spend, 4), round(month_spend, 4)
+    """Return (today_spend, month_spend) for billing=api sessions.
+
+    Uses the shared usage.sum_spend convention (half-open window on session
+    end) so `halyard budget` reconciles with invoicing for the same period.
+    """
+    from halyard.usage import sum_spend
+
+    day_start = datetime(now.year, now.month, now.day)
+    day_end = day_start + timedelta(days=1)
+    month_start = datetime(now.year, now.month, 1)
+    if now.month == 12:
+        month_end = datetime(now.year + 1, 1, 1)
+    else:
+        month_end = datetime(now.year, now.month + 1, 1)
+    today = sum_spend(sessions, period_start=day_start, period_end=day_end)
+    month = sum_spend(sessions, period_start=month_start, period_end=month_end)
+    return today, month

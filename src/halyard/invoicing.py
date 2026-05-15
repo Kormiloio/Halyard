@@ -16,6 +16,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from halyard.ai_log import AiSession, parse_sessions
 from halyard.ai_plans import AiPlan
+from halyard.usage import round_money, sum_spend
 
 # M-3/M-4: Slugs must be lowercase alphanumeric + hyphens only.
 # This prevents path traversal (e.g. slug = "../../etc") and argument
@@ -161,7 +162,7 @@ def generate_invoice(
                 description=description,
                 hours=hours,
                 rate=rate,
-                amount=round(hours * rate, 2),
+                amount=round_money(hours * rate, 2),
             )
         )
 
@@ -173,7 +174,7 @@ def generate_invoice(
                     description="AI usage cost",
                     hours=0.0,
                     rate=0.0,
-                    amount=round(ai_cost, 2),
+                    amount=round_money(ai_cost, 2),
                 )
             )
 
@@ -217,7 +218,7 @@ def generate_invoice(
         due_date=issue_date + timedelta(days=due_days),
         currency=currency,
         line_items=line_items,
-        total=round(sum(item.amount for item in line_items), 2),
+        total=round_money(sum(item.amount for item in line_items), 2),
     )
     rendered = _render_invoice(project_dir, business, client, view)
 
@@ -543,13 +544,13 @@ def _ai_cost_for(
     period_end: datetime,
 ) -> float:
     sessions = parse_sessions(project_dir)
-    return round(
-        sum(
-            session.cost_usd
-            for session in sessions
-            if session.project in project_accounts and period_start <= session.end < period_end
-        ),
-        2,
+    return sum_spend(
+        sessions,
+        period_start=period_start,
+        period_end=period_end,
+        api_only=False,
+        accounts=project_accounts,
+        places=2,
     )
 
 

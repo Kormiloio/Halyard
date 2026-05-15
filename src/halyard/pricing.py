@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 from contextlib import suppress
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 # (input_per_mtok, output_per_mtok)
@@ -49,13 +50,20 @@ PRICING: dict[str, tuple[float, float]] = {
 _CACHE_READ_MULTIPLIER = 0.10  # cache reads = 10% of input price
 _CACHE_WRITE_MULTIPLIER = 1.25  # cache writes = 125% of input price
 
+# A multiplier outside (0, _MAX_MULTIPLIER] is treated as malformed: a runaway
+# value would silently inflate every cached-token cost.
+_MAX_MULTIPLIER = 10.0
+
 _LOCAL_PRICING_FILE = Path.home() / ".halyard" / "pricing.toml"
 _REMOTE_URL = "https://raw.githubusercontent.com/Kormiloio/Halyard/main/pricing/models.toml"
 
-# Cached merged table; computed once per process. Invalidated explicitly via
-# invalidate_pricing_cache() when the user runs `halyard update-pricing`.
-# Short-lived CLI processes never need mid-run invalidation.
+# Cached merged rate table and per-model multiplier table; computed once per
+# process from a single local-file read. Both are invalidated together via
+# invalidate_pricing_cache() when the user runs `halyard update-pricing` so a
+# run can never mix old rates with new multipliers. Short-lived CLI processes
+# never need mid-run invalidation.
 _merged_table: dict[str, tuple[float, float]] | None = None
+_multipliers_table: dict[str, tuple[float, float]] | None = None
 
 
 def _pricing_hash_path() -> Path:
@@ -101,34 +109,104 @@ class PricingFetchError(Exception):
     pass
 
 
+def invalidate_pricing_cache() -> None:
+    """Drop the cached rate and multiplier tables together."""
+    global _merged_table, _multipliers_table
+    _merged_table = None
+    _multipliers_table = None
+
+
 def load_pricing_table() -> dict[str, tuple[float, float]]:
     """Return merged table: local overrides bundled. Cached per process."""
-    global _merged_table
-    if _merged_table is not None:
-        return _merged_table
-
-    local = _load_local_pricing()
-    merged: dict[str, tuple[float, float]] = dict(PRICING)
-    merged.update(local)
-    _merged_table = merged
+    _ensure_tables()
+    assert _merged_table is not None
     return _merged_table
 
 
-def _load_local_pricing() -> dict[str, tuple[float, float]]:
+def _ensure_tables() -> None:
+    """Populate the rate and multiplier caches from one local-file read.
+
+    Resetting _merged_table to None (the test hook) forces both to rebuild,
+    so the two caches can never diverge.
+    """
+    global _merged_table, _multipliers_table
+    if _merged_table is not None and _multipliers_table is not None:
+        return
+    raw = _load_local_raw()
+    merged: dict[str, tuple[float, float]] = dict(PRICING)
+    merged.update(_parse_local_rates(raw))
+    _merged_table = merged
+    _multipliers_table = _parse_local_multipliers(raw)
+
+
+def _load_local_raw() -> dict[str, object] | None:
+    """Read and parse the local pricing TOML. Warn (never raise) on failure."""
     if not _LOCAL_PRICING_FILE.exists():
-        return {}
+        return None
     try:
-        data = tomllib.loads(_LOCAL_PRICING_FILE.read_text())
-        return _parse_models_table(data)
-    except (tomllib.TOMLDecodeError, ValueError) as e:
+        result: dict[str, object] = tomllib.loads(_LOCAL_PRICING_FILE.read_text())
+        return result
+    except (tomllib.TOMLDecodeError, ValueError, OSError) as e:
         print(
             f"[halyard] Warning: {_LOCAL_PRICING_FILE} is invalid — "
-            f"custom pricing ignored. ({e})",
+            f"custom pricing ignored, using bundled prices. ({e})",
+            file=sys.stderr,
+        )
+        return None
+
+
+def _parse_local_rates(raw: dict[str, object] | None) -> dict[str, tuple[float, float]]:
+    if raw is None:
+        return {}
+    try:
+        return _parse_models_table(raw)
+    except ValueError as e:
+        print(
+            f"[halyard] Warning: {_LOCAL_PRICING_FILE} is invalid — "
+            f"custom pricing ignored, using bundled prices. ({e})",
             file=sys.stderr,
         )
         return {}
-    except OSError:
+
+
+def _parse_local_multipliers(
+    raw: dict[str, object] | None,
+) -> dict[str, tuple[float, float]]:
+    """Return {model: (read_mult, write_mult)} for models that override them.
+
+    A multiplier outside (0, _MAX_MULTIPLIER] is rejected and the model falls
+    back to the global default for that side, with a stderr warning.
+    """
+    if raw is None:
         return {}
+    models = raw.get("models")
+    if not isinstance(models, dict):
+        return {}
+    out: dict[str, tuple[float, float]] = {}
+    for name, entry in models.items():
+        if not isinstance(entry, dict):
+            continue
+        read_m = _coerce_multiplier(
+            entry.get("cache_read_multiplier"), _CACHE_READ_MULTIPLIER, name
+        )
+        write_m = _coerce_multiplier(
+            entry.get("cache_write_multiplier"), _CACHE_WRITE_MULTIPLIER, name
+        )
+        out[name] = (read_m, write_m)
+    return out
+
+
+def _coerce_multiplier(val: object, default: float, model: str) -> float:
+    if val is None:
+        return default
+    if not isinstance(val, (int, float)) or not (0 < float(val) <= _MAX_MULTIPLIER):
+        print(
+            f"[halyard] Warning: {_LOCAL_PRICING_FILE} model {model!r} has invalid "
+            f"multiplier {val!r} — using default {default}.",
+            file=sys.stderr,
+        )
+        return default
+    return float(val)
 
 
 def _parse_models_table(data: object) -> dict[str, tuple[float, float]]:
@@ -149,32 +227,6 @@ def _parse_models_table(data: object) -> dict[str, tuple[float, float]]:
             raise ValueError(f"Model {name!r} has non-positive price")
         result[name] = (float(inp), float(out))
     return result
-
-
-def _get_multipliers(data: dict[str, object], model: str) -> tuple[float, float]:
-    """Return (cache_read_mult, cache_write_mult) for a model from raw toml data."""
-    try:
-        models = data.get("models", {})
-        if not isinstance(models, dict):
-            return _CACHE_READ_MULTIPLIER, _CACHE_WRITE_MULTIPLIER
-        entry = models.get(model, {})
-        if not isinstance(entry, dict):
-            return _CACHE_READ_MULTIPLIER, _CACHE_WRITE_MULTIPLIER
-        read_mult = float(entry.get("cache_read_multiplier", _CACHE_READ_MULTIPLIER))
-        write_mult = float(entry.get("cache_write_multiplier", _CACHE_WRITE_MULTIPLIER))
-        return read_mult, write_mult
-    except (TypeError, ValueError):
-        return _CACHE_READ_MULTIPLIER, _CACHE_WRITE_MULTIPLIER
-
-
-def _load_local_toml_raw() -> dict[str, object] | None:
-    if not _LOCAL_PRICING_FILE.exists():
-        return None
-    try:
-        result: dict[str, object] = tomllib.loads(_LOCAL_PRICING_FILE.read_text())
-        return result
-    except tomllib.TOMLDecodeError:
-        return None
 
 
 def pricing_table_age_days() -> int | None:
@@ -245,7 +297,9 @@ def update_pricing(timeout: int = 5, accept_changed: bool = False) -> tuple[int,
             raise PricingFetchError(f"pricing.toml model entry {model_name!r} is not a table")
         for field in ("cache_read_multiplier", "cache_write_multiplier"):
             val = entry.get(field)
-            if val is not None and (not isinstance(val, (int, float)) or float(val) <= 0):
+            if val is not None and (
+                not isinstance(val, (int, float)) or not (0 < float(val) <= _MAX_MULTIPLIER)
+            ):
                 raise PricingFetchError(f"Model {model_name!r} has invalid {field}: {val!r}")
 
     # D-5: check hash before accepting the table.
@@ -281,9 +335,8 @@ def update_pricing(timeout: int = 5, accept_changed: bool = False) -> tuple[int,
     hash_path.parent.mkdir(parents=True, exist_ok=True)
     hash_path.write_text(new_hash + "\n")
 
-    # Invalidate process cache
-    global _merged_table
-    _merged_table = None
+    # Invalidate process cache (rates + multipliers together)
+    invalidate_pricing_cache()
 
     return new_count, updated_count
 
@@ -296,25 +349,26 @@ def calculate_cost(
     cache_write: int = 0,
 ) -> float:
     """Return cost in USD. Returns 0.0 for unknown models."""
-    table = load_pricing_table()
-    if model not in table:
+    _ensure_tables()
+    assert _merged_table is not None and _multipliers_table is not None
+    if model not in _merged_table:
         return 0.0
-    input_rate, output_rate = table[model]
+    input_rate, output_rate = _merged_table[model]
+    read_mult, write_mult = _multipliers_table.get(
+        model, (_CACHE_READ_MULTIPLIER, _CACHE_WRITE_MULTIPLIER)
+    )
 
-    # Per-model multipliers: check local file first, fall back to globals
-    local_raw = _load_local_toml_raw()
-    models_section = local_raw.get("models") if local_raw else None
-    if local_raw and isinstance(models_section, dict) and model in models_section:
-        read_mult, write_mult = _get_multipliers(local_raw, model)
-    else:
-        read_mult, write_mult = _CACHE_READ_MULTIPLIER, _CACHE_WRITE_MULTIPLIER
-
-    cost = (input_tokens * input_rate + output_tokens * output_rate) / 1_000_000
+    # Decimal arithmetic so cost is deterministic and does not accumulate
+    # binary-float error when summed across thousands of sessions.
+    million = Decimal(1_000_000)
+    in_rate = Decimal(str(input_rate))
+    out_rate = Decimal(str(output_rate))
+    cost = (Decimal(input_tokens) * in_rate + Decimal(output_tokens) * out_rate) / million
     if cache_read:
-        cost += (cache_read * input_rate * read_mult) / 1_000_000
+        cost += Decimal(cache_read) * in_rate * Decimal(str(read_mult)) / million
     if cache_write:
-        cost += (cache_write * input_rate * write_mult) / 1_000_000
-    return round(cost, 4)
+        cost += Decimal(cache_write) * in_rate * Decimal(str(write_mult)) / million
+    return float(cost.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP))
 
 
 def model_is_known(model: str) -> bool:

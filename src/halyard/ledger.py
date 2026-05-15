@@ -18,6 +18,7 @@ from typing import Literal
 
 from halyard.ai_log import AiSession
 from halyard.ai_plans import AiPlan
+from halyard.usage import round_money
 
 CostTrust = Literal["captured", "calculated", "allocated", "unallocated", "mixed", "inferred"]
 
@@ -139,9 +140,9 @@ def build_ledger(
             output_tokens=int(b["output_tokens"]),
             cache_read_tokens=int(b["cache_read"]),
             cache_write_tokens=int(b["cache_write"]),
-            direct_usd=round(float(b["direct_usd"]), 4),
-            allocated_usd=round(float(b["allocated_usd"]), 4),
-            total_usd=round(float(b["direct_usd"]) + float(b["allocated_usd"]), 4),
+            direct_usd=round_money(float(b["direct_usd"]), 4),
+            allocated_usd=round_money(float(b["allocated_usd"]), 4),
+            total_usd=round_money(float(b["direct_usd"]) + float(b["allocated_usd"]), 4),
             trust=_trust_label(
                 float(b["direct_usd"]), float(b["allocated_usd"]), int(b["seat_claimed"])
             ),
@@ -154,15 +155,15 @@ def build_ledger(
     ]
 
     unattributed = sum(1 for e in entries if e.project == "(unattributed)")
-    total_direct = round(sum(e.direct_usd for e in entries), 4)
-    total_allocated = round(sum(e.allocated_usd for e in entries), 4)
+    total_direct = round_money(sum(e.direct_usd for e in entries), 4)
+    total_allocated = round_money(sum(e.allocated_usd for e in entries), 4)
 
     return LedgerSummary(
         entries=entries,
         period_label=period_label,
         total_direct_usd=total_direct,
         total_allocated_usd=total_allocated,
-        total_usd=round(total_direct + total_allocated, 4),
+        total_usd=round_money(total_direct + total_allocated, 4),
         unattributed_count=unattributed,
     )
 
@@ -266,7 +267,7 @@ def _allocate_credits(
 
     for sess, inf in plan_sessions:
         if sess.credits is not None and rate is not None:
-            result.append((sess, inf, round(sess.credits * rate, 4)))
+            result.append((sess, inf, round_money(sess.credits * rate, 4)))
         elif plan.monthly_usd is not None:
             # Fall back to minute-based allocation if credits field is absent
             result.append((sess, inf, 0.0))

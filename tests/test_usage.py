@@ -202,3 +202,26 @@ def test_cli_usage_json_output(
     assert "by_model" in payload
     assert "by_tool" in payload
     assert payload["summary"]["sessions"] == 1
+
+
+def test_sum_spend_half_open_on_end_and_api_filter() -> None:
+    from halyard.usage import round_money, sum_spend
+
+    inside = _session(start=datetime(2026, 5, 7, 23, 50), cost_usd=10.0)  # ends 2026-05-08 00:00
+    before = _session(start=datetime(2026, 4, 30, 9), cost_usd=5.0)
+    seat = _session(start=datetime(2026, 5, 7, 10), cost_usd=99.0)
+    seat.billing = "seat"
+
+    sessions = [inside, before, seat]
+    month_start = datetime(2026, 5, 1)
+    month_end = datetime(2026, 6, 1)
+
+    # api_only excludes the seat session and the out-of-window one.
+    assert sum_spend(sessions, period_start=month_start, period_end=month_end) == 10.0
+    # api_only=False includes the seat session.
+    assert (
+        sum_spend(sessions, period_start=month_start, period_end=month_end, api_only=False) == 109.0
+    )
+    # Half-open on end: a session ending exactly at period_end is excluded.
+    assert sum_spend([inside], period_start=month_start, period_end=datetime(2026, 5, 8)) == 0.0
+    assert round_money(0.125, 2) == 0.13  # ROUND_HALF_UP, not banker's

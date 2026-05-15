@@ -5,9 +5,44 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
 from halyard.ai_log import AiSession
+
+
+def round_money(value: float, places: int = 2) -> float:
+    """Round a monetary value with ROUND_HALF_UP (not banker's rounding)."""
+    quant = Decimal(1).scaleb(-places)
+    return float(Decimal(str(value)).quantize(quant, rounding=ROUND_HALF_UP))
+
+
+def sum_spend(
+    sessions: list[AiSession],
+    *,
+    period_start: datetime,
+    period_end: datetime,
+    api_only: bool = True,
+    accounts: set[str] | None = None,
+    places: int = 4,
+) -> float:
+    """Single spend-summing convention shared by budget and invoicing.
+
+    Window is half-open on session *end* (period_start <= end < period_end)
+    so a session is billed in the period it completed. Result is quantized
+    with ROUND_HALF_UP so totals are deterministic across views.
+    """
+    total = Decimal(0)
+    for s in sessions:
+        if api_only and (s.billing != "api" or s.cost_usd <= 0):
+            continue
+        if accounts is not None and s.project not in accounts:
+            continue
+        if period_start <= s.end < period_end:
+            total += Decimal(str(s.cost_usd))
+    quant = Decimal(1).scaleb(-places)  # e.g. places=2 -> Decimal("0.01")
+    return float(total.quantize(quant, rounding=ROUND_HALF_UP))
+
 
 UsageRangeKey = Literal["all", "30d", "7d"]
 
