@@ -114,6 +114,36 @@ def test_infer_project_no_remote(tmp_path: Path) -> None:
         assert infer_project(tmp_path) is None
 
 
+def test_infer_project_halyard_toml_in_cwd(tmp_path: Path) -> None:
+    (tmp_path / "halyard.toml").write_text('[project]\nslug = "acme:core"\n')
+    assert infer_project(tmp_path) == "acme:core"
+
+
+def test_infer_project_halyard_toml_in_parent(tmp_path: Path) -> None:
+    (tmp_path / "halyard.toml").write_text('[project]\nslug = "acme:core"\n')
+    sub = tmp_path / "app" / "src"
+    sub.mkdir(parents=True)
+    assert infer_project(sub) == "acme:core"
+
+
+def test_infer_project_halyard_toml_beats_repos(tmp_path: Path) -> None:
+    (tmp_path / "halyard.toml").write_text('[project]\nslug = "local:override"\n')
+    with (
+        _mock_remote("https://github.com/acme/auth.git"),
+        _mock_repos({"github.com/acme/auth": "acme:auth"}),
+    ):
+        assert infer_project(tmp_path) == "local:override"
+
+
+def test_infer_project_halyard_toml_no_slug_falls_through(tmp_path: Path) -> None:
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Acme'\n")
+    with (
+        _mock_remote("https://github.com/acme/auth.git"),
+        _mock_repos({"github.com/acme/auth": "acme:auth"}),
+    ):
+        assert infer_project(tmp_path) == "acme:auth"
+
+
 # ---------------------------------------------------------------------------
 # register_repo
 # ---------------------------------------------------------------------------

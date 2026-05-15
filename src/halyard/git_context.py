@@ -5,8 +5,9 @@ module tries to determine which project the work belongs to by inspecting the
 git remote of the working directory.
 
 Priority:
-  1. Explicit mapping in ~/.halyard/repos.toml  ([repos] section, key = remote pattern)
-  2. Auto-derived slug: git/<repo-name>
+  1. halyard.toml [project].slug — walk up from cwd until one is found
+  2. Explicit mapping in ~/.halyard/repos.toml  ([repos] section, key = remote pattern)
+  3. Auto-derived slug: git/<repo-name>
 
 Users can promote auto-slugs to real project slugs with ``halyard link-repo``.
 """
@@ -22,8 +23,28 @@ from pathlib import Path
 _REPOS_CONFIG = Path.home() / ".halyard" / "repos.toml"
 
 
+def _slug_from_halyard_toml(cwd: Path) -> str | None:
+    """Walk up from cwd looking for a halyard.toml with [project].slug."""
+    for directory in (cwd, *cwd.parents):
+        candidate = directory / "halyard.toml"
+        if candidate.is_file():
+            try:
+                data = tomllib.loads(candidate.read_text())
+                slug = data.get("project", {}).get("slug")
+                if slug:
+                    return str(slug)
+            except (tomllib.TOMLDecodeError, OSError):
+                pass
+            return None  # found a halyard.toml but no slug — stop walking
+    return None
+
+
 def infer_project(cwd: Path) -> str | None:
-    """Return a project slug inferred from the git remote of cwd, or None."""
+    """Return a project slug inferred from cwd, or None."""
+    slug = _slug_from_halyard_toml(cwd)
+    if slug:
+        return slug
+
     remote = _git_remote_url(cwd)
     if remote is None:
         return None
@@ -184,7 +205,7 @@ def _load_repos_config() -> dict[str, str]:
         data = tomllib.loads(_REPOS_CONFIG.read_text())
         repos = data.get("repos", {})
         return {k: v for k, v in repos.items() if isinstance(k, str) and isinstance(v, str)}
-    except Exception:
+    except (OSError, tomllib.TOMLDecodeError):
         return {}
 
 

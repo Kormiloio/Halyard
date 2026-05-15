@@ -193,6 +193,85 @@ def register(app: typer.Typer) -> None:
         if install_errors:
             raise typer.Exit(code=1)
 
+    @app.command(name="adopt")
+    def adopt_cmd(
+        path: str = typer.Argument(
+            ".", metavar="PATH", help="Directory to adopt (default: current directory)."
+        ),
+        slug: str | None = typer.Option(None, "--slug", help="Project slug (skips prompt)."),
+        yes: bool = typer.Option(
+            False, "--yes", "-y", help="Accept suggested slug without prompting."
+        ),
+    ) -> None:
+        """Promote an auto-tracked directory to a named Halyard project.
+
+        Creates a minimal halyard.toml with [project].slug so future sessions
+        are attributed to the chosen slug instead of the generic git/<repo-name>
+        auto-slug.  Also wires up repos.toml so the git remote maps to the same
+        slug on machines without a local halyard.toml.
+        """
+        from halyard.git_context import _extract_repo_name, _git_remote_url, register_repo
+        from halyard.registry import add_project
+
+        target = Path(path).resolve()
+
+        if not target.is_dir():
+            console.print(f"[bold red]Error:[/] {target} is not a directory.")
+            raise typer.Exit(code=1)
+
+        if (target / "halyard.toml").exists():
+            console.print(
+                "[bold red]Error:[/] halyard.toml already exists here.\n"
+                "Use [bold]halyard init[/] to scaffold a full project, or edit the "
+                "existing [bold]halyard.toml[/] directly."
+            )
+            raise typer.Exit(code=1)
+
+        remote = _git_remote_url(target)
+        repo_name = _extract_repo_name(remote) if remote else None
+        current_auto_slug = f"git/{repo_name}" if repo_name else None
+
+        if current_auto_slug:
+            console.print(
+                f"Sessions from this directory are currently tracked as "
+                f"[dim]{current_auto_slug}[/]"
+            )
+        else:
+            console.print(
+                "[dim]No git remote — slug will be used for path-based attribution only.[/]"
+            )
+
+        suggested = repo_name or target.name
+
+        if slug is None:
+            if yes or not sys.stdin.isatty():
+                slug = suggested
+            else:
+                slug = typer.prompt("Project slug", default=suggested)
+
+        slug = slug.strip()
+        if not slug:
+            console.print("[bold red]Error:[/] slug cannot be empty.")
+            raise typer.Exit(code=1)
+
+        toml_content = f'[project]\nslug = "{slug}"\n'
+        (target / "halyard.toml").write_text(toml_content)
+
+        if remote:
+            register_repo(remote, slug)
+
+        add_project(target)
+
+        console.print(f"\n[bold green]Adopted[/] [bold]{target}[/] → [bold]{slug}[/]")
+        if current_auto_slug and current_auto_slug != slug:
+            console.print(
+                f"[dim]Future sessions will be attributed to [bold]{slug}[/]. "
+                f"Existing hub sessions remain under [bold]{current_auto_slug}[/] — "
+                f"run [bold]halyard reattribute {current_auto_slug} {slug}[/] to migrate them.[/]"
+            )
+        if remote:
+            console.print(f"[dim]repos.toml updated: {remote} → {slug}[/]")
+
     @app.command(name="link-repo")
     def link_repo(
         project: str = typer.Argument(
