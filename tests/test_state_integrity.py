@@ -97,7 +97,7 @@ def test_tampered_file_raises(tmp_path: Path) -> None:
     write_trusted_state(p, "slug=acme\n", mode="hash")
     p.write_text("slug=evil\n", encoding="utf-8")  # tamper
 
-    with pytest.raises(IntegrityError, match="Hash mismatch"):
+    with pytest.raises(IntegrityError, match="Integrity mismatch"):
         read_trusted_state(p, mode="hash")
 
 

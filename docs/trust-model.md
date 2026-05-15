@@ -93,3 +93,30 @@ inferred.
 The trust hierarchy exists because client-facing evidence should be honest about what is known versus estimated. A `captured` cost of $12.34 means exactly that. An `allocated` cost of $45.00 means "we believe roughly $45 of the $200 seat cost belongs here, based on how the time was distributed."
 
 Neither is wrong. They are different kinds of information, and Halyard is explicit about which kind you are looking at.
+
+## State-file integrity
+
+Halyard keeps small trusted-state files under `~/.halyard/` (the active
+timer, the hub pointer). The `state_integrity` setting in `halyard.toml`
+(or the `HALYARD_STATE_INTEGRITY` env override) controls verification.
+The guarantees are stated honestly here so the security posture is not
+overclaimed:
+
+| Mode | Sidecar | What it actually protects against |
+|------|---------|-----------------------------------|
+| `off` (default) | none | Nothing. No integrity. |
+| `hash` | `.sha256` (unkeyed) | Accidental corruption and naive single-file edits **only**. It is **not** tamper-resistant: an attacker who can write the state file can recompute and rewrite the `.sha256` sidecar. Do not rely on it as a security control. |
+| `hmac` | `.hmac` keyed with `~/.halyard/integrity.key` (0600) | Tampering by any process that **cannot read the key file**. It is **not** a defense against a full local-account compromise — an attacker who can read `~/.halyard/integrity.key` can forge a valid sidecar. It raises the bar from "anyone who reads this open-source code" to "an attacker who can also read the 0600 key". |
+
+`hmac` fails closed: if the key is missing or unreadable at verification
+time, the read raises an integrity error rather than silently accepting
+unverified content.
+
+**Recovery.** Switching `off`/`hash` → `hmac` (or deleting
+`integrity.key`) leaves existing state files without a valid `.hmac`
+sidecar. The next read fails the integrity check; `halyard` degrades
+gracefully (the active-timer / hub lookups return "none" rather than
+crashing) and the next write through the Halyard CLI regenerates the key
+and sidecar. To reset deliberately, set `state_integrity = "off"`, run a
+command that rewrites the state (e.g. start/stop the timer), then
+re-enable `hmac`.

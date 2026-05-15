@@ -301,6 +301,15 @@ def _integrity_check(home_state: Path) -> DoctorCheck:
     tracked = [home_state / "active", home_state / "hub"]
     ok, failure = verify_all([p for p in tracked if p.exists()])
     if ok:
+        if mode == "hash":
+            return DoctorCheck(
+                id="state.integrity",
+                label="Integrity",
+                status="ok",
+                detail="mode=hash — corruption detection only, NOT "
+                'tamper-resistant; set state_integrity="hmac" for '
+                "authenticated integrity",
+            )
         return DoctorCheck(
             id="state.integrity",
             label="Integrity",

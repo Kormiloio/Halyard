@@ -270,7 +270,19 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.39-input-injection/`.
     **Status: complete (995 tests passing).**
 
-19. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+19. **v2.40 — Authenticated state integrity:** adds
+    `state_integrity = "hmac"` — keyed HMAC-SHA256 sidecars (`.hmac`)
+    using a per-user 0600 secret at `~/.halyard/integrity.key`, fail-closed
+    if the key is missing. Closes the CRITICAL review finding that the
+    unkeyed `hash` sidecar is trivially forgeable. Equally important: the
+    docstring, `docs/trust-model.md`, and `halyard doctor` now state the
+    guarantee **honestly** — `hash` is corruption-detection only (not
+    tamper-resistant), `hmac` resists processes that can't read the key
+    but not a full local-account compromise. No more overclaiming. Spec
+    in `openspec/changes/v2.40-authenticated-state/`.
+    **Status: complete (1003 tests passing).**
+
+20. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

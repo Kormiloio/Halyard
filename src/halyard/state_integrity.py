@@ -1,29 +1,44 @@
-"""Integrity verification for ~/.halyard/ state files (phase 1).
+"""Integrity verification for ~/.halyard/ state files.
 
-Opt-in via the ``state_integrity`` key in ``halyard.toml``.
+Opt-in via the ``state_integrity`` key in ``halyard.toml`` (or the
+``HALYARD_STATE_INTEGRITY`` env override). Three tiers, with **exactly**
+these guarantees — no more:
 
-- ``"off"`` (default): pass-through; no overhead, no sidecar files.
-- ``"hash"``: each tracked file has a ``.sha256`` sidecar holding the hex
-  digest of its content. Reads verify; writes refresh.
+- ``"off"`` (default): pass-through. No integrity at all.
+- ``"hash"``: a ``.sha256`` sidecar holds an *unkeyed* digest of the
+  content. This detects accidental corruption and naive single-file
+  edits. It is **NOT tamper-resistant**: anyone who can write the state
+  file can also recompute and rewrite its ``.sha256`` sidecar. Use it
+  for corruption detection only, never as a security control.
+- ``"hmac"``: a ``.hmac`` sidecar holds ``HMAC-SHA256(key, content)``
+  where ``key`` is a 32-byte secret at ``~/.halyard/integrity.key``
+  (mode 0600). This detects tampering by any process that **cannot read
+  the key file**. It is **NOT** a defense against a full local-account
+  compromise: an attacker who can read ``~/.halyard/integrity.key`` can
+  forge a valid sidecar. It raises the bar from "anyone who reads this
+  open-source code" to "an attacker who can also read the 0600 key".
 
-Tampering with a tracked state file out of band causes the next read to
-raise :class:`IntegrityError`. Callers decide whether to fail closed or
-fail open — :func:`read_active_project` and :func:`find_hub` log the
-error and return ``None`` so the rest of Halyard keeps running.
-
-Phase 2 will add an ``"hmac"`` mode with a per-user key for tamper
-detection that resists local-account attacks.
+Verification failure raises :class:`IntegrityError`. Callers decide
+fail-closed vs fail-open — :func:`read_active_project` and
+:func:`find_hub` log and return ``None`` so the rest of Halyard keeps
+running. ``hmac`` fails closed if the key is missing/unreadable: it never
+silently downgrades to "unverified".
 """
 
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
+import secrets
 import tomllib
 from pathlib import Path
 from typing import Literal, cast
 
-IntegrityMode = Literal["off", "hash"]
+IntegrityMode = Literal["off", "hash", "hmac"]
+
+_VALID_MODES = ("off", "hash", "hmac")
+_KEY_PATH = Path.home() / ".halyard" / "integrity.key"
 
 _DEFAULT_MODE: IntegrityMode = "off"
 # Cached per process, keyed by resolved project directory. Keying by dir
@@ -38,8 +53,35 @@ class IntegrityError(Exception):
     """Raised when a tracked state file fails integrity verification."""
 
 
-def _sidecar(path: Path) -> Path:
-    return path.with_suffix(path.suffix + ".sha256")
+def _sidecar(path: Path, mode: IntegrityMode) -> Path:
+    # Distinct suffixes so an unkeyed SHA-256 can never be mistaken for
+    # an HMAC when the mode changes.
+    suffix = ".hmac" if mode == "hmac" else ".sha256"
+    return path.with_suffix(path.suffix + suffix)
+
+
+def _integrity_key(*, create: bool) -> bytes:
+    """Return the 32-byte HMAC key.
+
+    Read path (create=False): a missing/unreadable key is fatal — raise
+    IntegrityError rather than silently downgrade to "unverified".
+    Write path (create=True): generate and atomically create on first use.
+    """
+    if _KEY_PATH.exists():
+        try:
+            raw = _KEY_PATH.read_text(encoding="utf-8").strip()
+            key = bytes.fromhex(raw)
+        except (OSError, ValueError) as exc:
+            raise IntegrityError(f"Integrity key unreadable: {_KEY_PATH}") from exc
+        if len(key) < 16:
+            raise IntegrityError(f"Integrity key too short: {_KEY_PATH}")
+        return key
+    if not create:
+        raise IntegrityError(f"Missing integrity key: {_KEY_PATH}")
+    _KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    key = secrets.token_bytes(32)
+    _atomic_write(_KEY_PATH, key.hex() + "\n")
+    return key
 
 
 def _read_mode_from_toml(project_dir: Path) -> IntegrityMode | None:
@@ -53,7 +95,7 @@ def _read_mode_from_toml(project_dir: Path) -> IntegrityMode | None:
     except (OSError, tomllib.TOMLDecodeError):
         return None
     value = data.get("state_integrity")
-    if value in ("off", "hash"):
+    if value in _VALID_MODES:
         return cast("IntegrityMode", value)
     return None
 
@@ -66,7 +108,7 @@ def current_mode(project_dir: Path | None = None) -> IntegrityMode:
     so hot paths (every hook fire) don't re-read halyard.toml.
     """
     env = os.environ.get("HALYARD_STATE_INTEGRITY")
-    if env in ("off", "hash"):
+    if env in _VALID_MODES:
         return cast("IntegrityMode", env)
     if project_dir is not None:
         key = str(project_dir.resolve())
@@ -99,14 +141,18 @@ def read_trusted_state(path: Path, *, mode: IntegrityMode | None = None) -> str 
     content = path.read_text(encoding="utf-8")
     if active_mode == "off":
         return content
-    if active_mode == "hash":
-        sidecar = _sidecar(path)
+    if active_mode in ("hash", "hmac"):
+        sidecar = _sidecar(path, active_mode)
         if not sidecar.exists():
             raise IntegrityError(f"Missing integrity sidecar for {path}")
         expected = sidecar.read_text(encoding="utf-8").strip()
-        actual = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        if expected != actual:
-            raise IntegrityError(f"Hash mismatch for {path}")
+        if active_mode == "hmac":
+            key = _integrity_key(create=False)
+            actual = hmac.new(key, content.encode("utf-8"), hashlib.sha256).hexdigest()
+        else:
+            actual = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        if not hmac.compare_digest(expected, actual):
+            raise IntegrityError(f"Integrity mismatch for {path}")
         return content
     return content  # pragma: no cover - exhaustive Literal
 
@@ -121,13 +167,17 @@ def write_trusted_state(path: Path, content: str, *, mode: IntegrityMode | None 
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     active_mode = mode if mode is not None else current_mode()
-    if active_mode == "hash":
+    if active_mode in ("hash", "hmac"):
         # Write the sidecar (fsync'd) BEFORE swapping the data file in. A
         # crash then leaves an old file with an old (matching) sidecar, or a
         # new sidecar with the old file — the latter raises a clean
         # IntegrityError instead of silently trusting tampered content.
-        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        _atomic_write(_sidecar(path), digest + "\n")
+        if active_mode == "hmac":
+            key = _integrity_key(create=True)
+            digest = hmac.new(key, content.encode("utf-8"), hashlib.sha256).hexdigest()
+        else:
+            digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        _atomic_write(_sidecar(path, active_mode), digest + "\n")
     _atomic_write(path, content)
 
 
