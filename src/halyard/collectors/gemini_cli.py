@@ -126,6 +126,14 @@ def handle_agent_stop() -> int:
     except ValueError:
         start = now
 
+    # Stale state guard: a gc-session older than 12 hours cannot be a real session.
+    # Delete it silently rather than writing a phantom multi-day record.
+    max_stale_seconds = 12 * 3600
+    if (now - start).total_seconds() > max_stale_seconds:
+        if _GC_SESSION_FILE.exists():
+            _GC_SESSION_FILE.unlink()
+        return 0
+
     branch = current_branch(cwd)
     commit_count = commits_in_window(cwd, start, now)
     base_tags: list[str] = []

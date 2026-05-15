@@ -7,6 +7,7 @@ into the session log by each collector's handle_stop_hook / import path.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -231,9 +232,10 @@ def test_cursor_stop_captures_code_delta(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def _gemini_hook_state(project: Path) -> str:
+    recent = (datetime.now() - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S")
     return json.dumps(
         {
-            "turn_start": "2026-05-01T10:00:00",
+            "turn_start": recent,
             "cwd": str(project),
             "model": "gemini-2.5-pro",
             "session_id": "test-session-001",

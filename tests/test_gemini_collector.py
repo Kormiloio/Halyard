@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -64,6 +65,10 @@ def _after_agent_payload(cwd: str = "/some/project") -> dict:  # type: ignore[ty
         "prompt_response": "Hi there",
         "stop_hook_active": False,
     }
+
+
+def _recent_ts(minutes_ago: int = 30) -> str:
+    return (datetime.now() - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def _halyard_project(tmp_path: Path) -> Path:
@@ -177,7 +182,7 @@ def test_handle_agent_stop_writes_session(tmp_path: Path, monkeypatch: pytest.Mo
     state_file.write_text(
         json.dumps(
             {
-                "turn_start": "2026-05-07T10:00:00",
+                "turn_start": _recent_ts(),
                 "cwd": str(project),
                 "model": "gemini-2.0-pro",
                 "prompt_tokens": 1500,
@@ -211,7 +216,7 @@ def test_handle_agent_stop_resets_accumulators(
     state_file.write_text(
         json.dumps(
             {
-                "turn_start": "2026-05-07T10:00:00",
+                "turn_start": _recent_ts(),
                 "cwd": str(project),
                 "model": "gemini-2.0-pro",
                 "prompt_tokens": 1000,
@@ -238,7 +243,7 @@ def test_handle_agent_stop_skips_when_no_project(
     state_file.write_text(
         json.dumps(
             {
-                "turn_start": "2026-05-07T10:00:00",
+                "turn_start": _recent_ts(),
                 "cwd": "/nonexistent/random/path",
                 "model": "gemini-2.0-pro",
                 "prompt_tokens": 100,
@@ -262,7 +267,7 @@ def test_handle_agent_stop_tokens_available_false_when_no_tokens(
     state_file.write_text(
         json.dumps(
             {
-                "turn_start": "2026-05-07T10:00:00",
+                "turn_start": _recent_ts(),
                 "cwd": str(project),
                 "model": "gemini-unknown",
                 "prompt_tokens": 0,
@@ -290,7 +295,7 @@ def test_full_turn_sequence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)
 
-    with _patch_stdin(_session_start_payload(cwd=str(project), timestamp="2026-05-07T10:00:00")):
+    with _patch_stdin(_session_start_payload(cwd=str(project), timestamp=_recent_ts())):
         record_session_start()
 
     with _patch_stdin(_after_model_payload(prompt_tokens=1000, candidates_tokens=100)):
@@ -323,7 +328,7 @@ def test_cache_tokens_reduce_input_and_set_cache_read(
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)
 
-    with _patch_stdin(_session_start_payload(cwd=str(project))):
+    with _patch_stdin(_session_start_payload(cwd=str(project), timestamp=_recent_ts())):
         record_session_start()
 
     # 1000 prompt tokens, 400 of which were cached

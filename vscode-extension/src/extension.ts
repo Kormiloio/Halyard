@@ -47,6 +47,9 @@ export function activate(context: vscode.ExtensionContext): void {
   // Recovery prompt: if a session was in progress when VS Code last quit, offer
   // to record it, continue tracking, or discard rather than silently losing it.
   const pending = context.workspaceState.get<SessionState>(STATE_KEY);
+  if (!pending && config().get<boolean>("autoTrack", true)) {
+    void autoStartSession(context);
+  }
   if (pending) {
     const ageMinutes = Math.max(1, Math.round((Date.now() - pending.startedAt) / 60000));
     vscode.window
@@ -70,6 +73,24 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   status?.dispose();
+}
+
+async function autoStartSession(context: vscode.ExtensionContext): Promise<void> {
+  const existing = context.workspaceState.get<SessionState>(STATE_KEY);
+  if (existing) {
+    return;
+  }
+  const now = Date.now();
+  const gitStats = await readGitStats();
+  const state: SessionState = {
+    startedAt: now,
+    activeSeconds: 0,
+    idleSeconds: 0,
+    lastActivityAt: now,
+    initialBranch: gitStats.branch,
+  };
+  await context.workspaceState.update(STATE_KEY, state);
+  updateStatus(context);
 }
 
 async function startAIWork(context: vscode.ExtensionContext): Promise<void> {
@@ -185,6 +206,9 @@ async function showCurrentScope(context: vscode.ExtensionContext): Promise<void>
 function markActivity(context: vscode.ExtensionContext): void {
   const state = context.workspaceState.get<SessionState>(STATE_KEY);
   if (!state) {
+    if (config().get<boolean>("autoTrack", true)) {
+      void autoStartSession(context);
+    }
     return;
   }
   const now = Date.now();

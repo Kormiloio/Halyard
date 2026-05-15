@@ -60,6 +60,11 @@
           "default": 300,
           "minimum": 30,
           "description": "Seconds without editor activity before time is counted as idle."
+        },
+        "halyard.autoTrack": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start tracking when VS Code opens or activity is detected. Disable to use manual halyard.startAIWork instead."
         }
       }
     }

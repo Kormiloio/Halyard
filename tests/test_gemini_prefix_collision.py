@@ -12,6 +12,7 @@ with no cross-contamination of token counts or project slugs.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -73,7 +74,7 @@ def _make_session_file(
 def _hook_state(project_dir: Path, session_id: str) -> str:
     return json.dumps(
         {
-            "turn_start": "2026-05-08T10:00:00",
+            "turn_start": (datetime.now() - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S"),
             "cwd": str(project_dir),
             "model": "gemini-2.0-pro",
             "session_id": session_id,
