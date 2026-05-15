@@ -200,9 +200,12 @@ auto-tags sessions with project slug and branch when no active timer is running.
 ### Project attribution
 Mapping a session to a `client:project` slug. Priority order:
 1. Active timer (`halyard start acme:auth`)
-2. Explicit git mapping (`~/.halyard/repos.toml`)
-3. Auto-derived git slug (`git/<repo-name>`)
-4. Unattributed (recoverable later with `halyard assign-unattributed`)
+2. `halyard.toml` walk-up — `infer_project` walks from CWD to filesystem root looking for the nearest `halyard.toml` with `[project].slug`. Wins over git inference; works for monorepos and non-git directories.
+3. Explicit git mapping (`~/.halyard/repos.toml` pattern → slug)
+4. Auto-derived git slug (`git/<repo-name>`)
+5. Unattributed — written to `~/.halyard/unattributed.log`, grouped by git remote in `halyard doctor` and the dashboard. Run `halyard adopt` in the relevant directory to promote it.
+
+`halyard adopt <path>` is the promotion command: it creates a minimal `halyard.toml` with `[project].slug`, wires `repos.toml`, and registers the path — without scaffolding the full project layout. Run `halyard init` when full invoicing/voyage support is wanted.
 
 ### AI plan / seat cost
 Many AI tools charge flat monthly fees (Cursor, GitHub Copilot, Claude Max) or

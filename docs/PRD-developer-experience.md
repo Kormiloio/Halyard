@@ -148,12 +148,18 @@ First slice implemented.
 - `AiSession.from_log_line()` validates required fields, token/cost types, and
   non-negative numeric values; malformed lines are quarantined in
   `~/.halyard/quarantine.log`.
+- `AiSession.remote` captures the normalized git remote (`host/owner/repo`) at
+  session time so unattributed sessions can be grouped by repo — no local paths
+  stored. Non-git sessions stay anonymous.
 - `halyard check-log` validates `ai-sessions.log`.
 - `halyard report` now warns when the global unattributed log has recoverable
   sessions.
-- `halyard assign-unattributed` now reviews `~/.halyard/unattributed.log` and
-  lets the user assign sessions to the current project, move them to the hub,
-  discard them, or skip them.
+- `halyard doctor` groups unattributed sessions by remote and suggests
+  `halyard adopt` per repo instead of a raw count.
+- Dashboard Overview tab shows the same grouped breakdown with a `⚠` marker.
+- `halyard adopt <path>` is the one-command promotion flow: writes a minimal
+  `halyard.toml` with `[project].slug`, wires `repos.toml`, and registers
+  the path. Does not scaffold the full project layout (`halyard init` does that).
 
 Still pending: a design document for the final serialization/quarantine shape
 and any broader migration guidance for older logs.
@@ -182,10 +188,13 @@ count grows.
 - When a session cannot be attributed to any project (no `project_dir`, no
   hub), the collector writes the session to `~/.halyard/unattributed.log`
   instead of dropping it.
-- A warning is printed to stderr: `[halyard] session written to unattributed
-  log — run 'halyard assign-unattributed' to review.`
-- `halyard assign-unattributed` is a new command that reads the unattributed
-  log, presents each session, and lets the user assign or discard it.
+- A warning is printed to stderr: `[halyard] session saved to unattributed
+  log — run 'halyard adopt' in the relevant directory.`
+- `halyard adopt <path>` promotes a directory to a named project: writes a
+  minimal `halyard.toml`, wires `repos.toml`, and registers the path. Sessions
+  from that repo are attributed correctly going forward.
+- `halyard doctor` and the dashboard Overview tab surface unattributed sessions
+  grouped by git remote so the developer knows exactly which repos to adopt.
 - Existing `halyard report` includes an unattributed line in the summary if
   the file is non-empty.
 

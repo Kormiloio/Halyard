@@ -106,7 +106,7 @@ corrections are written as `a <hash> key=value …` amendment records appended t
 the log; the original `s` lines are never mutated.  The log is now genuinely
 append-only in normal operation: in-place rewrites (`_rewrite_lines_atomic`)
 are reserved exclusively for user-driven interactive triage
-(`halyard assign-unattributed` interactive prompt).  Cloud sync and enterprise
+(`halyard adopt` command).  Cloud sync and enterprise
 layers must read from this local source of truth; they do not replace it.
 
 ## Active focus (May 2026)
@@ -232,13 +232,22 @@ layers must read from this local source of truth; they do not replace it.
 
 15. **v2.36 — Proof score transparency:** Voyage panel proof score now shows
     `attr X% · tokens Y%` component breakdown inline so users understand a
-    score of 40% with zero attribution. Fix prompt "run halyard
-    assign-unattributed" shown when attribution < 100%. Sessions column adds
-    all-time sub-label.
+    score of 40% with zero attribution. Fix prompt "run halyard adopt" shown
+    when attribution < 100%. Sessions column adds all-time sub-label.
     Spec in `openspec/changes/v2.36-proof-score-transparency/`.
     **Status: complete (952 tests passing).**
 
-16. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+16. **v2.37 — Smart attribution:** `halyard.toml` walk-up inference (CWD → root)
+    makes project detection work for monorepos, non-git directories, and any
+    user's layout without central config. `halyard adopt` promotes an
+    auto-tracked directory to a named project in one command. `AiSession.remote`
+    captures the normalized git remote at session time so unattributed sessions
+    can be grouped by repo in `halyard doctor` and the dashboard Overview tab.
+    Privacy-first: non-git directories stay anonymous; no local paths stored.
+    Spec in `openspec/changes/v2.37-smart-attribution/`.
+    **Status: complete (974 tests passing).**
+
+17. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 
