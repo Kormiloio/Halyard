@@ -74,7 +74,7 @@ def read_voyages(project_dir: Path) -> list[VoyageEntry]:
 
     try:
         data = tomllib.loads(path.read_text())
-    except Exception:
+    except (OSError, tomllib.TOMLDecodeError):
         return []
 
     entries: list[VoyageEntry] = []
