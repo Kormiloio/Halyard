@@ -118,8 +118,8 @@ class HookWriteError(OSError):
         self.original = original
         super().__init__(
             f"could not write {settings_path} — {original.strerror}. "
-            "The file may be read-only or managed by an MDM / config tool "
-            "(e.g. Orbit deploys ~/.gemini as read-only). "
+            "The file may be read-only, or managed by an MDM, "
+            "config-management, or dotfile tool that deploys it read-only. "
             "Fix the file's write permission, or add the hook manually."
         )
 
@@ -128,8 +128,8 @@ def _write_settings(settings_path: Path, content: str) -> None:
     """Write a hook settings file, raising HookWriteError on failure.
 
     Settings files like ``~/.gemini/settings.json`` are sometimes deployed
-    read-only by an MDM or config-management tool (e.g. Orbit). An
-    unguarded ``write_text`` would crash with a raw traceback.
+    read-only by an MDM, config-management, or dotfile tool. An unguarded
+    ``write_text`` would crash with a raw traceback.
     """
     try:
         settings_path.write_text(content)
