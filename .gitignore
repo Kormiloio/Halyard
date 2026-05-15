@@ -45,5 +45,14 @@ voyages.toml
 invoices/
 *.tmp
 
+# Local environment / agent state — never belongs in the OSS repo.
+# This repo dogfoods Halyard, so the maintainer's working tree
+# accumulates local runtime artifacts and agent memory. Keep them out
+# of version control so `git add -A` can never leak them upstream.
+*.bak
+*.ics
+memory/
+ai-schedule.*
+
 # OS
 Thumbs.db
