@@ -118,7 +118,14 @@ def _load_local_pricing() -> dict[str, tuple[float, float]]:
     try:
         data = tomllib.loads(_LOCAL_PRICING_FILE.read_text())
         return _parse_models_table(data)
-    except (tomllib.TOMLDecodeError, ValueError):
+    except (tomllib.TOMLDecodeError, ValueError) as e:
+        print(
+            f"[halyard] Warning: {_LOCAL_PRICING_FILE} is invalid — "
+            f"custom pricing ignored. ({e})",
+            file=sys.stderr,
+        )
+        return {}
+    except OSError:
         return {}
 
 

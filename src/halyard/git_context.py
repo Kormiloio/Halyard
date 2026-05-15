@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 import tomllib
 from datetime import datetime
 from pathlib import Path
@@ -205,7 +206,14 @@ def _load_repos_config() -> dict[str, str]:
         data = tomllib.loads(_REPOS_CONFIG.read_text())
         repos = data.get("repos", {})
         return {k: v for k, v in repos.items() if isinstance(k, str) and isinstance(v, str)}
-    except (OSError, tomllib.TOMLDecodeError):
+    except tomllib.TOMLDecodeError as e:
+        print(
+            f"[halyard] Warning: {_REPOS_CONFIG} is not valid TOML — "
+            f"git attribution disabled. Run 'halyard doctor' to verify. ({e})",
+            file=sys.stderr,
+        )
+        return {}
+    except OSError:
         return {}
 
 
