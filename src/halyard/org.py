@@ -96,23 +96,39 @@ class OrgConfig(BaseModel):
         return ORG_NOTES_POLICY_DEFAULT
 
 
-def _org_hash_path() -> Path:
-    """Return the path for the stored org.toml SHA-256 hash."""
-    return Path.home() / ".halyard" / "org-hash.txt"
+def _org_hash_path(hub_dir: Path, org_id: str | None = None) -> Path:
+    """Return the per-hub (and optionally per-org) path for the stored org.toml hash.
+
+    D-3 (Sage): a single global ``~/.halyard/org-hash.txt`` would warn or
+    overwrite the baseline whenever the user switched between hubs or
+    multi-tenant orgs, defeating the purpose of change detection. The
+    baseline is now keyed on a SHA-256 of the absolute hub path (and the
+    org id when supplied) so each hub/org has its own independent stored
+    hash under ``~/.halyard/org-hashes/``.
+    """
+    hub_key = hashlib.sha256(str(hub_dir.resolve()).encode()).hexdigest()[:16]
+    if org_id:
+        # Sanitise org_id for filesystem: keep alnum and `-`, replace the rest.
+        safe_org = "".join(c if c.isalnum() or c in "-_" else "_" for c in org_id)[:64]
+        filename = f"{hub_key}-{safe_org}.txt"
+    else:
+        filename = f"{hub_key}.txt"
+    return Path.home() / ".halyard" / "org-hashes" / filename
 
 
-def _check_org_hash(content: bytes) -> None:
-    """D-3: Detect silent changes to org.toml between runs.
+def _check_org_hash(content: bytes, hub_dir: Path, org_id: str | None = None) -> None:
+    """D-3: Detect silent changes to a hub's org.toml between runs.
 
-    Computes SHA-256 of the org.toml bytes, compares against the hash stored
-    in ~/.halyard/org-hash.txt.  If the hashes differ a warning is printed to
-    stderr (informational — does not block startup).  The new hash is always
-    written so the next run has a current baseline.
+    Computes SHA-256 of the org.toml bytes, compares against the hash
+    stored at ``_org_hash_path(hub_dir, org_id)``. If the hashes differ a
+    warning is printed to stderr (informational — does not block startup).
+    The new hash is always written so the next run has a current baseline.
 
-    On the very first run (no stored hash) the hash is written silently.
+    On the very first run for this hub/org (no stored hash) the hash is
+    written silently.
     """
     new_hash = hashlib.sha256(content).hexdigest()
-    hash_path = _org_hash_path()
+    hash_path = _org_hash_path(hub_dir, org_id)
 
     if hash_path.exists():
         stored = hash_path.read_text().strip()
@@ -133,7 +149,9 @@ def read_org_config(hub_dir: Path) -> OrgConfig | None:
     if not path.exists():
         return None
     content = path.read_bytes()
-    _check_org_hash(content)
+    # Hash check is keyed on the hub directory so two hubs maintain
+    # independent baselines.
+    _check_org_hash(content, hub_dir)
     data = tomllib.loads(content.decode())
     return OrgConfig(
         org=OrgInfo.model_validate(data["org"]),

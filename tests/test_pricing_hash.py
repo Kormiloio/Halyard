@@ -249,3 +249,62 @@ def test_changed_table_warning_on_update(
     assert "Warning" in captured.err
     assert "pricing table has changed" in captured.err
     _reset_cache()
+
+
+def test_changed_pricing_table_does_not_overwrite_without_accept(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without --accept-changed, a hash mismatch must NOT replace the local table."""
+    _reset_cache()
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    local = tmp_path / "pricing.toml"
+    local.write_bytes(_VALID_TOML)  # local has the original table
+
+    hash_file = tmp_path / ".halyard" / "pricing-hash.txt"
+    hash_file.parent.mkdir(parents=True, exist_ok=True)
+    hash_file.write_text(_sha256(_VALID_TOML) + "\n")  # baseline matches local
+
+    mock = _mock_resp(_CHANGED_TOML)  # remote serves a different table
+
+    with (
+        patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
+        patch("urllib.request.urlopen", return_value=mock),
+        pytest.raises(PricingHashChangedError),
+    ):
+        update_pricing(accept_changed=False)
+
+    # Local table must still match the original — NOT the changed remote body.
+    assert local.read_bytes() == _VALID_TOML
+    # Stored hash must still be the original — not the new one.
+    assert hash_file.read_text().strip() == _sha256(_VALID_TOML)
+    _reset_cache()
+
+
+def test_changed_pricing_table_accept_flag_overwrites_and_updates_hash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With --accept-changed, the local table is updated and the stored hash refreshed."""
+    _reset_cache()
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    local = tmp_path / "pricing.toml"
+    local.write_bytes(_VALID_TOML)
+
+    hash_file = tmp_path / ".halyard" / "pricing-hash.txt"
+    hash_file.parent.mkdir(parents=True, exist_ok=True)
+    hash_file.write_text(_sha256(_VALID_TOML) + "\n")
+
+    mock = _mock_resp(_CHANGED_TOML)
+
+    with (
+        patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
+        patch("urllib.request.urlopen", return_value=mock),
+    ):
+        update_pricing(accept_changed=True)
+
+    # Local table is now the changed body.
+    assert local.read_bytes() == _CHANGED_TOML
+    # And the stored hash has been refreshed.
+    assert hash_file.read_text().strip() == _sha256(_CHANGED_TOML)
+    _reset_cache()
