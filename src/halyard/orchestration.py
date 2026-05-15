@@ -57,13 +57,14 @@ def write_active_timer(timeclock: Path, slug: str, started: str) -> None:
     """Write the active-timer state file atomically (tmp → rename).
 
     This helper is shared by start_timer and the CLI/dashboard start paths so
-    the write pattern is never duplicated.
+    the write pattern is never duplicated. Goes through
+    :func:`halyard.state_integrity.write_trusted_state` so a hash sidecar
+    is refreshed in lockstep when integrity mode is enabled.
     """
-    _reports_mod._HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
+    from halyard.state_integrity import write_trusted_state
+
     content = f"timeclock={timeclock}\nslug={slug}\nstarted={started}\n"
-    tmp = _reports_mod._HALYARD_ACTIVE.with_suffix(".tmp")
-    tmp.write_text(content)
-    tmp.replace(_reports_mod._HALYARD_ACTIVE)
+    write_trusted_state(_reports_mod._HALYARD_ACTIVE, content)
 
 
 def start_timer(project_dir: Path, slug: str) -> ActiveTimer:

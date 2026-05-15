@@ -285,6 +285,37 @@ def _gemini_hook_check(*, required: bool) -> DoctorCheck:
     )
 
 
+def _integrity_check(home_state: Path) -> DoctorCheck:
+    """Report the active state-integrity mode and verify tracked files."""
+    from halyard.state_integrity import current_mode, verify_all
+
+    mode = current_mode()
+    if mode == "off":
+        return DoctorCheck(
+            id="state.integrity",
+            label="Integrity",
+            status="skipped",
+            detail="mode=off (opt-in via halyard.toml state_integrity)",
+        )
+
+    tracked = [home_state / "active", home_state / "hub"]
+    ok, failure = verify_all([p for p in tracked if p.exists()])
+    if ok:
+        return DoctorCheck(
+            id="state.integrity",
+            label="Integrity",
+            status="ok",
+            detail=f"mode={mode} — all tracked sidecars verify",
+        )
+    return DoctorCheck(
+        id="state.integrity",
+        label="Integrity",
+        status="warning",
+        detail=f"mode={mode} — verification failed at {failure}",
+        fix="inspect the tampered file or re-write via halyard CLI",
+    )
+
+
 def _collector_state_checks() -> list[DoctorCheck]:
     home_state = Path.home() / ".halyard"
     checks: list[DoctorCheck] = []
@@ -347,6 +378,8 @@ def _collector_state_checks() -> list[DoctorCheck]:
         checks.append(
             DoctorCheck(id="state.quarantine", label="Quarantine", status="ok", detail="none")
         )
+
+    checks.append(_integrity_check(home_state))
 
     for name, filename in (("Gemini state", "gc-session"), ("Cursor state", "cursor-session")):
         path = home_state / filename

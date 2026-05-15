@@ -810,11 +810,23 @@ def read_active_project() -> str | None:
     this function so that the read logic is never duplicated.  The file is
     written atomically by the dashboard (tmp-then-rename), so a partial read
     will simply find no ``slug=`` line and return None — a safe degradation.
+
+    Goes through :func:`halyard.state_integrity.read_trusted_state` so
+    out-of-band tampering is detected when integrity mode is enabled. On
+    IntegrityError the function logs and returns None rather than crashing
+    every collector hook.
     """
+    from halyard.state_integrity import IntegrityError, read_trusted_state
+
     active = Path.home() / ".halyard" / "active"
-    if not active.exists():
+    try:
+        content = read_trusted_state(active)
+    except IntegrityError as exc:
+        _log_error("read_active_project: integrity verification failed", exc)
         return None
-    for line in active.read_text(encoding="utf-8").splitlines():
+    if content is None:
+        return None
+    for line in content.splitlines():
         if line.startswith("slug="):
             return line[5:]
     return None
