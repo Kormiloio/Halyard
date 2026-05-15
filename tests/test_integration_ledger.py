@@ -83,7 +83,9 @@ def test_note_with_newline_does_not_corrupt_log(tmp_path: Path) -> None:
     log_text = (tmp_path / AI_LOG_FILENAME).read_text()
     data_lines = [ln for ln in log_text.splitlines() if ln.startswith("s ")]
     assert len(data_lines) == 1, "newline in note must not produce extra log lines"
-    assert "line_one_line_two" in data_lines[0]
+    # Newline is percent-encoded (%0A) and the literal raw newline is gone.
+    assert "\n" not in data_lines[0]
+    assert "%0A" in data_lines[0]
 
 
 # ---------------------------------------------------------------------------

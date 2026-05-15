@@ -87,9 +87,9 @@ def test_to_log_line_omits_tokens_available_when_true() -> None:
     assert "tokens_available" not in line
 
 
-def test_to_log_line_note_spaces_become_underscores() -> None:
+def test_to_log_line_note_percent_encodes_spaces() -> None:
     line = _session(note="quick check").to_log_line()
-    assert "note=quick_check" in line
+    assert "note=quick%20check" in line
 
 
 def test_to_log_line_tags() -> None:
@@ -792,3 +792,67 @@ def test_streaming_parse_large_log_smoke(tmp_path: Path) -> None:
             )
     sessions = parse_sessions(tmp_path)
     assert len(sessions) == n
+
+
+# ---------------------------------------------------------------------------
+# Percent-encoding for free-text fields (note, resume_command)
+# ---------------------------------------------------------------------------
+
+
+def test_note_round_trip_preserves_literal_underscore(tmp_path: Path) -> None:
+    """Literal underscores survive encode + parse — no collapse with spaces."""
+    s = _session(note="snake_case literal")
+    append_session(tmp_path, s)
+    parsed = parse_sessions(tmp_path)[0]
+    assert parsed.note == "snake_case literal"
+
+
+def test_note_round_trip_preserves_percent_sign(tmp_path: Path) -> None:
+    s = _session(note="cost: 50% off")
+    append_session(tmp_path, s)
+    parsed = parse_sessions(tmp_path)[0]
+    assert parsed.note == "cost: 50% off"
+
+
+def test_note_round_trip_preserves_unicode(tmp_path: Path) -> None:
+    s = _session(note="café ☕")
+    append_session(tmp_path, s)
+    parsed = parse_sessions(tmp_path)[0]
+    assert parsed.note == "café ☕"
+
+
+def test_resume_command_round_trip(tmp_path: Path) -> None:
+    s = _session(resume_command="halyard resume acme:project")
+    append_session(tmp_path, s)
+    parsed = parse_sessions(tmp_path)[0]
+    assert parsed.resume_command == "halyard resume acme:project"
+
+
+def test_legacy_underscore_note_still_decodes_to_spaces(tmp_path: Path) -> None:
+    """Pre-change log lines (no % escapes) still parse with legacy decode."""
+    log = tmp_path / AI_LOG_FILENAME
+    log.write_text(
+        "s 2026-05-09T10:00:00 2026-05-09T10:15:00 claude-code sonnet 100 50 0.0010 "
+        "note=quick_check resume_command=halyard_resume_acme\n"
+    )
+    parsed = parse_sessions(tmp_path)[0]
+    assert parsed.note == "quick check"
+    assert parsed.resume_command == "halyard resume acme"
+
+
+def test_legacy_log_line_hash_stable(tmp_path: Path) -> None:
+    """A pre-change s-line hashes to the same value before and after the encoder switch.
+
+    Hash is computed on the raw stored bytes, so changing how new writes
+    encode does not invalidate amendment records pointing at older lines.
+    """
+    from halyard.ai_log import session_hash
+
+    legacy_line = (
+        "s 2026-05-09T10:00:00 2026-05-09T10:15:00 claude-code sonnet 100 50 0.0010 "
+        "note=quick_check"
+    )
+    log = tmp_path / AI_LOG_FILENAME
+    log.write_text(legacy_line + "\n")
+    parsed = parse_sessions(tmp_path)[0]
+    assert parsed._raw_hash == session_hash(legacy_line)

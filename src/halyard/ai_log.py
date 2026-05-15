@@ -12,6 +12,7 @@ import re
 import sys
 import threading
 import traceback
+import urllib.parse
 import warnings
 from collections import defaultdict
 from collections.abc import Callable, Generator
@@ -179,6 +180,31 @@ def _safe_field(value: str) -> str:
     return _UNSAFE_FIELD_RE.sub("_", value)[:128]
 
 
+def _encode_free_text(value: str) -> str:
+    """Percent-encode a free-text value for safe storage in a key=value log token.
+
+    Uses ``urllib.parse.quote(value, safe="")`` so every byte that would
+    break the space-delimited format (spaces, control chars, '=', '%') is
+    escaped. The output is round-trippable through ``_decode_free_text``
+    and preserves literal underscores in the input — unlike the legacy
+    underscore-substitution scheme.
+    """
+    return urllib.parse.quote(value, safe="")
+
+
+def _decode_free_text(value: str) -> str:
+    """Decode a free-text value from a log line, accepting both encodings.
+
+    If the stored value contains any ``%`` escape, it is decoded via
+    ``urllib.parse.unquote`` (the new percent-encoded form). Otherwise the
+    legacy rule is applied — underscores are turned back into spaces — so
+    pre-existing log lines continue to parse correctly.
+    """
+    if "%" in value:
+        return urllib.parse.unquote(value)
+    return value.replace("_", " ")
+
+
 @dataclass
 class AiSession:
     start: datetime
@@ -271,7 +297,7 @@ class AiSession:
                 # Store as note-style string; callers can parse as ISO if needed
                 pass  # confirmed_at is metadata; no AiSession field for it yet
             elif key == "note":
-                self.note = value.replace("_", " ")
+                self.note = _decode_free_text(value)
             elif key == "pr_ref":
                 self.pr_ref = value
             elif key == "pr_state":
@@ -320,14 +346,7 @@ class AiSession:
         if self.tags:
             kvs.append(f"tags={_safe_field(','.join(self.tags))}")
         if self.note:
-            # M-2 encoding contract: spaces→underscores, CR/LF/tab stripped.
-            # Limitation: literal underscores in the original note are
-            # indistinguishable from encoded spaces after round-trip.
-            # Future format versions should use percent-encoding.
-            note_safe = (
-                self.note.replace("\n", " ").replace("\r", "").replace("\t", " ").replace(" ", "_")
-            )
-            kvs.append(f"note={note_safe}")
+            kvs.append(f"note={_encode_free_text(self.note)}")
         if self.session_id:
             kvs.append(f"session_id={_safe_field(self.session_id)}")
         if self.tool_calls is not None:
@@ -345,10 +364,7 @@ class AiSession:
         if self.model_breakdown:
             kvs.append(f"model_breakdown={_safe_field(self.model_breakdown)}")
         if self.resume_command:
-            # M-2 encoding contract: spaces→underscores, CR/LF stripped.
-            # Same underscore ambiguity as note — see comment above.
-            safe_cmd = self.resume_command.replace(" ", "_").replace("\n", "").replace("\r", "")
-            kvs.append(f"resume_command={safe_cmd}")
+            kvs.append(f"resume_command={_encode_free_text(self.resume_command)}")
         if self.branch:
             kvs.append(f"branch={_safe_field(self.branch)}")
         if self.commit_count is not None:
@@ -590,7 +606,7 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
             case "tags":
                 session.tags = v.split(",")
             case "note":
-                session.note = v.replace("_", " ")
+                session.note = _decode_free_text(v)
             case "session_id":
                 session.session_id = v
             case "tool_calls":
@@ -614,7 +630,7 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
             case "model_breakdown":
                 session.model_breakdown = v
             case "resume_command":
-                session.resume_command = v.replace("_", " ")
+                session.resume_command = _decode_free_text(v)
             case "branch":
                 session.branch = v
             case "commit_count":
