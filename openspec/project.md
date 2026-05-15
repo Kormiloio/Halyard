@@ -340,7 +340,22 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.45-hook-dedup/`.
     **Status: complete (1034 tests passing).**
 
-25. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+25. **v2.46 — Suppress evidence-free collector sessions:** the Gemini
+    AfterAgent and Cursor stop handlers appended an `s` session on every
+    fire, even when nothing happened (no tokens, no history, no tool
+    calls, no interactions, no code delta, no model). The shared
+    Cursor `beforeSubmitPrompt`/`stop` chain and spurious Gemini fires
+    therefore wrote zero-signal ledger rows. New shared
+    `collectors.session_has_evidence` predicate: a stop fire with no
+    evidence of a real turn is skipped (state still reset); any single
+    signal (tokens/history/tool/interaction/code/commit/real model)
+    still records as before. Honest scope: constant synthetic token
+    values come from external hook payloads, not a Halyard default —
+    this only removes the wholly-empty fire Halyard controls. Spec in
+    `openspec/changes/v2.46-evidence-free-sessions/`.
+    **Status: complete (1053 tests passing).**
+
+26. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

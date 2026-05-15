@@ -37,6 +37,7 @@ from halyard.ai_log import (
     read_active_project,
     write_unattributed_session,
 )
+from halyard.collectors import session_has_evidence
 from halyard.collectors.gemini_history import (
     GeminiModelStats,
     find_session_file,
@@ -243,6 +244,13 @@ def handle_agent_stop() -> int:
         telemetry_source="gemini-history" if history_summary else "gemini-hook",
         telemetry_trust="observed",
     )
+
+    # A hook fire with no evidence of a real turn (aborted turn,
+    # SessionStart-only state, or a spurious/shared invocation) must not
+    # become a ledger row. Still reset state so the next turn is clean.
+    if not session_has_evidence(session, history=history_summary is not None):
+        _reset_state(payload)
+        return 0
 
     if can_append_project_log and project_dir is not None:
         append_session(project_dir, session)

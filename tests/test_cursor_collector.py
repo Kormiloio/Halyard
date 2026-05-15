@@ -249,9 +249,12 @@ def test_handle_stop_hook_records_safe_metadata_counts(
     assert "do not log this content" not in (project / "ai-sessions.log").read_text()
 
 
-def test_handle_stop_hook_tokens_available_false_when_empty(
+def test_handle_stop_hook_skips_evidence_free_fire(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # v2.46: a stop fire with no tokens, unknown model, no signals is
+    # not a real turn (the shared beforeSubmitPrompt/stop chain can fire
+    # without a Cursor turn) — it must NOT become a ledger row.
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
     state_file.write_text("2026-05-07T10:00:00")
@@ -264,9 +267,7 @@ def test_handle_stop_hook_tokens_available_false_when_empty(
 
     from halyard.ai_log import parse_sessions
 
-    sessions = parse_sessions(project)
-    assert len(sessions) == 1
-    assert sessions[0].tokens_available is False
+    assert parse_sessions(project) == []
 
 
 # ---------------------------------------------------------------------------

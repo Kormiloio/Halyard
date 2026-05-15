@@ -259,9 +259,12 @@ def test_handle_agent_stop_skips_when_no_project(
     assert result == 0
 
 
-def test_handle_agent_stop_tokens_available_false_when_no_tokens(
+def test_handle_agent_stop_skips_evidence_free_fire(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # v2.46: AfterAgent with no tokens, unknown model, no history and no
+    # signals is not a real turn (SessionStart-only / aborted / spurious
+    # fire) — it must NOT become a ledger row.
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "gc-session"
     state_file.write_text(
@@ -283,9 +286,7 @@ def test_handle_agent_stop_tokens_available_false_when_no_tokens(
 
     from halyard.ai_log import parse_sessions as read_sessions
 
-    sessions = read_sessions(project)
-    assert len(sessions) == 1
-    assert sessions[0].tokens_available is False
+    assert read_sessions(project) == []
 
 
 def test_full_turn_sequence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
