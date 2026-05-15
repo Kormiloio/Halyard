@@ -1,11 +1,21 @@
 # PRD: Halyard Usage Analytics
 
-**Status - May 9, 2026:**
-Proposed. This PRD describes a stats-forward usage analytics surface for
-Halyard. It complements the existing Glass Cockpit dashboard rather than
-replacing it. The Glass Cockpit remains the operational view for capture,
-attribution, health, and billing readiness; Usage Analytics makes the same
-ledger feel legible, memorable, and useful at a glance.
+**Status - May 14, 2026:**
+**Shipped — 36 of 39 openspec tasks complete; 3 remaining are user-only
+visual review (layout verification, release screenshot, demo GIF).**
+
+The shared aggregation service (`src/halyard/usage.py`), the dashboard
+Usage Analytics panel with summary cards, activity heatmap, model and
+tool breakdowns, the new Overview/Models tab split with range segmented
+control (7d/30d/all), the daily-by-model SVG stacked bar chart with the
+v2.23 colour palette, and the `halyard usage --range --json` CLI all
+shipped in [v2.23-usage-analytics](../openspec/changes/v2.23-usage-analytics/).
+README quickstart and troubleshooting both reference the new surface.
+
+This PRD is now historical reference for the design intent rather than
+forward-looking work. The Glass Cockpit remains the operational view for
+capture, attribution, health, and billing readiness; Usage Analytics
+makes the same ledger feel legible, memorable, and useful at a glance.
 
 ---
 

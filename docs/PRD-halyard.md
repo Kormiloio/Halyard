@@ -30,8 +30,16 @@ and is preparing for an OSS community launch (HN / Reddit / Lobsters).
 2. OSS community launch — get real users, validate the format.
 3. Outcome-aware metadata uplift: branch as first-class field, commit count,
    code delta across all collectors, PR linkage (v2.24 — moves score 2/10 → 6/10).
-4. Attestable AI work appendix: signed, verifiable proof-of-work artifact (v2.19).
-5. Outcome graph only when design partners ask for it (v3.0, gated).
+4. Outcome graph — shipped in OSS Halyard 2026-05-14 (v3.0, 24/27 tasks
+   complete; 3 user-only items remain). Connects sessions to commits,
+   branches, PR refs and merge state, optional shell-history test runs,
+   and a branch-pattern repeated-attempt heuristic. Behind
+   `[outcomes].enabled` flag.
+5. Attestable AI work appendix — moved to the separate
+   [Kormiloio/Halyard-Enterprise](https://github.com/Kormiloio/Halyard-Enterprise)
+   repo (`halyard_enterprise` package). Identified as a bottoms-up
+   enterprise feature whose value rises with cross-party use; out of
+   scope for single-user OSS.
 
 **Strategic sequence:** users and trust before paid tiers. No paid features are
 discussed in any OSS-facing surface until the community has validated the format.

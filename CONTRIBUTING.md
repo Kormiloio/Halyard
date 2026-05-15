@@ -10,45 +10,39 @@ Halyard the OSS project is **single-user, local-first, plain-text**.
 The repo's intended audience is the individual developer or freelancer
 who wants to instrument their own AI-assisted work. Everything that
 matters for that audience — capture hooks, the AI sessions log, reports,
-invoicing, dashboard, TUI — lives and stays in this repo.
+invoicing, dashboard, TUI, outcome graph (v3.0), usage analytics
+(v2.23) — lives and stays in this repo.
 
-A separate **Enterprise** version is planned in its own repository:
-multi-user org admin, cost centers, organization-level rollups, hosted
-sync, trust aggregation across contributors. **That work belongs in the
+A separate **Enterprise** package lives at
+[Kormiloio/Halyard-Enterprise](https://github.com/Kormiloio/Halyard-Enterprise)
+(`halyard_enterprise` Python package): multi-user org admin, cost
+centers, organization-level rollups, hosted sync, trust aggregation
+across contributors, the attestable AI work appendix (signed,
+recipient-verifiable proof artifact). **That work belongs in the
 enterprise repo, not here.**
 
-## Frozen modules — do not extend in this repo
+The enterprise package depends on OSS Halyard as a library — it reads
+the same `ai-sessions.log` format and reuses pure helpers like
+`halyard.trust`. Bug fixes to OSS surfaces that also exist in
+enterprise should be applied in both repos.
 
-The following files are scaffolding for the future enterprise version
-that was committed to this repo earlier in the project's history. They
-are functional but **off-limits for new feature work in OSS Halyard**:
+## What belongs in the enterprise repo
 
-- `src/halyard/org.py` — org / department / team / member data model.
-- `src/halyard/org_store.py` — org-level SQLite sync store.
-- `src/halyard/org_rollups.py` — team and department rollup aggregation.
-- `src/halyard/org_reports.py` — org-level CLI reports.
-- `src/halyard/cost_centers.py` — cost center allocation.
-- `src/halyard/sync.py` — push local sessions into the org store.
-- `src/halyard/cli_org.py` — `halyard org` subcommands.
+If your change touches any of these concepts, it belongs in the
+[Halyard-Enterprise](https://github.com/Kormiloio/Halyard-Enterprise)
+repository, not here:
 
-These modules will be **extracted into a separate `halyard-enterprise`
-package** when the enterprise version starts. Until then:
+- `org.toml` schema, `OrgConfig` / `Department` / `Team` / `Member`
+  data model
+- `halyard org` CLI subcommands
+- `halyard report org` and `halyard report export` (finance CSV)
+- Cost-center allocation
+- Cross-contributor sync into an org store
+- Attestable AI work appendix (signed appendix + recipient verifier)
+- Hosted dashboards
+- SSO / RBAC
 
-- **Do not add new features** that touch these modules.
-- **Do not extend** the `org.toml` schema, the `OrgConfig` model, or
-  the `halyard org` CLI.
-- **Bug fixes only**, and only when the bug affects a path a solo user
-  can reach (the dashboard reading a sibling-account file, a security
-  finding, etc.).
-- **Do not start new openspec changes** scoped at multi-user, org admin,
-  cost-center, governance, trust aggregation, or hosted sync work in
-  this repo. Those proposals belong in the enterprise repo when it
-  exists.
-
-If you're unsure whether something crosses the line, ask before
-implementing.
-
-## What kind of contributions are welcome
+## What kind of contributions are welcome here
 
 - Bug fixes in capture hooks, the log format, reports, invoicing, the
   dashboard, the TUI.
@@ -64,7 +58,7 @@ implementing.
 - Cloud / hosted backend integrations beyond optional PyPI metadata.
 - Telemetry that phones home.
 - Anything that captures prompt text, source code, or full transcripts.
-- Multi-user / org-admin features (see frozen modules above).
+- Multi-user / org-admin features (see Enterprise above).
 
 ## Working with OpenSpec
 

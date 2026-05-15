@@ -19,7 +19,6 @@ from halyard.ai_log import AiSession
 from halyard.ai_plans import read_ai_plans
 from halyard.budget import BudgetStatus, budget_status
 from halyard.ledger import LedgerSummary, build_ledger
-from halyard.org_rollups import aggregate_trust, session_trust
 from halyard.reports import (
     CostBucket,
     DashboardState,
@@ -28,6 +27,7 @@ from halyard.reports import (
     format_minutes,
     parse_timeclock,
 )
+from halyard.trust import aggregate_trust, session_trust
 from halyard.usage import (
     ModelUsageBucket,
     ToolUsageBucket,

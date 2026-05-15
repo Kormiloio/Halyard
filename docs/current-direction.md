@@ -146,12 +146,24 @@ Spec: `openspec/changes/archive/2026-05-09-v2.24-outcome-metadata/`. 902 tests p
 13. **v2.36** — Proof score transparency — **shipped**: voyage panel shows
     `attr X% · tokens Y%` breakdown; fix prompt inline when attribution < 100%;
     sessions column adds all-time sub-label. 952 tests.
-14. **v2.19** — Attestable AI work appendix. Gated on v2.24 so the appendix
-   can include commit and PR evidence.
-5. **v3.0** — Outcome graph (connect sessions to commits, PRs, tests) only
-   if design partners ask for it.
-6. **v3+ org and enterprise** — After the local proof artifact is in the
-   field and the security posture is credible.
+14. **v3.0** — Outcome graph — **shipped (24 of 27 tasks, 3 user-only).**
+    Connect sessions to git commits/branches, PR refs and merge state,
+    test runs (opt-in shell-history scan), and repeated-attempt branch
+    heuristic. Surfaces: dashboard Leverage panel, TUI outcome glyph,
+    invoice-appendix PR refs. Behind `[outcomes].enabled` opt-out and
+    `[outcomes].shell_history` opt-in. 1052 tests. Design-partner recruit
+    and write-up remain user tasks.
+15. **v2.19** — Attestable AI work appendix — **moved to
+    [Kormiloio/Halyard-Enterprise](https://github.com/Kormiloio/Halyard-Enterprise).**
+    Identified on 2026-05-14 as a bottoms-up enterprise feature whose
+    value rises with cross-party use (recipient verifying a signed
+    appendix). Does not fit single-user OSS scope.
+16. **v3+ org and enterprise** — Lives in
+    [Kormiloio/Halyard-Enterprise](https://github.com/Kormiloio/Halyard-Enterprise)
+    (`halyard_enterprise` package). The seven OSS modules currently
+    mirrored there (`org.py`, `org_store.py`, `org_rollups.py`,
+    `org_reports.py`, `cost_centers.py`, `sync.py`, `cli_org.py`) are
+    frozen in OSS — see CONTRIBUTING.md.
 
 ---
 
@@ -162,7 +174,7 @@ These ideas are important, but not the current wedge:
 - hosted dashboards;
 - SSO / RBAC;
 - org admin dashboards;
-- full outcome graph analytics (v3.0);
+- (v3.0 outcome graph: shipped in OSS Halyard, see roadmap above);
 - duplicate-effort detection;
 - calendar scheduling for AI work;
 - new collectors (Copilot, Windsurf) before v2.18;
