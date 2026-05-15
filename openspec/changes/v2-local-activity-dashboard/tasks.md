@@ -62,4 +62,11 @@ Implementation checklist for v2 — Local Activity Dashboard.
 - [x] 8.2 Add sample session command for demos and UI testing.
 - [x] 8.3 Add unattributed session attention panel.
 - [x] 8.4 Add command to assign unattributed sessions to a project.
-- [ ] 8.5 Add first-class Codex hook integration when a stable hook surface exists.
+- [x] 8.5 DROPPED: first-class Codex hook integration.
+  — As of 2026-05, OpenAI Codex Desktop still has no public hook
+  surface — no equivalent of Claude Code's `~/.claude/settings.json`
+  hooks, Cursor's `hooks.json`, or Gemini CLI's `AfterModel`/
+  `AfterAgent` hooks. Halyard ships file-system-based capture instead
+  via `halyard import-codex`, which reads `~/.codex/sessions/.../rollout-*.jsonl`
+  and de-duplicates by session id. Revisit this task only if OpenAI
+  publishes a stable hook API.
