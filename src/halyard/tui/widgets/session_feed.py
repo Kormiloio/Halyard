@@ -37,6 +37,7 @@ class SessionFeed(Static):
             err_badge = f" ⚠{session.tool_errors}e" if session.tool_errors else ""
             branch_badge = f" [{session.branch}]" if session.branch else ""
             meta_badge = _metadata_badge(session)
+            outcome_badge = _outcome_badge(session)
             line = (
                 f"{marker} {tool_icon(session.tool)} "
                 f"{truncate(session.model, 20):20} "
@@ -44,11 +45,33 @@ class SessionFeed(Static):
                 f"{duration_str(session.end - session.start):>7} "
                 f"{tokens:>8} tok "
                 f"{cost_str(session.cost_usd):>9}"
-                f"{err_badge}{meta_badge}{branch_badge}"
+                f"{err_badge}{meta_badge}{branch_badge}{outcome_badge}"
             )
             lines.append(line)
         self.last_rendered_text = "\n".join(lines)
         self.update(self.last_rendered_text)
+
+
+_OUTCOME_GLYPH = {
+    "merged": "✓",
+    "open": "•",
+    "closed": "✗",
+    "none": "—",
+}
+
+
+def _outcome_badge(session: AiSession) -> str:
+    """Render the v3.0 outcome state as a compact glyph + PR ref.
+
+    Examples: " ✓ owner/repo#42" (merged), " • #42" (open), " ✗ closed" (closed).
+    Returns "" when no outcome is attached.
+    """
+    if not session.pr_state and not session.pr_ref:
+        return ""
+    glyph = _OUTCOME_GLYPH.get(session.pr_state or "", "?")
+    if session.pr_ref:
+        return f" {glyph} {session.pr_ref}"
+    return f" {glyph} {session.pr_state or '?'}"
 
 
 def _metadata_badge(session: AiSession) -> str:

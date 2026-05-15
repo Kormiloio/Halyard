@@ -29,6 +29,15 @@ def outcome_sync(
         console.print("[bold red]Error:[/] No Halyard project found.")
         raise typer.Exit(code=1)
 
+    from halyard.outcomes_config import outcomes_enabled
+
+    if not outcomes_enabled(project_dir):
+        console.print(
+            "[yellow]Outcome collection is disabled in halyard.toml "
+            "([outcomes] enabled = false).[/]"
+        )
+        raise typer.Exit()
+
     if not gh_available():
         console.print("[yellow]gh not available — skipping PR resolution.[/]")
         console.print("Install gh CLI to enable outcome sync: https://cli.github.com")
@@ -83,6 +92,15 @@ def outcome_report_cmd(
     if project_dir is None:
         console.print("[bold red]Error:[/] No Halyard project found.")
         raise typer.Exit(code=1)
+
+    from halyard.outcomes_config import outcomes_enabled
+
+    if not outcomes_enabled(project_dir):
+        console.print(
+            "[yellow]Outcome collection is disabled in halyard.toml "
+            "([outcomes] enabled = false).[/]"
+        )
+        raise typer.Exit()
 
     since_date = None
     if since:

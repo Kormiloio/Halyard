@@ -329,8 +329,53 @@ def render_ai_evidence_appendix(
     if notes:
         lines += ["", "*" + " ".join(notes) + "*"]
 
+    # v3.0 outcome graph: PR-linked sessions, grouped by PR ref.
+    pr_lines = _render_pr_refs_subsection(sessions)
+    if pr_lines:
+        lines += pr_lines
+
     lines.append("")
     return "\n".join(lines)
+
+
+def _render_pr_refs_subsection(sessions: list[AiSession]) -> list[str]:
+    """Render the "Linked engineering artifacts" subsection of the appendix.
+
+    Lists every PR a session in this period linked to, with its merge
+    state and session count. Skips sessions with no pr_ref. Returns an
+    empty list when no session has any PR linkage so we don't emit an
+    empty heading.
+
+    Never includes prompts, diffs, commit messages, code, or branch
+    contents. Only the PR ref (e.g. "owner/repo#42") and the count of
+    sessions that linked to it.
+    """
+    from collections import defaultdict
+
+    by_ref: dict[str, list[AiSession]] = defaultdict(list)
+    for s in sessions:
+        if s.pr_ref:
+            by_ref[s.pr_ref].append(s)
+    if not by_ref:
+        return []
+
+    out: list[str] = [
+        "",
+        "### Linked engineering artifacts",
+        "",
+        "| PR | State | Sessions |",
+        "|---|---|---:|",
+    ]
+    for ref in sorted(by_ref):
+        bucket = by_ref[ref]
+        # All sessions sharing a ref should agree on state; if not, prefer
+        # the most recently resolved one.
+        bucket_sorted = sorted(
+            bucket, key=lambda s: s.outcome_resolved_at or "", reverse=True
+        )
+        state = bucket_sorted[0].pr_state or "—"
+        out.append(f"| {ref} | {state} | {len(bucket)} |")
+    return out
 
 
 def render_pdf(invoice_path: Path) -> str | None:

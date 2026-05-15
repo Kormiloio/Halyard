@@ -9,7 +9,7 @@ import socket
 import webbrowser
 from collections.abc import Iterable
 from contextlib import suppress
-from datetime import timedelta
+from datetime import datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -610,6 +610,17 @@ def _render_state(state: DashboardState) -> str:
         {_usage_panel(usage)}
       </article>
 
+      <article class="panel span-12">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">v3.0</p>
+            <h2>Leverage</h2>
+          </div>
+          <div class="pill-group"><span class="pill">30d</span></div>
+        </div>
+        {_leverage_panel(state.all_sessions, state.generated_at)}
+      </article>
+
       <article class="panel span-7">
         <div class="panel-head">
           <div>
@@ -1043,6 +1054,72 @@ def _health_badge(session: AiSession) -> str:
         else:
             parts.append("<span class='dim'>~est</span>")
     return " ".join(parts)
+
+
+def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
+    """v3.0 Leverage — engineering-outcome rollup over the last 30 days.
+
+    Shows the answer to "is the AI spend producing engineering leverage?"
+    in solo-developer terms: of your AI sessions in the last 30 days,
+    how many landed in merged PRs?
+    """
+    cutoff = now - timedelta(days=30)
+    recent = [s for s in sessions if s.start >= cutoff]
+    total = len(recent)
+    if total == 0:
+        return (
+            "<div class='leverage-empty'>"
+            "<p class='mini-empty'>No sessions in the last 30 days.</p>"
+            "</div>"
+        )
+
+    merged = sum(1 for s in recent if s.pr_state == "merged")
+    open_ = sum(1 for s in recent if s.pr_state == "open")
+    closed = sum(1 for s in recent if s.pr_state == "closed")
+    no_pr = sum(1 for s in recent if s.pr_state == "none")
+    unsynced = sum(1 for s in recent if not s.pr_state)
+
+    leverage_pct = int((merged / total) * 100) if total else 0
+    fill_class = "leverage-high" if leverage_pct >= 50 else (
+        "leverage-mid" if leverage_pct >= 20 else "leverage-low"
+    )
+
+    rows = [
+        ("Merged", merged, "leverage-merged"),
+        ("Open", open_, "leverage-open"),
+        ("Closed unmerged", closed, "leverage-closed"),
+        ("No PR", no_pr, "leverage-nopr"),
+        ("Not synced", unsynced, "leverage-unsynced"),
+    ]
+    row_html = "".join(
+        "<div class='leverage-row'>"
+        f"<span class='leverage-label {cls}'>{_e(label)}</span>"
+        f"<strong>{count}</strong>"
+        f"<small>{int(count * 100 / total)}%</small>"
+        "</div>"
+        for label, count, cls in rows
+    )
+
+    hint = ""
+    if unsynced > 0:
+        hint = (
+            "<p class='leverage-hint'>"
+            "Run <code>halyard outcome sync</code> to resolve unsynced sessions."
+            "</p>"
+        )
+
+    return (
+        "<div class='leverage-grid'>"
+        f"<div class='leverage-headline'>"
+        f"<div class='leverage-pct {fill_class}'>{leverage_pct}%</div>"
+        f"<div class='leverage-caption'>"
+        f"<strong>{merged}</strong> of <strong>{total}</strong> sessions landed in merged PRs"
+        "</div>"
+        "</div>"
+        f"<div class='leverage-rows'>{row_html}</div>"
+        f"{hint}"
+        "</div>"
+    )
 
 
 def _usage_panel(usage: UsageAnalytics) -> str:
@@ -1819,6 +1896,30 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .usage-row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .usage-row small { text-align: right; white-space: nowrap; }
 .usage-warnings { grid-column: span 3; display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* v3.0 Leverage panel */
+.leverage-grid { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 18px; align-items: center; }
+.leverage-headline { display: grid; gap: 8px; }
+.leverage-pct { font-size: 42px; font-weight: 700; line-height: 1.1; }
+.leverage-pct.leverage-high { color: #5cd28b; }
+.leverage-pct.leverage-mid { color: #f3bf5b; }
+.leverage-pct.leverage-low { color: var(--muted); }
+.leverage-caption { font-size: 13px; color: var(--muted); }
+.leverage-caption strong { color: var(--fg); }
+.leverage-rows { display: grid; gap: 6px; }
+.leverage-row { display: grid; grid-template-columns: 1.4fr 64px 64px; gap: 12px; align-items: center; font-size: 13px; }
+.leverage-row strong { text-align: right; }
+.leverage-row small { text-align: right; color: var(--muted); }
+.leverage-label { display: inline-flex; align-items: center; gap: 6px; }
+.leverage-label::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.leverage-label.leverage-merged::before { background: #5cd28b; }
+.leverage-label.leverage-open::before { background: #5b9cf3; }
+.leverage-label.leverage-closed::before { background: #d2675c; }
+.leverage-label.leverage-nopr::before { background: #b09060; }
+.leverage-label.leverage-unsynced::before { background: var(--muted); }
+.leverage-hint { grid-column: span 2; font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+.leverage-hint code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; }
+.leverage-empty { padding: 12px 0; }
 
 /* Budget panel */
 .budget-list { display: grid; gap: 8px; }
