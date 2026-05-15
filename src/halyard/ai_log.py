@@ -59,7 +59,7 @@ def _log_error(msg: str, exc: Exception) -> None:
         ts = datetime.now(tz=UTC).isoformat(timespec="seconds")
         tb = traceback.format_exc()
         entry = f"[{ts}] {msg}: {type(exc).__name__}: {exc}\n{tb}\n"
-        with _HALYARD_LOG.open("a") as fh:
+        with _HALYARD_LOG.open("a", encoding="utf-8") as fh:
             fh.write(entry)
     except Exception:
         pass
@@ -86,7 +86,7 @@ def locked_file(path: Path, mode: str) -> Generator[IO[str], None, None]:
     lock_key = str(path.resolve())
     with _PATH_LOCKS_GUARD:
         thread_lock = _PATH_LOCKS.setdefault(lock_key, threading.RLock())
-    with thread_lock, open(path, mode) as f:
+    with thread_lock, open(path, mode, encoding="utf-8") as f:
         if _fcntl is not None:
             _fcntl.flock(f.fileno(), _fcntl.LOCK_EX)
         try:
@@ -262,9 +262,9 @@ class AiSession:
         ]
         kvs: list[str] = []
         if self.project:
-            kvs.append(f"project={self.project}")
+            kvs.append(f"project={_safe_field(self.project)}")
         if self.user:
-            kvs.append(f"user={self.user}")
+            kvs.append(f"user={_safe_field(self.user)}")
         if self.cache_read is not None:
             kvs.append(f"cache_read={self.cache_read}")
         if self.cache_write is not None:
@@ -272,17 +272,17 @@ class AiSession:
         if not self.tokens_available:
             kvs.append("tokens_available=false")
         if self.billing != "api":
-            kvs.append(f"billing={self.billing}")
+            kvs.append(f"billing={_safe_field(self.billing)}")
         if self.credits is not None:
             kvs.append(f"credits={self.credits:.4f}")
         if self.job_id:
-            kvs.append(f"job_id={self.job_id}")
+            kvs.append(f"job_id={_safe_field(self.job_id)}")
         if self.source:
-            kvs.append(f"source={self.source}")
+            kvs.append(f"source={_safe_field(self.source)}")
         if self.attr_method:
-            kvs.append(f"attr_method={self.attr_method}")
+            kvs.append(f"attr_method={_safe_field(self.attr_method)}")
         if self.tags:
-            kvs.append(f"tags={','.join(self.tags)}")
+            kvs.append(f"tags={_safe_field(','.join(self.tags))}")
         if self.note:
             # M-2 encoding contract: spaces→underscores, CR/LF/tab stripped.
             # Limitation: literal underscores in the original note are
@@ -293,8 +293,7 @@ class AiSession:
             )
             kvs.append(f"note={note_safe}")
         if self.session_id:
-            safe_sid = self.session_id.replace(" ", "")
-            kvs.append(f"session_id={safe_sid}")
+            kvs.append(f"session_id={_safe_field(self.session_id)}")
         if self.tool_calls is not None:
             kvs.append(f"tool_calls={self.tool_calls}")
         if self.tool_errors is not None:
@@ -308,22 +307,22 @@ class AiSession:
         if self.code_removed is not None:
             kvs.append(f"code_removed={self.code_removed}")
         if self.model_breakdown:
-            kvs.append(f"model_breakdown={self.model_breakdown}")
+            kvs.append(f"model_breakdown={_safe_field(self.model_breakdown)}")
         if self.resume_command:
             # M-2 encoding contract: spaces→underscores, CR/LF stripped.
             # Same underscore ambiguity as note — see comment above.
             safe_cmd = self.resume_command.replace(" ", "_").replace("\n", "").replace("\r", "")
             kvs.append(f"resume_command={safe_cmd}")
         if self.branch:
-            kvs.append(f"branch={self.branch}")
+            kvs.append(f"branch={_safe_field(self.branch)}")
         if self.commit_count is not None:
             kvs.append(f"commit_count={self.commit_count}")
         if self.pr_ref:
-            kvs.append(f"pr_ref={self.pr_ref}")
+            kvs.append(f"pr_ref={_safe_field(self.pr_ref)}")
         if self.pr_state:
-            kvs.append(f"pr_state={self.pr_state}")
+            kvs.append(f"pr_state={_safe_field(self.pr_state)}")
         if self.outcome_resolved_at:
-            kvs.append(f"outcome_resolved_at={self.outcome_resolved_at}")
+            kvs.append(f"outcome_resolved_at={_safe_field(self.outcome_resolved_at)}")
         if self.interaction_count is not None:
             kvs.append(f"interaction_count={self.interaction_count}")
         if self.user_message_count is not None:
@@ -397,7 +396,7 @@ def parse_sessions(project_dir: Path) -> list[AiSession]:
     sessions_by_hash: dict[str, AiSession] = {}  # first occurrence per hash for amendment lookup
     amendments_by_hash: dict[str, list[Amendment]] = defaultdict(list)
 
-    for raw_line in log_path.read_text().splitlines():
+    for raw_line in log_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith(";"):
             continue
@@ -702,9 +701,11 @@ def _effective_session_lines(lines: list[str]) -> list[tuple[str, AiSession]]:
     for raw_line in lines:
         line = raw_line.rstrip()
         if line.startswith("s "):
-            session = _parse_line(line)
+            session, error = _parse_line_result(line)
             if session is not None:
                 entries.append((line, session_hash(line), session))
+            elif error is not None:
+                _write_quarantine(line, error)
         elif line.startswith("a "):
             amendment = parse_amendment(line)
             if amendment is not None:
@@ -748,7 +749,7 @@ def read_active_project() -> str | None:
     active = Path.home() / ".halyard" / "active"
     if not active.exists():
         return None
-    for line in active.read_text().splitlines():
+    for line in active.read_text(encoding="utf-8").splitlines():
         if line.startswith("slug="):
             return line[5:]
     return None
@@ -772,7 +773,9 @@ def unattributed_log_count() -> int:
     path = unattributed_log_path()
     if not path.exists():
         return 0
-    return sum(1 for line in path.read_text().splitlines() if line.strip().startswith("s "))
+    return sum(
+        1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip().startswith("s ")
+    )
 
 
 def maybe_show_dashboard_hint() -> None:
@@ -812,7 +815,7 @@ def _write_quarantine(original_line: str, error: str) -> Path:
     # M-5: strip newlines from the error string so a crafted log line cannot
     # inject additional "; error=..." header lines into quarantine.log.
     safe_error = error.replace("\n", " ").replace("\r", "")
-    with path.open("a") as f:
+    with path.open("a", encoding="utf-8") as f:
         f.write(f"; error={safe_error}\n")
         f.write(original_line.rstrip("\n") + "\n")
     return path

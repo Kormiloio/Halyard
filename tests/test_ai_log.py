@@ -431,6 +431,42 @@ def test_newline_injection_round_trips_safely(tmp_path: Path) -> None:
     assert "\n" not in sessions[0].model
 
 
+@pytest.mark.parametrize(
+    "field,payload",
+    [
+        ("project", "good:slug cost_usd=0 project=evil"),
+        ("user", "alice billing=free"),
+        ("billing", "credits\nstatus=hacked"),
+        ("job_id", "abc def=ghi"),
+        ("source", "hook source=spoof"),
+        ("attr_method", "git\tnewline"),
+        ("branch", "feat/x project=evil"),
+        ("pr_ref", "owner/repo#1 tags=evil"),
+        ("pr_state", "open pr_state=closed"),
+        ("outcome_resolved_at", "2026-01-01 outcome=hacked"),
+        ("session_id", "id with spaces=bad"),
+        ("model_breakdown", "gpt:1 fake=field"),
+    ],
+)
+def test_metadata_injection_sanitized(tmp_path: Path, field: str, payload: str) -> None:
+    """Whitespace/= injection in any string metadata field must not corrupt the log."""
+    s = _session(**{field: payload})
+    append_session(tmp_path, s)
+    raw = (tmp_path / AI_LOG_FILENAME).read_text()
+    data_lines = [ln for ln in raw.splitlines() if ln.startswith("s ")]
+    assert len(data_lines) == 1
+    sessions = parse_sessions(tmp_path)
+    assert len(sessions) == 1
+
+
+def test_tags_injection_sanitized(tmp_path: Path) -> None:
+    """A tag containing space/= must not break the log."""
+    s = _session(tags=["normal", "bad tag=evil"])
+    append_session(tmp_path, s)
+    sessions = parse_sessions(tmp_path)
+    assert len(sessions) == 1
+
+
 # ---------------------------------------------------------------------------
 # M-2: note/resume_command encoding documentation (round-trip verification)
 # ---------------------------------------------------------------------------
