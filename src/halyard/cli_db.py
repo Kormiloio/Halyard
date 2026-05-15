@@ -40,13 +40,23 @@ def db_sync(
 
 
 @app.command(name="reset")
-def db_reset() -> None:
+def db_reset(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+) -> None:
     """Delete the SQLite cache (cache.db). Safe to re-run sync afterwards."""
+    import sys
+
     from halyard.db import db_path, reset
 
     path = db_path()
     if not path.exists():
         console.print("[yellow]No cache file found.[/]")
+        return
+
+    # Only prompt for an interactive user; scripts / non-TTY callers
+    # (and --yes) proceed unprompted so automation is unaffected.
+    if not yes and sys.stdin.isatty() and not typer.confirm(f"Delete cache at {path}?"):
+        console.print("[yellow]Aborted.[/]")
         return
 
     reset()

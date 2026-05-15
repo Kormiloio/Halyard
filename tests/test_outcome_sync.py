@@ -58,7 +58,11 @@ def _pr(
     created_offset_hours: float = 0.5,
     base: datetime = _END,
 ) -> dict:  # type: ignore[type-arg]
-    created = base + timedelta(hours=created_offset_hours)
+    # gh createdAt is real UTC; session.end is local-naive. Mirror that:
+    # express the PR time as the UTC equivalent of the (local) base + offset.
+    from datetime import UTC
+
+    created = (base + timedelta(hours=created_offset_hours)).astimezone(UTC)
     return {
         "number": number,
         "state": state,

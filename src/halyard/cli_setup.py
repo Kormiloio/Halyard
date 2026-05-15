@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -9,6 +10,10 @@ import typer
 from rich.console import Console
 
 console = Console()
+
+# A project slug is written verbatim into halyard.toml as a quoted string;
+# restrict it so it cannot inject TOML or path separators that escape it.
+_SLUG_RE = re.compile(r"^[A-Za-z0-9._:/-]+$")
 
 
 def register(app: typer.Typer) -> None:
@@ -233,8 +238,7 @@ def register(app: typer.Typer) -> None:
 
         if current_auto_slug:
             console.print(
-                f"Sessions from this directory are currently tracked as "
-                f"[dim]{current_auto_slug}[/]"
+                f"Sessions from this directory are currently tracked as [dim]{current_auto_slug}[/]"
             )
         else:
             console.print(
@@ -252,6 +256,12 @@ def register(app: typer.Typer) -> None:
         slug = slug.strip()
         if not slug:
             console.print("[bold red]Error:[/] slug cannot be empty.")
+            raise typer.Exit(code=1)
+        if not _SLUG_RE.match(slug):
+            console.print(
+                "[bold red]Error:[/] invalid slug. Use only letters, digits, "
+                "and the characters . _ : / -"
+            )
             raise typer.Exit(code=1)
 
         toml_content = f'[project]\nslug = "{slug}"\n'

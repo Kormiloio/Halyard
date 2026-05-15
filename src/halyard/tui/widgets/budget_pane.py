@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from rich.markup import escape
 from textual.widgets import Static
 
 from halyard.budget import BudgetStatus, budget_status
@@ -29,7 +30,7 @@ class BudgetPane(Static):
             day = _limit_text(status.today_spend, status.today_limit)
             month = _limit_text(status.month_spend, status.month_limit)
             css = budget_css_class(status.month_spend, status.month_limit)
-            lines.append(f"{status.slug} [{css}]today {day} month {month}[/{css}]")
+            lines.append(f"{escape(status.slug)} [{css}]today {day} month {month}[/{css}]")
         self.last_rendered_text = "\n".join(lines)
         self.update(self.last_rendered_text)
 

@@ -7,6 +7,7 @@ tool call stats, and accurate multi-model cost for a completed session.
 from __future__ import annotations
 
 import json
+import re
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -170,6 +171,11 @@ def parse_session_file(path: Path) -> GeminiSessionSummary | None:
         return None
 
 
+# Gemini session IDs are UUID-like (hex + hyphens). Reject anything else so
+# the value can never inject glob metacharacters into the pattern below.
+_SESSION_ID_RE = re.compile(r"^[0-9A-Za-z-]{8,}$")
+
+
 def find_session_file(session_id: str) -> Path | None:
     """Find the history JSON for a session by its ID.
 
@@ -178,6 +184,8 @@ def find_session_file(session_id: str) -> Path | None:
     This prevents false-positive matches when two sessions share the same
     8-char prefix (Gap-7 collision scenario).
     """
+    if not _SESSION_ID_RE.match(session_id):
+        return None
     prefix = session_id[:8]
     matches: list[Path] = []
     for candidate in _GEMINI_TMP.glob(f"*/chats/session-*-{prefix}.json"):

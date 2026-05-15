@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 
+from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -204,12 +205,12 @@ class HalyardApp(App[None]):
             return f"⚓ HALYARD  Waiting for log file: {self.store.log_path}"
         scope = "hub"
         if self.project_scope == "project":
-            scope = f"project: {self.project_slug or 'unknown'}"
+            scope = f"project: {escape(self.project_slug or 'unknown')}"
         parts = ["⚓ HALYARD", f"[{scope}]", f"[{self.time_window}]"]
         if self.branch_filter:
-            parts.append(f"[branch: {self.branch_filter}]")
+            parts.append(f"[branch: {escape(self.branch_filter)}]")
         if self.detail_project:
-            parts.append(f"[detail: {self.detail_project}]")
+            parts.append(f"[detail: {escape(self.detail_project)}]")
         if self.header_note:
             parts.append(self.header_note)
         return "  ·  ".join(parts)

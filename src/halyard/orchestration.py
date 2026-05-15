@@ -298,16 +298,18 @@ def interactive_assign_unattributed(
             raise typer.Exit(code=1)
 
     global_log = unattributed_log_path()
-    if global_log.exists() and any(
-        line.strip().startswith("s ") for line in global_log.read_text().splitlines()
-    ):
-        remaining = global_log.read_text().splitlines()
+    snapshot = global_log.read_text().splitlines() if global_log.exists() else []
+    if any(line.strip().startswith("s ") for line in snapshot):
         assigned = 0
         hubbed = 0
         discarded = 0
         skipped = 0
+        # Collect processed line strings and rewrite the file ONCE at the end
+        # under a lock. Rewriting per-iteration (outside any lock) would clobber
+        # sessions a concurrent hook appended between the read and each write.
+        to_drop: list[str] = []
 
-        for line in list(remaining):
+        for line in snapshot:
             if not line.strip().startswith("s "):
                 continue
             session = AiSession.from_log_line(line)
@@ -347,8 +349,7 @@ def interactive_assign_unattributed(
                     continue
 
                 append_session(target_dir, replace(session, project=target_project))
-                remaining.remove(line)
-                _rewrite_lines_atomic(global_log, remaining)
+                to_drop.append(line)
                 assigned += 1
             elif choice == "h":
                 hub_dir = find_hub()
@@ -357,18 +358,19 @@ def interactive_assign_unattributed(
                     skipped += 1
                     continue
                 append_session(hub_dir, session)
-                remaining.remove(line)
-                _rewrite_lines_atomic(global_log, remaining)
+                to_drop.append(line)
                 hubbed += 1
             elif choice == "d":
                 if typer.confirm("Discard this session?", default=False):
-                    remaining.remove(line)
-                    _rewrite_lines_atomic(global_log, remaining)
+                    to_drop.append(line)
                     discarded += 1
                 else:
                     skipped += 1
             else:
                 skipped += 1
+
+        if to_drop:
+            _remove_lines_atomic(global_log, to_drop)
 
         console.print(
             f"\n[bold green]Done.[/] {assigned} assigned, {hubbed} moved to hub, "
@@ -541,14 +543,27 @@ def _ensure_gitignore(path: Path) -> None:
     path.write_text(existing + separator + "\n".join(missing_lines) + "\n")
 
 
-def _rewrite_lines_atomic(path: Path, lines: list[str]) -> None:
-    # v2.17 task 3.4 audit: this function is called only from
-    # interactive_assign_unattributed() (lines above), which is a user-driven
-    # destructive path — the user explicitly chooses to assign/hub/discard
-    # sessions one at a time via interactive prompt.  That is the intended use.
-    # It is NOT used on any background or automatic write path.  No unexpected
-    # callers found.
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    content = "\n".join(lines)
-    tmp.write_text((content + "\n") if content else "")
-    tmp.replace(path)
+def _remove_lines_atomic(path: Path, drop: list[str]) -> None:
+    """Remove exactly the lines in *drop* from *path*, once, under a lock.
+
+    Re-reads the file inside the lock and removes each dropped line by
+    occurrence count, so sessions a concurrent hook appended between the
+    initial snapshot and now are preserved instead of being clobbered.
+    Counting (rather than identity) makes duplicate serialized sessions
+    unambiguous: drop exactly as many copies as were processed.
+    """
+    from collections import Counter
+
+    remaining_to_drop: Counter[str] = Counter(drop)
+    with locked_file(path, "r+") as f:
+        current = f.read().splitlines()
+        kept: list[str] = []
+        for line in current:
+            if remaining_to_drop.get(line, 0) > 0:
+                remaining_to_drop[line] -= 1
+                continue
+            kept.append(line)
+        f.seek(0)
+        f.truncate()
+        if kept:
+            f.write("\n".join(kept) + "\n")

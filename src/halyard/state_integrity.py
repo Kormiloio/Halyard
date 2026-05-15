@@ -26,9 +26,12 @@ from typing import Literal, cast
 IntegrityMode = Literal["off", "hash"]
 
 _DEFAULT_MODE: IntegrityMode = "off"
-# Cached per process; invalidated via clear_integrity_mode_cache(). CLI
-# invocations are short-lived so stale reads are not a concern.
-_MODE_CACHE: IntegrityMode | None = None
+# Cached per process, keyed by resolved project directory. Keying by dir
+# matters: a `hash`-mode project must not poison a later read for a
+# different project (or a project_dir=None read such as find_hub()), which
+# would raise spurious IntegrityErrors and silently disable hub discovery.
+# CLI invocations are short-lived so stale reads are not a concern.
+_MODE_CACHE: dict[str, IntegrityMode] = {}
 
 
 class IntegrityError(Exception):
@@ -62,24 +65,24 @@ def current_mode(project_dir: Path | None = None) -> IntegrityMode:
     override > cached value > default ("off"). The cache is process-local
     so hot paths (every hook fire) don't re-read halyard.toml.
     """
-    global _MODE_CACHE
     env = os.environ.get("HALYARD_STATE_INTEGRITY")
     if env in ("off", "hash"):
         return cast("IntegrityMode", env)
     if project_dir is not None:
+        key = str(project_dir.resolve())
+        cached = _MODE_CACHE.get(key)
+        if cached is not None:
+            return cached
         mode = _read_mode_from_toml(project_dir)
         if mode is not None:
-            _MODE_CACHE = mode
+            _MODE_CACHE[key] = mode
             return mode
-    if _MODE_CACHE is not None:
-        return _MODE_CACHE
     return _DEFAULT_MODE
 
 
 def _reset_cache_for_tests() -> None:
     """Test helper: clear the cached mode so subsequent calls re-read config."""
-    global _MODE_CACHE
-    _MODE_CACHE = None
+    _MODE_CACHE.clear()
 
 
 def read_trusted_state(path: Path, *, mode: IntegrityMode | None = None) -> str | None:
@@ -111,19 +114,33 @@ def read_trusted_state(path: Path, *, mode: IntegrityMode | None = None) -> str 
 def write_trusted_state(path: Path, content: str, *, mode: IntegrityMode | None = None) -> None:
     """Write *content* to *path* and refresh its integrity sidecar.
 
-    Uses a tmp-then-rename pattern to keep the file write atomic. The
-    sidecar is written last so a reader observing an updated file with
-    a stale sidecar will get a clean IntegrityError rather than silent
-    acceptance.
+    Both the data file and its sidecar are written via tmp + fsync +
+    atomic rename. The sidecar is committed first, so a crash mid-write
+    leaves the pair mismatched and the next read raises a clean
+    IntegrityError rather than silently trusting stale content.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(content, encoding="utf-8")
-    tmp.replace(path)
     active_mode = mode if mode is not None else current_mode()
     if active_mode == "hash":
+        # Write the sidecar (fsync'd) BEFORE swapping the data file in. A
+        # crash then leaves an old file with an old (matching) sidecar, or a
+        # new sidecar with the old file — the latter raises a clean
+        # IntegrityError instead of silently trusting tampered content.
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        _sidecar(path).write_text(digest + "\n", encoding="utf-8")
+        _atomic_write(_sidecar(path), digest + "\n")
+    _atomic_write(path, content)
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    """Write *content* to *path* via tmp + fsync + atomic rename."""
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, content.encode("utf-8"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.replace(tmp, path)
 
 
 def verify_all(paths: list[Path]) -> tuple[bool, Path | None]:

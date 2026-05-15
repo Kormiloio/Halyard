@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from rich.markup import escape
 from textual.widgets import Static
 
 from halyard.ai_log import AiSession
@@ -56,7 +57,7 @@ class UsagePane(Static):
         for bucket in usage.by_model[:4]:
             pct = int(bucket.token_share * 100)
             bar = "#" * max(1, min(16, pct // 6)) if bucket.tokens else "-"
-            model = truncate(bucket.model, 18)
+            model = escape(truncate(bucket.model, 18))
             tokens = compact_number(bucket.tokens)
             lines.append(f"{model:18} {tokens:>7} {pct:>3}% {bar}")
         self.last_rendered_text = "\n".join(lines)

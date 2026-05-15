@@ -74,8 +74,14 @@ def rate_history_from_git(project_dir: Path) -> list[RateChange]:
             current_slug = ""
         elif line.startswith("Date:"):
             commit_date = _parse_git_date(line[5:].strip())
-        elif line.startswith("+") and "slug" in line and "=" in line:
-            m = re.search(r'slug\s*=\s*["\']?([a-z0-9_-]+)["\']?', line)
+        elif line.startswith("@@") or line.startswith("diff --git"):
+            # Hunk / file boundary: the previous slug no longer governs the
+            # rate lines that follow, so don't carry it across.
+            current_slug = ""
+        elif re.match(r'^\+\s*slug\s*=\s*["\']?([A-Za-z0-9_:/-]+)', line):
+            # Anchored to the `slug` key itself — must not match
+            # `+client_slug =` or `+project_slug =`.
+            m = re.match(r'^\+\s*slug\s*=\s*["\']?([A-Za-z0-9_:/-]+)', line)
             if m:
                 current_slug = m.group(1)
         elif line.startswith("+hourly_rate") and "=" in line and commit_date:

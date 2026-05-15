@@ -170,7 +170,18 @@ def get_db() -> sqlite3.Connection:
                     "No plain-text data is lost."
                 )
             if sql.strip() and sql.strip() != "-- no-op":
-                conn.executescript(sql)
+                try:
+                    conn.executescript(sql)
+                except sqlite3.OperationalError as exc:
+                    # A prior run may have died after applying an ALTER but
+                    # before bumping user_version. Re-running the ALTER then
+                    # fails with "duplicate column name" — treat that as
+                    # already-applied so the migration self-heals instead of
+                    # bricking the cache forever. Any other error is real.
+                    if "duplicate column name" not in str(exc).lower():
+                        conn.rollback()
+                        conn.close()
+                        raise
             conn.execute(f"PRAGMA user_version = {from_version + 1}")
             conn.commit()
             version = from_version + 1
@@ -341,7 +352,17 @@ def _sync_timeclock(conn: sqlite3.Connection, tc_path: Path) -> int:
     source = str(tc_path.resolve())
 
     for start, end, account in _parse_closed_timeclock(tc_path):
-        result = conn.execute(
+        # Pre-check existence: INSERT OR REPLACE always reports rowcount=1
+        # (it deletes+inserts), so without this a resync of unchanged
+        # entries would overcount "added". Mirrors the sessions path.
+        is_new = (
+            conn.execute(
+                "SELECT 1 FROM timeclock WHERE source_file = ? AND started_at = ? AND project = ?",
+                (source, start.isoformat(), account),
+            ).fetchone()
+            is None
+        )
+        conn.execute(
             """
             INSERT OR REPLACE INTO timeclock
                 (project, started_at, ended_at, source_file)
@@ -349,7 +370,8 @@ def _sync_timeclock(conn: sqlite3.Connection, tc_path: Path) -> int:
             """,
             (account, start.isoformat(), end.isoformat(), source),
         )
-        added += result.rowcount
+        if is_new:
+            added += 1
 
     return added
 

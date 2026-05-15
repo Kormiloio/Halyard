@@ -101,7 +101,12 @@ def auto_timer_activity(project: str, timeclock: Path, now: datetime | None = No
 
     Silently skips if a manual timer is already running.
     """
+    from halyard.ai_log import _safe_field
     from halyard.reports import read_active_timer
+
+    # Sanitize: a slug with whitespace/newline would corrupt the
+    # space-delimited timeclock record.
+    project = _safe_field(project)
 
     if read_active_timer() is not None:
         return  # manual timer wins
@@ -162,3 +167,18 @@ def auto_timer_close_now(now: datetime | None = None) -> bool:
             _write_clockout(tc, ts)
     _clear_state()
     return True
+
+
+def safe_auto_timer_close() -> None:
+    """Close the auto-timer, never raising into the caller.
+
+    Used by `timer stop` paths: a corrupt timeclock must not abort the
+    stop command, but the failure is logged (not silently swallowed) so
+    it is diagnosable.
+    """
+    try:
+        auto_timer_close_now()
+    except Exception as exc:  # must not break the stop command
+        from halyard.ai_log import _log_error
+
+        _log_error("auto-timer close failed", exc)

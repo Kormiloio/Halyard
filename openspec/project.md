@@ -247,7 +247,20 @@ layers must read from this local source of truth; they do not replace it.
     Spec in `openspec/changes/v2.37-smart-attribution/`.
     **Status: complete (974 tests passing).**
 
-17. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+17. **v2.38 — Review hardening:** full-codebase review remediation. Cost
+    math moved to `Decimal`/`ROUND_HALF_UP`; a single `usage.sum_spend`
+    convention so `halyard budget` and invoicing reconcile; pricing
+    cache/multipliers invalidate together and never silently fall back;
+    Rich-markup injection closed across all TUI panes; `adopt`/Gemini
+    glob/auto-timer inputs validated; SQLite migrations self-heal; the
+    `state_integrity` mode cache is per-project and the sidecar write is
+    crash-atomic; PR-attribution datetimes normalized to UTC; TUI memory
+    bounded; Codex import streams + prunes dedup state. H7 (move TUI
+    aggregation off the event loop) and four LOW dedup items are deferred
+    with rationale. Spec in `openspec/changes/v2.38-review-hardening/`.
+    **Status: complete (987 tests passing).**
+
+18. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

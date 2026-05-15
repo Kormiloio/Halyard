@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from rich.markup import escape
 from textual.widgets import Static
 
 from halyard.ai_log import AiSession
@@ -34,11 +35,12 @@ class VoyagePane(Static):
             if summary.stage == "moored":
                 creature = summary.creature or "·"
                 trait = f" {summary.creature_trait}" if summary.creature_trait else ""
-                lines.append(f"{creature} {summary.slug}  {label}{trait}")
+                lines.append(f"{creature} {escape(summary.slug)}  {label}{trait}")
             else:
                 bar = _progress_bar(summary.progress_pct)
                 lines.append(
-                    f"· {summary.slug}  {label}  {summary.session_count}/{summary.target_sessions}"
+                    f"· {escape(summary.slug)}  {label}  "
+                    f"{summary.session_count}/{summary.target_sessions}"
                 )
                 lines.append(f"  {bar}")
         if len(summaries) > 6:

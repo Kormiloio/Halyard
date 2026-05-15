@@ -145,12 +145,9 @@ def signal(
             console.print("[red]No active timer to stop.[/]")
             return
         result = stop_timer(Path.cwd())
-        try:
-            from halyard.auto_timer import auto_timer_close_now
+        from halyard.auto_timer import safe_auto_timer_close
 
-            auto_timer_close_now()
-        except Exception:  # auto-timer close must not break the stop command
-            pass
+        safe_auto_timer_close()
         if result.was_running:
             from halyard.visuals import stop_card
 

@@ -123,7 +123,7 @@ def handle_agent_stop() -> int:
     turn_start_str = (state or {}).get("turn_start")
     try:
         start = datetime.fromisoformat(turn_start_str) if turn_start_str else now
-    except ValueError:
+    except (ValueError, TypeError):
         start = now
 
     # Stale state guard: a gc-session older than 12 hours cannot be a real session.

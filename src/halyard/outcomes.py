@@ -108,13 +108,17 @@ def _best_pr_for_session(
         return None
     best = None
     best_delta: timedelta | None = None
+    # session.end is local-naive; the gh createdAt is UTC. Normalize the
+    # session time to UTC-naive too, otherwise the delta is wrong by the
+    # local UTC offset and the closest-PR pick can be off by hours.
+    session_end_utc = session.end.astimezone(UTC).replace(tzinfo=None)
     for pr in prs:
         created_str = pr.get("createdAt", "")
         with suppress(ValueError, TypeError):
             created = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
             if created.tzinfo is not None:
                 created = created.astimezone(UTC).replace(tzinfo=None)
-            delta = abs(session.end - created)
+            delta = abs(session_end_utc - created)
             if best_delta is None or delta < best_delta:
                 best = pr
                 best_delta = delta

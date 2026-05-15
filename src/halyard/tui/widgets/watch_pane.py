@@ -6,6 +6,7 @@ from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 
+from rich.markup import escape
 from textual.widgets import Static
 
 from halyard.ai_log import AiSession
@@ -35,7 +36,7 @@ class WatchPane(Static):
 
         lines = [
             "🔔 Current Watch",
-            f"Making way · {active.slug}",
+            f"Making way · {escape(active.slug)}",
             f"Elapsed   {active.elapsed_label}",
             f"Sessions  {total}  {manifest}",
             f"Proof     {proof}  {proof_label}",

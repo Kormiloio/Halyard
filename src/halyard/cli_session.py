@@ -170,12 +170,9 @@ def register(app: typer.Typer) -> None:
 
         result = stop_timer(Path.cwd())
 
-        try:
-            from halyard.auto_timer import auto_timer_close_now
+        from halyard.auto_timer import safe_auto_timer_close
 
-            auto_timer_close_now()
-        except Exception:  # auto-timer close must not break the stop command
-            pass
+        safe_auto_timer_close()
 
         if result.was_running:
             from halyard.visuals import stop_card
@@ -756,7 +753,12 @@ def register(app: typer.Typer) -> None:
         ),
     ) -> None:
         """Validate an AI session log and quarantine malformed lines."""
-        from halyard.ai_log import AI_LOG_FILENAME, AiSession, find_project_dir
+        from halyard.ai_log import (
+            AI_LOG_FILENAME,
+            AiSession,
+            _write_quarantine,
+            find_project_dir,
+        )
 
         resolved_log_path: Path
         if log_path is None:
@@ -785,7 +787,7 @@ def register(app: typer.Typer) -> None:
                 continue
             error = AiSession.log_line_error(line)
             if error is not None:
-                AiSession.from_log_line(line)
+                _write_quarantine(line, error)
                 invalid += 1
                 console.print(f"[red]Line {lineno}: {error}[/]")
                 console.print(f"  {line}")

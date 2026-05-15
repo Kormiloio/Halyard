@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -11,6 +10,11 @@ from typing import Literal
 from halyard.ai_log import AiSession, parse_sessions
 
 TimeWindow = Literal["today", "week", "month", "all"]
+
+# The live feed only ever displays the most recent ~50 sessions; retaining
+# every session for a long-running `halyard tui` against an actively
+# appended log grows unbounded and makes every refresh re-sort the lot.
+_MAX_RETAINED_SESSIONS = 500
 
 
 @dataclass
@@ -23,30 +27,8 @@ class SessionStore:
 
     def load(self) -> None:
         """Parse the full log on startup."""
-        self.sessions = _read_sessions_file(self.log_path)
+        self.sessions = _read_sessions_file(self.log_path)[:_MAX_RETAINED_SESSIONS]
         self._offset = self.log_path.stat().st_size if self.log_path.exists() else 0
-
-    async def watch_log(self) -> None:
-        """Watch the log file and append newly written session lines."""
-        try:
-            from watchfiles import Change, awatch
-        except ImportError:
-            return
-
-        watch_root = self.log_path.parent if self.log_path.parent.exists() else Path.cwd()
-        async for changes in awatch(watch_root):
-            changed_paths = {Path(path) for _change, path in changes}
-            if self.log_path not in changed_paths:
-                continue
-            log_deleted = any(
-                change == Change.deleted for change, path in changes if Path(path) == self.log_path
-            )
-            if log_deleted:
-                self.sessions = []
-                self._offset = 0
-                continue
-            self.read_new_lines()
-            await asyncio.sleep(0)
 
     def read_new_lines(self) -> list[AiSession]:
         """Read appended lines since the last offset."""
@@ -70,7 +52,7 @@ class SessionStore:
                 [*parsed, *self.sessions],
                 key=lambda s: s.start,
                 reverse=True,
-            )
+            )[:_MAX_RETAINED_SESSIONS]
         return parsed
 
     def filter(

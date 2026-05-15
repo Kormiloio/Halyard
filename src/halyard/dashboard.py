@@ -1230,11 +1230,13 @@ def _daily_model_chart(usage: UsageAnalytics, model_index: dict[str, int]) -> st
         x = pad_left + i * bar_w
         if day.tokens <= 0:
             continue
-        # Stack segments per model in rank order.
+        # Stack segments per model in rank order. Segment heights are an
+        # approximation (each model's window-wide share of the day's total);
+        # the tooltip therefore states only the day total + model name, never
+        # a fabricated per-day-per-model number that wouldn't reconcile with
+        # the model table.
         running_top = 0.0
         bar_total_h = (day.tokens / max_tokens) * chart_h
-        # Approximate: distribute today's total across models by their
-        # overall share of tokens in the analytics window.
         total_modelled = sum(m.tokens for m in usage.by_model) or 1
         for m in usage.by_model:
             model_share = m.tokens / total_modelled
@@ -1244,7 +1246,8 @@ def _daily_model_chart(usage: UsageAnalytics, model_index: dict[str, int]) -> st
             bars.append(
                 f"<rect x='{x}' y='{y}' width='{max(1, bar_w - 1)}' height='{seg_h:.2f}' "
                 f"fill='{color}' opacity='0.9'>"
-                f"<title>{_e(day.day.isoformat())}: {_e(m.model)} ~ {compact_number(int(m.tokens * (day.tokens / (usage.summary.total_tokens or 1))))}</title>"
+                f"<title>{_e(day.day.isoformat())} · {_e(m.model)} · "
+                f"day total {compact_number(day.tokens)} tok</title>"
                 f"</rect>"
             )
             running_top += seg_h

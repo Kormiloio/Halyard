@@ -275,27 +275,8 @@ def _watch_streak(watches: list[_Watch], *, as_of: date | None = None) -> int:
     cursor = today
     while cursor in watch_dates:
         streak += 1
-        cursor = (
-            date(cursor.year, cursor.month, cursor.day - 1)
-            if cursor.day > 1
-            else date(
-                cursor.year - 1 if cursor.month == 1 else cursor.year,
-                12 if cursor.month == 1 else cursor.month - 1,
-                31
-                if cursor.month == 1
-                else _days_in_month(
-                    cursor.year - 1 if cursor.month == 1 else cursor.year,
-                    12 if cursor.month == 1 else cursor.month - 1,
-                ),
-            )
-        )
+        cursor = _prev_day(cursor)
     return streak
-
-
-def _days_in_month(year: int, month: int) -> int:
-    import calendar
-
-    return calendar.monthrange(year, month)[1]
 
 
 def _clean_watch_days(
@@ -306,11 +287,10 @@ def _clean_watch_days(
     watch_dates: set[date] = set()
     for watch in watches:
         day = watch.start.date()
-        day_sessions = [
-            s
-            for s in sessions
-            if s.start.date() == day or (s.start >= watch.start and s.end <= watch.end)
-        ]
+        # Scope strictly to the watch interval. Unioning in "same calendar
+        # day" sessions let work from an adjacent day poison (or clean) a
+        # watch that spans midnight.
+        day_sessions = [s for s in sessions if watch.start <= s.start and s.end <= watch.end]
         if not day_sessions:
             continue
         if all(s.project and s.tokens_available for s in day_sessions):

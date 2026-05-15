@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 
@@ -82,7 +83,17 @@ def import_codex_sessions(
         newly_imported_ids.append(session_id)
 
     if not dry_run and newly_imported_ids:
-        _save_imported_state(already_imported | set(newly_imported_ids))
+        # Prune ids whose rollout file no longer exists: codex rotates old
+        # rollouts away, so a missing file can never be re-imported. This
+        # bounds the dedup state to the rollouts actually on disk instead
+        # of growing forever.
+        present_ids = {
+            uuid for uuid in (_extract_uuid(p) for p in session_files) if uuid is not None
+        }
+        updated = (already_imported | set(newly_imported_ids)) & (
+            present_ids | set(newly_imported_ids)
+        )
+        _save_imported_state(updated)
 
     return imported
 
@@ -92,13 +103,21 @@ def import_codex_sessions(
 # ---------------------------------------------------------------------------
 
 
+def _iter_jsonl_lines(path: Path) -> Iterator[str]:
+    """Yield lines from a rollout file without loading it all into memory.
+
+    An unreadable file yields nothing; the caller then sees no events and
+    skips the session (session_start stays None).
+    """
+    try:
+        with path.open(encoding="utf-8") as fh:
+            yield from fh
+    except OSError:
+        return
+
+
 def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
     """Parse one rollout JSONL file. Returns (AiSession, cwd) or None to skip."""
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return None
-
     session_start: datetime | None = None
     session_end: datetime | None = None
     cwd: str | None = None
@@ -109,7 +128,7 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
     tool_calls = 0
     tool_errors = 0
 
-    for raw in lines:
+    for raw in _iter_jsonl_lines(path):
         raw = raw.strip()
         if not raw:
             continue

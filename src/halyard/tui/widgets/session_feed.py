@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from rich.markup import escape
 from textual.widgets import Static
 
 from halyard.ai_log import AiSession
@@ -35,13 +36,13 @@ class SessionFeed(Static):
             is_new = (now - session.end).total_seconds() < _NEW_ARRIVAL_SECONDS
             marker = "▶" if index == selected_index else ("+" if is_new else " ")
             err_badge = f" ⚠{session.tool_errors}e" if session.tool_errors else ""
-            branch_badge = f" [{session.branch}]" if session.branch else ""
+            branch_badge = f" [{escape(session.branch)}]" if session.branch else ""
             meta_badge = _metadata_badge(session)
             outcome_badge = _outcome_badge(session)
             line = (
                 f"{marker} {tool_icon(session.tool)} "
-                f"{truncate(session.model, 20):20} "
-                f"{truncate(project, 22):22} "
+                f"{escape(truncate(session.model, 20)):20} "
+                f"{escape(truncate(project, 22)):22} "
                 f"{duration_str(session.end - session.start):>7} "
                 f"{tokens:>8} tok "
                 f"{cost_str(session.cost_usd):>9}"
@@ -70,8 +71,8 @@ def _outcome_badge(session: AiSession) -> str:
         return ""
     glyph = _OUTCOME_GLYPH.get(session.pr_state or "", "?")
     if session.pr_ref:
-        return f" {glyph} {session.pr_ref}"
-    return f" {glyph} {session.pr_state or '?'}"
+        return f" {glyph} {escape(session.pr_ref)}"
+    return f" {glyph} {escape(session.pr_state or '?')}"
 
 
 def _metadata_badge(session: AiSession) -> str:
@@ -83,7 +84,7 @@ def _metadata_badge(session: AiSession) -> str:
     if session.files_touched_count is not None:
         bits.append(f"{session.files_touched_count}f")
     if session.test_status:
-        bits.append(f"test:{session.test_status}")
+        bits.append(f"test:{escape(session.test_status)}")
     if not bits:
         return ""
     return " " + " ".join(bits)

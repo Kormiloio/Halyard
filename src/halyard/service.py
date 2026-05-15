@@ -8,6 +8,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+from contextlib import suppress
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -39,6 +40,10 @@ def _load_or_create_token() -> str:
     if path.exists():
         token = path.read_text().strip()
         if len(token) == 64 and all(c in "0123456789abcdef" for c in token):
+            # A token written before the 0600 logic (or with loosened perms)
+            # would otherwise stay world-readable for its whole lifetime.
+            with suppress(OSError):
+                os.chmod(path, 0o600)
             return token
     # Generate fresh token and write with 0600 permissions
     token = secrets.token_hex(32)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime
 
+from rich.markup import escape
 from textual.widgets import Static
 
 from halyard.ai_log import AiSession
@@ -32,7 +33,7 @@ class ProjectPane(Static):
         )
 
         lines = [
-            f"Project: {project}",
+            f"Project: {escape(project)}",
             f"Sessions: {len(sessions)}",
             _budget_line(project, today_spend, month_spend),
             "",
@@ -47,7 +48,7 @@ class ProjectPane(Static):
             err = f" ⚠{session.tool_errors}e" if session.tool_errors else ""
             lines.append(
                 f"{tool_icon(session.tool)} "
-                f"{truncate(session.model, 18):18} "
+                f"{escape(truncate(session.model, 18)):18} "
                 f"{duration_str(session.end - session.start):>7} "
                 f"{tokens:>8} tok "
                 f"{cost_str(session.cost_usd):>9}"
@@ -59,7 +60,7 @@ class ProjectPane(Static):
             None,
         )
         if resume:
-            lines.append(f"\nResume: {resume}")
+            lines.append(f"\nResume: {escape(resume)}")
         lines.append("")
         lines.append("Escape returns to feed")
         self.last_rendered_text = "\n".join(lines)
@@ -130,7 +131,9 @@ def _model_lines(sessions: list[AiSession]) -> list[str]:
     for model, (count, cost) in sorted_totals:
         pct = 0 if total_cost <= 0 else int((cost / total_cost) * 100)
         bar = "#" * max(1, min(20, pct // 5)) if cost > 0 else "-"
-        lines.append(f"{truncate(model, 18):18} {count:>3} {cost_str(cost):>9} {pct:>3}% {bar}")
+        lines.append(
+            f"{escape(truncate(model, 18)):18} {count:>3} {cost_str(cost):>9} {pct:>3}% {bar}"
+        )
     return lines
 
 
