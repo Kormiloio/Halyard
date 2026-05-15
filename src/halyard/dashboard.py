@@ -674,8 +674,8 @@ def _render_state(
       <article class="panel span-12" data-panel="leverage">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">v3.0</p>
-            <h2>Leverage</h2>
+            <p class="eyebrow">Outcomes</p>
+            <h2>Did it ship?</h2>
           </div>
           <div class="pill-group"><span class="pill">30d</span></div>
         </div>
