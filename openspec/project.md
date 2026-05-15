@@ -318,7 +318,18 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.43-health-detail/`.
     **Status: complete (1023 tests passing).**
 
-23. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+23. **v2.44 — TUI health visibility:** parity with the v2.43 web health
+    surface on the terminal side. The TUI status bar shows a compact
+    `⚠ N — press h` chip when any `build_health_checks` result is
+    warning/error (nothing when healthy); a new `HealthModal` (`h` key)
+    lists each failing check's label/status/detail plus a `halyard
+    doctor` pointer. Reuses the authoritative health data — no new data
+    file, no persistence, no command; check-derived text is escaped
+    (v2.38 invariant). Spec in
+    `openspec/changes/v2.44-tui-health/`.
+    **Status: complete (1029 tests passing).**
+
+24. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

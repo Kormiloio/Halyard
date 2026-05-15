@@ -27,6 +27,7 @@ from halyard.tui.widgets.voyage_pane import VoyagePane
 from halyard.tui.widgets.watch_pane import WatchPane
 
 if TYPE_CHECKING:
+    from halyard.reports import HealthCheck
     from halyard.tui.widgets.branch_modal import BranchModal
 
 ProjectScope = Literal["hub", "project"]
@@ -43,6 +44,7 @@ class HalyardApp(App[None]):
         ("a", "set_time_window('all')", "all"),
         ("p", "toggle_project_scope", "project"),
         ("b", "open_branch_modal", "branch"),
+        ("h", "open_health_modal", "health"),
         ("?", "open_help_modal", "help"),
         ("up", "move_selection(-1)", "up"),
         ("down", "move_selection(1)", "down"),
@@ -159,6 +161,11 @@ class HalyardApp(App[None]):
 
         self.push_screen(HelpModal())
 
+    def action_open_health_modal(self) -> None:
+        from halyard.tui.widgets.health_modal import HealthModal
+
+        self.push_screen(HealthModal(self._health_checks()))
+
     def on_branch_modal_branch_selected(self, message: BranchModal.BranchSelected) -> None:
         self.branch_filter = message.branch
         self.selected_index = 0
@@ -200,6 +207,14 @@ class HalyardApp(App[None]):
             branch=self.branch_filter,
         )
 
+    def _health_checks(self) -> list[HealthCheck]:
+        from halyard.reports import build_health_checks
+
+        try:
+            return build_health_checks(self.store.log_path.parent)
+        except Exception:  # health is advisory; never break the TUI
+            return []
+
     def _status_text(self) -> str:
         if self.log_missing:
             return f"⚓ HALYARD  Waiting for log file: {self.store.log_path}"
@@ -213,6 +228,10 @@ class HalyardApp(App[None]):
             parts.append(f"[detail: {escape(self.detail_project)}]")
         if self.header_note:
             parts.append(self.header_note)
+        failing = sum(1 for c in self._health_checks() if c.status in ("warning", "error"))
+        if failing:
+            # count only — no check-derived text in the status line.
+            parts.append(f"[⚠ {failing} issue{'s' if failing != 1 else ''} — press h]")
         return "  ·  ".join(parts)
 
     def on_key(self, event: Key) -> None:
