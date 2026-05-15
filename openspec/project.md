@@ -355,7 +355,18 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.46-evidence-free-sessions/`.
     **Status: complete (1053 tests passing).**
 
-26. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+26. **v2.47 — Evidence-free guard for Claude Code:** v2.46's
+    `session_has_evidence` predicate extended to
+    `claude_code.handle_stop_hook` (v2.46 had explicitly scoped Claude
+    Code out pending evidence — now shown). A Stop fire that resolved no
+    transcript/tokens and has no model/interactions/tools/code (the
+    `claude-unknown 0 0 $0` stub that dominated "Recent AI Sessions") is
+    no longer written; transcript-enriched real sessions are unaffected.
+    Two existing collector tests updated from the old stub contract.
+    Spec in `openspec/changes/v2.47-claude-code-evidence/`.
+    **Status: complete (1053 tests passing).**
+
+27. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

@@ -115,17 +115,20 @@ def test_stop_hook_handles_missing_usage(tmp_path: Path) -> None:
     assert s.tokens_available is False
 
 
-def test_stop_hook_handles_empty_payload(tmp_path: Path) -> None:
+def test_stop_hook_skips_evidence_free_empty_payload(tmp_path: Path) -> None:
+    # v2.47: an empty Stop payload (unknown model, 0 tokens, no
+    # transcript/interactions) is not a turn — no stub row is written.
     _init_project(tmp_path)
     rc = _run_stop_hook(tmp_path, {})
 
     assert rc == 0
-    sessions = parse_sessions(tmp_path)
-    assert len(sessions) == 1
-    assert sessions[0].model == "claude-unknown"
+    assert parse_sessions(tmp_path) == []
 
 
 def test_stop_hook_writes_unattributed_when_not_in_halyard_project(tmp_path: Path) -> None:
+    # Payload carries evidence (real model + tokens) so the session is
+    # real and the not-in-a-project routing to unattributed is exercised.
+    payload = '{"model": "claude-sonnet-4-6", "usage": {"input_tokens": 100, "output_tokens": 50}}'
     with (
         patch("halyard.collectors.claude_code.find_project_dir", return_value=None),
         patch("halyard.collectors.claude_code.find_hub", return_value=None),
@@ -133,7 +136,7 @@ def test_stop_hook_writes_unattributed_when_not_in_halyard_project(tmp_path: Pat
             "halyard.collectors.claude_code.write_unattributed_session",
             return_value=tmp_path / "unattributed.log",
         ) as write_unattributed,
-        patch("sys.stdin", StringIO("{}")),
+        patch("sys.stdin", StringIO(payload)),
         patch("sys.stderr", StringIO()) as stderr,
     ):
         rc = handle_stop_hook()
