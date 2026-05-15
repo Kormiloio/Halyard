@@ -103,6 +103,17 @@ def _cc_hook_cmd_key(cmd: str) -> str:
     return f"{Path(parts[0]).name} {' '.join(parts[1:])}" if parts else cmd
 
 
+def _is_halyard_hook_cmd(cmd: str) -> bool:
+    """True iff *cmd* invokes the halyard binary, regardless of its path.
+
+    Keyed off the basename of arg0 only, so every stale variant
+    (uv-tool, repo venv, deleted temp/pipx venvs) is recognised as ours
+    while another vendor's command never is.
+    """
+    parts = cmd.split()
+    return bool(parts) and Path(parts[0]).name in ("halyard", "halyard.exe")
+
+
 def _resolve_claude_hook_entries(entries: list[dict[str, Any]], exe: str) -> list[dict[str, Any]]:
     """Return a deep copy of Claude hook entries with the halyard binary resolved."""
     resolved_entries: list[dict[str, Any]] = []
@@ -221,6 +232,18 @@ def _load_existing_settings(settings_path: Path) -> dict[str, Any]:
     return parsed
 
 
+def _settings_unchanged(settings_path: Path, new_text: str) -> bool:
+    """True if *settings_path* already contains exactly *new_text*.
+
+    Lets install be a true no-op (byte-stable file) when nothing needs
+    to change, instead of rewriting identical content every run.
+    """
+    try:
+        return settings_path.exists() and settings_path.read_text() == new_text
+    except OSError:
+        return False
+
+
 def _run_installer(fn: Callable[[], None]) -> None:
     """Run an explicit ``halyard install-hook-*`` command body.
 
@@ -298,30 +321,33 @@ def _do_install_hook_gemini() -> None:
     existing: dict[str, Any] = _load_existing_settings(settings_path)
 
     hooks = existing.setdefault("hooks", {})
-    added: list[str] = []
     exe = _halyard_exe()
 
     for event, template in _GC_HOOKS.items():
         command = template.replace("halyard ", f"{exe} ", 1)
         current = hooks.setdefault(event, [])
-        already = any(
-            h.get("command") == command for entry in current for h in entry.get("hooks", [])
+        # Drop every prior halyard block for this event (any path,
+        # incl. dead venvs), preserving foreign blocks and order, then
+        # re-add exactly one for the current binary.
+        kept = [
+            entry
+            for entry in current
+            if not any(_is_halyard_hook_cmd(h.get("command", "")) for h in entry.get("hooks", []))
+        ]
+        kept.append(
+            {
+                "matcher": "*",
+                "hooks": [{"name": "halyard", "type": "command", "command": command}],
+            }
         )
-        if not already:
-            current.append(
-                {
-                    "matcher": "*",
-                    "hooks": [{"name": "halyard", "type": "command", "command": command}],
-                }
-            )
-            added.append(event)
+        hooks[event] = kept
 
-    _write_settings(settings_path, json.dumps(existing, indent=2) + "\n")
-
-    if added:
-        console.print(f"[bold green]Gemini CLI hooks installed[/] in [bold]{settings_path}[/]")
-    else:
+    new_text = json.dumps(existing, indent=2) + "\n"
+    if _settings_unchanged(settings_path, new_text):
         console.print(f"[yellow]Gemini CLI hooks already present[/] in [bold]{settings_path}[/]")
+        return
+    _write_settings(settings_path, new_text)
+    console.print(f"[bold green]Gemini CLI hooks installed[/] in [bold]{settings_path}[/]")
 
 
 def _do_install_hook_cursor() -> None:
@@ -332,23 +358,23 @@ def _do_install_hook_cursor() -> None:
 
     existing.setdefault("version", 1)
     hooks = existing.setdefault("hooks", {})
-    added: list[str] = []
     exe = _halyard_exe()
 
     for event, template in _CURSOR_HOOKS.items():
         command = template.replace("halyard ", f"{exe} ", 1)
         current = hooks.setdefault(event, [])
-        already = any(entry.get("command") == command for entry in current)
-        if not already:
-            current.append({"command": command})
-            added.append(event)
+        # Keep foreign entries (bun/other vendors) in place; collapse
+        # every prior halyard entry (any path) to one for current exe.
+        kept = [e for e in current if not _is_halyard_hook_cmd(e.get("command", ""))]
+        kept.append({"command": command})
+        hooks[event] = kept
 
-    _write_settings(settings_path, json.dumps(existing, indent=2) + "\n")
-
-    if added:
-        console.print(f"[bold green]Cursor hooks installed[/] in [bold]{settings_path}[/]")
-    else:
+    new_text = json.dumps(existing, indent=2) + "\n"
+    if _settings_unchanged(settings_path, new_text):
         console.print(f"[yellow]Cursor hooks already present[/] in [bold]{settings_path}[/]")
+        return
+    _write_settings(settings_path, new_text)
+    console.print(f"[bold green]Cursor hooks installed[/] in [bold]{settings_path}[/]")
 
 
 def _vscode_record_task(command: str) -> dict[str, Any]:

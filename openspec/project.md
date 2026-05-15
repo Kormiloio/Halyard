@@ -329,7 +329,18 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.44-tui-health/`.
     **Status: complete (1029 tests passing).**
 
-24. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+24. **v2.45 — Cursor/Gemini hook install de-dup:** the cursor/gemini
+    installers matched "already present" by exact command string, so
+    every distinct halyard binary path stacked another hook entry
+    (observed: 4 cursor + 2 gemini stale registrations → duplicate
+    placeholder sessions). Now keyed off arg0 basename like Claude's
+    installer: each event keeps exactly one halyard hook for the current
+    binary, stale/dead-path entries are healed, foreign hooks preserved,
+    and a no-op leaves the file byte-unchanged. Spec in
+    `openspec/changes/v2.45-hook-dedup/`.
+    **Status: complete (1034 tests passing).**
+
+25. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 
