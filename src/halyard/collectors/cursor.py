@@ -35,6 +35,7 @@ from halyard.ai_log import (
 from halyard.git_context import (
     commits_in_window,
     current_branch,
+    current_remote,
     head_sha,
     infer_project,
     numstat_delta,
@@ -131,6 +132,8 @@ def handle_stop_hook() -> int:
         _attr_method = None
         _extra_tags = []
 
+    _remote = current_remote(cwd_for_git) if cwd_for_git else None
+
     session = AiSession(
         start=start,
         end=now,
@@ -148,6 +151,7 @@ def handle_stop_hook() -> int:
         attr_method=_attr_method,
         tags=_extra_tags,
         branch=branch,
+        remote=_remote,
         commit_count=commit_count,
         code_added=code_added,
         code_removed=code_removed,

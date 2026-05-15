@@ -98,7 +98,7 @@ def _log_error(msg: str, exc: Exception) -> None:
         entry = f"[{ts}] {msg}: {type(exc).__name__}: {exc}\n{tb}\n"
         with _HALYARD_LOG.open("a", encoding="utf-8") as fh:
             fh.write(entry)
-    except Exception:
+    except OSError:
         pass
 
 
@@ -243,6 +243,7 @@ class AiSession:
     resume_command: str | None = None
     # v2.24 outcome metadata
     branch: str | None = None  # git branch at session close; trust: captured
+    remote: str | None = None  # normalized git remote (host/owner/repo); trust: captured
     commit_count: int | None = None  # commits in session window; trust: captured
     pr_ref: str | None = None  # e.g. "owner/repo#42"; written by outcome sync
     pr_state: str | None = None  # merged | closed | open | none
@@ -368,6 +369,8 @@ class AiSession:
             kvs.append(f"resume_command={_encode_free_text(self.resume_command)}")
         if self.branch:
             kvs.append(f"branch={_safe_field(self.branch)}")
+        if self.remote:
+            kvs.append(f"remote={_safe_field(self.remote)}")
         if self.commit_count is not None:
             kvs.append(f"commit_count={self.commit_count}")
         if self.pr_ref:
@@ -634,6 +637,8 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
                 session.resume_command = _decode_free_text(v)
             case "branch":
                 session.branch = v
+            case "remote":
+                session.remote = v
             case "commit_count":
                 with suppress(ValueError):
                     session.commit_count = int(v)

@@ -42,7 +42,7 @@ from halyard.collectors.gemini_history import (
     find_session_file,
     parse_session_file,
 )
-from halyard.git_context import commits_in_window, current_branch, infer_project
+from halyard.git_context import commits_in_window, current_branch, current_remote, infer_project
 from halyard.hub import find_hub
 from halyard.pricing import calculate_cost
 
@@ -150,6 +150,8 @@ def handle_agent_stop() -> int:
         _gc_attr_method = "git" if _gc_project else None
         _gc_inferred_tag = ["attribution:inferred"] if _gc_project else []
 
+    _remote = current_remote(cwd)
+
     # Try to enrich from the history file for accurate multi-model cost
     session_id = (state or {}).get("session_id") or ""
     history_summary = None
@@ -231,6 +233,7 @@ def handle_agent_stop() -> int:
         code_removed=rich_code_removed,
         resume_command=rich_resume_command,
         branch=branch,
+        remote=_remote,
         commit_count=commit_count,
         interaction_count=rich_interaction_count,
         user_message_count=rich_user_message_count,

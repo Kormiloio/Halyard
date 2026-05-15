@@ -27,6 +27,7 @@ from halyard.ai_log import (
 from halyard.git_context import (
     commits_in_window,
     current_branch,
+    current_remote,
     head_sha,
     infer_project,
     numstat_delta,
@@ -169,6 +170,8 @@ def handle_stop_hook() -> int:
         _attr_method = "git" if _project else None
         _extra_tags = ["attribution:inferred"] if _project else []
 
+    _remote = current_remote(cwd)
+
     session = AiSession(
         start=start,
         end=now,
@@ -185,6 +188,7 @@ def handle_stop_hook() -> int:
         attr_method=_attr_method,
         tags=_extra_tags,
         branch=branch,
+        remote=_remote,
         commit_count=commit_count,
         code_added=code_added,
         code_removed=code_removed,
@@ -336,7 +340,7 @@ def _read_from_transcript(
             total_cw += int(usage.get("cache_creation_input_tokens", 0))
 
         return model, total_in, total_out, total_cr, total_cw, branch, assistant_count
-    except Exception:
+    except (OSError, json.JSONDecodeError, ValueError):
         return None, 0, 0, 0, 0, None, 0
 
 
@@ -351,6 +355,6 @@ def _read_model_from_settings(project_dir: Path) -> str | None:
                 model = data.get("model")
                 if model and model_is_known(model):
                     return str(model)
-            except Exception:
+            except (OSError, json.JSONDecodeError):
                 continue
     return None

@@ -39,7 +39,15 @@ class UsagePane(Static):
             f"Favorite {truncate(favorite, 24)}",
         ]
         if summary.unattributed_sessions:
-            lines.append(f"Open attribution: {summary.unattributed_sessions}")
+            from halyard.ai_log import unattributed_log_path
+            from halyard.doctor import _group_unattributed_by_remote
+
+            groups = _group_unattributed_by_remote(unattributed_log_path())
+            lines.append(
+                f"⚠ Unattributed: {summary.unattributed_sessions} session(s) — run halyard adopt"
+            )
+            for remote, count in sorted(groups.items(), key=lambda x: -x[1]):
+                lines.append(f"  {truncate(remote, 36)} ({count})")
         if summary.token_data_missing_sessions:
             lines.append(f"Missing token data: {summary.token_data_missing_sessions}")
         lines.extend(["", "Swells  (30d)"])

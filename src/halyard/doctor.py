@@ -344,13 +344,17 @@ def _collector_state_checks() -> list[DoctorCheck]:
     unattributed = home_state / "unattributed.log"
     unattributed_count = _count_session_lines(unattributed)
     if unattributed_count:
+        groups = _group_unattributed_by_remote(unattributed)
+        fix_lines = ["run 'halyard adopt' in each repo:"]
+        for remote, count in sorted(groups.items(), key=lambda x: -x[1]):
+            fix_lines.append(f"          {remote} ({count} session{'s' if count != 1 else ''})")
         checks.append(
             DoctorCheck(
                 id="state.unattributed",
                 label="Unattributed",
                 status="warning",
-                detail=f"{unattributed_count} recoverable session(s)",
-                fix="halyard assign-unattributed",
+                detail=f"{unattributed_count} session(s) across {len(groups)} source(s)",
+                fix="\n".join(fix_lines),
             )
         )
     else:
@@ -578,3 +582,22 @@ def _report_status(checks: list[DoctorCheck]) -> ReportStatus:
     if "warning" in statuses:
         return "warning"
     return "ok"
+
+
+def _group_unattributed_by_remote(log_path: Path) -> dict[str, int]:
+    """Parse unattributed.log and return session counts grouped by remote."""
+    groups: dict[str, int] = {}
+    if not log_path.exists():
+        return groups
+    try:
+        for raw_line in log_path.read_text(encoding="utf-8").splitlines():
+            if not raw_line.strip().startswith("s "):
+                continue
+            session = AiSession.from_log_line(raw_line)
+            if session is None:
+                continue
+            key = session.remote or "(no git remote)"
+            groups[key] = groups.get(key, 0) + 1
+    except OSError:
+        pass
+    return groups
