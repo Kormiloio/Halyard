@@ -307,7 +307,18 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.42-dashboard-layout/`.
     **Status: complete (1020 tests passing).**
 
-22. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+22. **v2.43 — Actionable health warnings:** the topbar status pill is
+    now a focusable button with a hover `title` summarizing health;
+    clicking it opens a server-rendered popup listing every non-healthy
+    check (status + detail) and pointing to `halyard doctor` for full
+    diagnostics/fixes (the dashboard `HealthCheck` has no per-check fix
+    field — that lives on the CLI's `DoctorCheck`; nothing is
+    fabricated). Dismiss via close button / Esc / outside-click;
+    fail-safe script, no server surface. Browser-verified. Spec in
+    `openspec/changes/v2.43-health-detail/`.
+    **Status: complete (1023 tests passing).**
+
+23. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

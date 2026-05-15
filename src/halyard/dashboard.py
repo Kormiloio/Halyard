@@ -599,9 +599,12 @@ def _render_state(
         <button id="layout-toggle-all" class="theme-toggle" aria-label="Collapse or expand all panels" title="Collapse or expand all panels">▾ collapse all</button>
         <button id="layout-reset" class="theme-toggle" aria-label="Reset panel layout" title="Reset panel layout to default">⊞ reset layout</button>
         <button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark mode">☀️</button>
-        <div class="status status-{health_level}">{_e(health_level.title())}</div>
+        <button id="health-pill" class="status status-{health_level}" type="button"
+          title="{_e(_health_pill_title(state.health))}"
+          aria-label="{_e(_health_pill_title(state.health))}">{_e(health_level.title())}</button>
       </div>
     </header>
+    {_health_popup(state.health)}
 
     <section class="metrics" aria-label="Today summary">
       {_timer_metric(state.active_timer)}
@@ -802,6 +805,7 @@ def _render_state(
     </footer>
   </main>
   {_layout_script()}
+  {_health_popup_script()}
   {_celebration_script()}
   {_easter_egg_script()}
 </body>
@@ -995,6 +999,80 @@ def _overall_health(state: DashboardState) -> str:
     if "warning" in statuses:
         return "warning"
     return "healthy"
+
+
+def _failing_checks(health: object) -> list[object]:
+    checks = health if isinstance(health, list) else []
+    return [c for c in checks if getattr(c, "status", "") in ("warning", "error")]
+
+
+def _health_pill_title(health: object) -> str:
+    failing = _failing_checks(health)
+    if not failing:
+        return "All systems healthy"
+    n = len(failing)
+    noun = "check needs" if n == 1 else "checks need"
+    return f"{n} {noun} attention — click for detail"
+
+
+def _health_popup(health: object) -> str:
+    failing = _failing_checks(health)
+    if not failing:
+        body = '<p class="health-popup-ok">✓ All systems healthy.</p>'
+    else:
+        rows = []
+        for c in failing:
+            status = _e(getattr(c, "status", ""))
+            label = _e(getattr(c, "label", ""))
+            detail = _e(getattr(c, "detail", ""))
+            rows.append(
+                f'<div class="health-popup-row">'
+                f'<span class="dot dot-{status}"></span>'
+                f"<div><strong>{label}</strong>"
+                f'<p class="health-popup-detail">{detail}</p></div></div>'
+            )
+        rows.append(
+            '<p class="health-popup-fix">For full diagnostics and how to '
+            "fix each item, run <code>halyard doctor</code> in your terminal.</p>"
+        )
+        body = "".join(rows)
+    return f"""
+    <div id="health-popup" class="health-popup" hidden role="dialog" aria-label="System health">
+      <div class="health-popup-backdrop" data-health-close></div>
+      <div class="health-popup-card">
+        <div class="health-popup-head">
+          <strong>System Health</strong>
+          <button type="button" class="health-popup-x" data-health-close
+            aria-label="Close">✕</button>
+        </div>
+        <div class="health-popup-body">{body}</div>
+      </div>
+    </div>"""
+
+
+def _health_popup_script() -> str:
+    return """<script>
+(function(){
+  try {
+    var pill = document.getElementById('health-pill');
+    var pop = document.getElementById('health-popup');
+    if (!pill || !pop) return;
+    function open(){ pop.hidden = false; pop.classList.add('open'); }
+    function close(){ pop.hidden = true; pop.classList.remove('open'); }
+    pill.addEventListener('click', function(){
+      if (pop.hidden) { open(); } else { close(); }
+    });
+    pop.addEventListener('click', function(ev){
+      if (ev.target && ev.target.hasAttribute('data-health-close')) close();
+    });
+    document.addEventListener('keydown', function(ev){
+      if (ev.key === 'Escape' && !pop.hidden) close();
+    });
+  } catch (e) {
+    if (window.console) console.warn('Halyard health popup failed:', e);
+  }
+})();
+</script>"""
 
 
 def _metric(label: str, value: str, detail: str, tone: str, panel_id: str) -> str:
@@ -2271,6 +2349,34 @@ h2 { font-size: 17px; }
 .status-healthy { color: var(--green); border-color: rgba(112, 225, 143, .4); }
 .status-warning { color: var(--amber); border-color: rgba(243, 191, 91, .45); }
 .status-error { color: var(--red); border-color: rgba(255, 111, 111, .5); }
+button.status { cursor: pointer; font-family: inherit; line-height: 1; }
+button.status:hover { filter: brightness(1.15); }
+button.status:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+/* ── v2.43 health detail popup ── */
+.health-popup[hidden] { display: none; }
+.health-popup { position: fixed; inset: 0; z-index: 50; }
+.health-popup-backdrop { position: absolute; inset: 0; background: rgba(2,8,12,.55); }
+.health-popup-card {
+  position: absolute; top: 64px; right: 20px; width: min(440px, calc(100vw - 40px));
+  max-height: 70vh; overflow: auto; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.5); padding: 16px;
+}
+.health-popup-head { display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px; }
+.health-popup-x { background: none; border: 1px solid var(--line); border-radius: 6px;
+  color: var(--muted); cursor: pointer; font-size: 12px; padding: 3px 8px; }
+.health-popup-x:hover { border-color: var(--cyan); color: var(--text); }
+.health-popup-row { display: grid; grid-template-columns: 14px 1fr; gap: 10px;
+  align-items: start; padding: 10px; border: 1px solid rgba(37,64,74,.7);
+  border-radius: 8px; background: var(--panel-2); margin-bottom: 8px; }
+.health-popup-detail { color: var(--muted); font-size: 12px; margin: 3px 0 0;
+  overflow-wrap: anywhere; }
+.health-popup-fix { color: var(--cyan); font-size: 12px;
+  margin: 10px 0 0; overflow-wrap: anywhere; }
+.health-popup-fix code { background: rgba(255,255,255,.06); padding: 1px 5px;
+  border-radius: 4px; }
+.health-popup-ok { color: var(--green); font-weight: 700; }
 .pill-healthy { color: var(--green); border-color: rgba(112, 225, 143, .4); background: rgba(112, 225, 143, .08); }
 .pill-warning { color: var(--amber); border-color: rgba(243, 191, 91, .45); background: rgba(243, 191, 91, .08); }
 .pill-error { color: var(--red); border-color: rgba(255, 111, 111, .5); background: rgba(255, 111, 111, .08); }
