@@ -31,20 +31,20 @@ Implementation checklist for v2.23 - Usage Analytics.
 ## 4. Dashboard
 
 - [x] 4.1 Add Usage view entry point from the local dashboard.
-- [ ] 4.2 Add Overview and Models tabs.
-  — DEFERRED: requires tab UI infrastructure that doesn't yet exist in
-  the Glass Cockpit. The current Usage Analytics panel renders all
-  sections inline; splitting into tabs needs a frontend pass.
-- [ ] 4.3 Add range segmented control.
-  — DEFERRED: dashboard currently hard-codes `range_key` to default 30d.
-  Wiring a URL query parameter and a button group is a focused frontend
-  task. The `halyard usage --range` CLI fully covers the data side.
+- [x] 4.2 Add Overview and Models tabs.
+  — Anchor-link segmented control (?tab=overview | models). Overview
+  keeps the existing inline panel; Models renders the daily-by-model
+  chart + extended breakdown table.
+- [x] 4.3 Add range segmented control.
+  — Anchor-link segmented control (?range=7d | 30d | all). HTTP handler
+  clamps unknown values to defaults; tab/range selections persist across
+  each other via URL params.
 - [x] 4.4 Add summary metric cards.
 - [x] 4.5 Add activity heatmap.
-- [ ] 4.6 Add daily model usage chart.
-  — DEFERRED: stacked bar chart per model per day is a new chart
-  component (no existing chart of this kind to extend). Belongs with
-  4.2/4.3 in a single frontend session.
+- [x] 4.6 Add daily model usage chart.
+  — Server-side SVG stacked bar chart in the Models tab. X-axis is the
+  selected window's days; bars stack per-model with the v2.23 §5.1
+  palette.
 - [x] 4.7 Add model and tool breakdown rows.
 - [x] 4.8 Add empty and missing-data states.
   — `_usage_model_rows` and `_usage_tool_rows` emit `<p class='mini-empty'>`
@@ -53,12 +53,15 @@ Implementation checklist for v2.23 - Usage Analytics.
 
 ## 5. Visual quality
 
-- [ ] 5.1 Define model color palette.
-  — DEFERRED with 4.6: no model-coloured chart exists yet to need a palette.
+- [x] 5.1 Define model color palette.
+  — `_MODEL_PALETTE` in dashboard.py: 7 distinct hues plus an "Other"
+  fallback. Tuned for readability on both light and dark themes.
 - [ ] 5.2 Verify desktop and narrow laptop layouts.
   — DEFERRED: needs visual review with screenshots. User task.
-- [ ] 5.3 Ensure chart labels and stat text do not overflow.
-  — DEFERRED with 4.6 / 5.2.
+- [x] 5.3 Ensure chart labels and stat text do not overflow.
+  — CSS `white-space: nowrap; overflow: hidden; text-overflow: ellipsis`
+  on `.model-name` and `.legend-item` inner spans; SVG chart has its
+  own viewBox so it scales to container width.
 - [x] 5.4 Add accessible labels for heatmap cells and chart bars.
   — Heatmap cells already carry both `title` and `aria-label` with the
   date / session count / tokens / cost. Chart bars in `_usage_model_rows`
@@ -85,6 +88,7 @@ Implementation checklist for v2.23 - Usage Analytics.
   README Quickstart.
 - [ ] 7.2 Add demo screenshot or GIF once the dashboard view exists.
   — DEFERRED: needs the deferred dashboard work (4.2/4.3/4.6) shipped first.
-- [ ] 7.3 Add troubleshooting note for missing token/cost data.
-  — DEFERRED: belongs in a "Troubleshooting" section that doesn't yet
-  exist in the README. Pair with 7.2 in a docs pass.
+- [x] 7.3 Add troubleshooting note for missing token/cost data.
+  — New "Troubleshooting" section in README with three subsections:
+  missing tokens (`tokens_available=false`), $0.00 cost on seat plans,
+  and the dashboard "missing tokens" pill.

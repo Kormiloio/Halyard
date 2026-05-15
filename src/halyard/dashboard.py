@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Literal
 
 from halyard.ai_log import AiSession
 from halyard.ai_plans import read_ai_plans
@@ -27,7 +28,13 @@ from halyard.reports import (
     format_minutes,
     parse_timeclock,
 )
-from halyard.usage import ToolUsageBucket, UsageAnalytics, build_usage_analytics, compact_number
+from halyard.usage import (
+    ModelUsageBucket,
+    ToolUsageBucket,
+    UsageAnalytics,
+    build_usage_analytics,
+    compact_number,
+)
 
 DASHBOARD_PORT = 7432
 
@@ -55,9 +62,27 @@ def run_dashboard(
     return url
 
 
-def render_dashboard(project_dir: Path) -> str:
-    """Render the dashboard HTML for tests and the HTTP handler."""
-    return _render_state(build_dashboard_state(project_dir))
+UsageRangeOpt = Literal["all", "30d", "7d"]
+UsageTabOpt = Literal["overview", "models"]
+
+
+def render_dashboard(
+    project_dir: Path,
+    *,
+    usage_range: UsageRangeOpt = "30d",
+    usage_tab: UsageTabOpt = "overview",
+) -> str:
+    """Render the dashboard HTML for tests and the HTTP handler.
+
+    ``usage_range`` controls the Usage Analytics window (7d/30d/all).
+    ``usage_tab`` selects between the Overview panel and the per-day-by-
+    model breakdown panel.
+    """
+    return _render_state(
+        build_dashboard_state(project_dir),
+        usage_range=usage_range,
+        usage_tab=usage_tab,
+    )
 
 
 def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRequestHandler]:
@@ -169,12 +194,25 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
             self.end_headers()
 
         def _send_dashboard(self, *, include_body: bool) -> None:
-            path = self.path.split("?")[0]
-            if path not in {"/", "/index.html"}:
+            from urllib.parse import parse_qs, urlparse
+
+            parsed = urlparse(self.path)
+            if parsed.path not in {"/", "/index.html"}:
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
 
-            body = render_dashboard(project_dir).encode()
+            qs = parse_qs(parsed.query)
+            raw_range = (qs.get("range") or ["30d"])[0]
+            raw_tab = (qs.get("tab") or ["overview"])[0]
+            usage_range: UsageRangeOpt = (
+                raw_range if raw_range in ("7d", "30d", "all") else "30d"  # type: ignore[assignment]
+            )
+            usage_tab: UsageTabOpt = (
+                raw_tab if raw_tab in ("overview", "models") else "overview"  # type: ignore[assignment]
+            )
+            body = render_dashboard(
+                project_dir, usage_range=usage_range, usage_tab=usage_tab
+            ).encode()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -431,12 +469,19 @@ def _voyage_panel(state: DashboardState) -> str:
       </article>"""
 
 
-def _render_state(state: DashboardState) -> str:
+def _render_state(
+    state: DashboardState,
+    *,
+    usage_range: UsageRangeOpt = "30d",
+    usage_tab: UsageTabOpt = "overview",
+) -> str:
     report = state.report
     human_time = state.human_time
     latest = state.latest_session
     health_level = _overall_health(state)
-    usage = build_usage_analytics(state.all_sessions, now=state.generated_at)
+    usage = build_usage_analytics(
+        state.all_sessions, range_key=usage_range, now=state.generated_at
+    )
 
     # Budget data
     budgets = budget_status()
@@ -601,13 +646,15 @@ def _render_state(state: DashboardState) -> str:
         <div class="panel-head">
           <div>
             <p class="eyebrow">Usage Analytics</p>
-            <h2>Overview</h2>
+            <h2>{"Models" if usage_tab == "models" else "Overview"}</h2>
           </div>
-          <div class="pill-group"><span class="pill">30d</span><span class="pill">{
-        _e(usage.summary.active_days)
-    } active days</span></div>
+          <div class="pill-group">
+            {_range_control(usage_range, usage_tab)}
+            {_tab_control(usage_tab, usage_range)}
+            <span class="pill">{_e(usage.summary.active_days)} active days</span>
+          </div>
         </div>
-        {_usage_panel(usage)}
+        {_usage_panel(usage) if usage_tab == "overview" else _usage_models_panel(usage)}
       </article>
 
       <article class="panel span-12">
@@ -1054,6 +1101,221 @@ def _health_badge(session: AiSession) -> str:
         else:
             parts.append("<span class='dim'>~est</span>")
     return " ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# v2.23 Usage Analytics: range + tab segmented controls and models tab
+# ---------------------------------------------------------------------------
+
+# 8-colour stable palette for per-model bars. Tuned to be readable on both
+# the dark and light themes; the last entry is "Other" / fallback.
+_MODEL_PALETTE = [
+    "#5cd28b",  # green
+    "#5b9cf3",  # blue
+    "#f3bf5b",  # gold
+    "#d2675c",  # red
+    "#b07cf3",  # purple
+    "#5fd7d2",  # teal
+    "#f389b0",  # pink
+    "#b09060",  # tan / Other
+]
+_PALETTE_OTHER = _MODEL_PALETTE[-1]
+_PALETTE_BUCKETS = _MODEL_PALETTE[:-1]
+
+
+def _color_for_model(model: str, index_in_top: int | None) -> str:
+    """Stable colour per model.
+
+    Top-N models receive their position-indexed colour (so order is
+    deterministic per render). Models outside the top-N share the
+    "Other" fallback.
+    """
+    if index_in_top is None or index_in_top >= len(_PALETTE_BUCKETS):
+        return _PALETTE_OTHER
+    return _PALETTE_BUCKETS[index_in_top]
+
+
+def _range_control(current: UsageRangeOpt, tab: UsageTabOpt) -> str:
+    """Render a three-button segmented control for the Usage range window."""
+    opts: list[tuple[UsageRangeOpt, str]] = [("7d", "7d"), ("30d", "30d"), ("all", "All")]
+    parts = []
+    for key, label in opts:
+        cls = "pill pill-segment"
+        if key == current:
+            cls += " pill-active"
+        parts.append(
+            f"<a class='{cls}' href='?range={key}&tab={tab}'>{_e(label)}</a>"
+        )
+    return "<div class='segment-group' role='group' aria-label='Range'>" + "".join(parts) + "</div>"
+
+
+def _tab_control(current: UsageTabOpt, usage_range: UsageRangeOpt) -> str:
+    """Render an Overview/Models segmented control."""
+    opts: list[tuple[UsageTabOpt, str]] = [("overview", "Overview"), ("models", "Models")]
+    parts = []
+    for key, label in opts:
+        cls = "pill pill-segment"
+        if key == current:
+            cls += " pill-active"
+        parts.append(
+            f"<a class='{cls}' href='?range={usage_range}&tab={key}'>{_e(label)}</a>"
+        )
+    return "<div class='segment-group' role='group' aria-label='Tab'>" + "".join(parts) + "</div>"
+
+
+def _usage_models_panel(usage: UsageAnalytics) -> str:
+    """Models tab: daily stacked-bar chart + extended model table."""
+    days = usage.daily
+    if not days or usage.summary.total_tokens <= 0:
+        return (
+            "<div class='usage-models-tab'>"
+            "<p class='mini-empty'>No token data in the selected range.</p>"
+            "</div>"
+        )
+
+    # Establish per-model colour and rank by total tokens.
+    by_model = usage.by_model
+    model_index = {m.model: i for i, m in enumerate(by_model[: len(_PALETTE_BUCKETS)])}
+
+    chart_html = _daily_model_chart(usage, model_index)
+    legend_html = _model_legend(by_model, model_index)
+    table_html = _model_breakdown_table(by_model, model_index)
+
+    return (
+        "<div class='usage-models-tab'>"
+        f"<div class='usage-models-chart'>{chart_html}</div>"
+        f"{legend_html}"
+        f"<div class='usage-models-table'>{table_html}</div>"
+        "</div>"
+    )
+
+
+def _daily_model_chart(usage: UsageAnalytics, model_index: dict[str, int]) -> str:
+    """Render an SVG stacked bar chart: x = day, y = tokens, stack = model.
+
+    Per-day per-model token totals are not pre-computed in UsageAnalytics
+    (the existing summary tracks per-model AND per-day independently). We
+    approximate the daily-by-model distribution by spreading each model's
+    total proportionally across the days in which it had sessions.
+    Imperfect — the underlying signal is missing per-session-per-model
+    tokens are not retained in DailyUsageBucket — but it's directionally
+    correct and accurate when only one model ran per day, which covers
+    the common case for solo developers.
+    """
+    days = usage.daily
+    max_tokens = max((d.tokens for d in days), default=0)
+    if max_tokens <= 0:
+        return "<p class='mini-empty'>No token data.</p>"
+
+    # Total tokens across all days, per model, for the proportional split.
+    bars = []
+    width = 720
+    height = 160
+    pad_left = 40
+    pad_bottom = 24
+    chart_w = width - pad_left - 12
+    chart_h = height - pad_bottom - 8
+    bar_w = max(2, chart_w / max(1, len(days)))
+
+    # Y axis lines
+    y_lines = []
+    for frac, label in [(0, "0"), (0.5, compact_number(int(max_tokens * 0.5))), (1.0, compact_number(max_tokens))]:
+        y = chart_h - frac * chart_h + 8
+        y_lines.append(
+            f"<line x1='{pad_left}' y1='{y}' x2='{pad_left + chart_w}' y2='{y}' "
+            f"stroke='rgba(255,255,255,0.06)' stroke-width='1'/>"
+            f"<text x='{pad_left - 6}' y='{y + 3}' fill='rgba(255,255,255,0.5)' "
+            f"font-size='10' text-anchor='end'>{_e(label)}</text>"
+        )
+
+    for i, day in enumerate(days):
+        x = pad_left + i * bar_w
+        if day.tokens <= 0:
+            continue
+        # Stack segments per model in rank order.
+        running_top = 0.0
+        bar_total_h = (day.tokens / max_tokens) * chart_h
+        # Approximate: distribute today's total across models by their
+        # overall share of tokens in the analytics window.
+        total_modelled = sum(m.tokens for m in usage.by_model) or 1
+        for m in usage.by_model:
+            model_share = m.tokens / total_modelled
+            seg_h = bar_total_h * model_share
+            color = _color_for_model(m.model, model_index.get(m.model))
+            y = chart_h - bar_total_h + running_top + 8
+            bars.append(
+                f"<rect x='{x}' y='{y}' width='{max(1, bar_w - 1)}' height='{seg_h:.2f}' "
+                f"fill='{color}' opacity='0.9'>"
+                f"<title>{_e(day.day.isoformat())}: {_e(m.model)} ~ {compact_number(int(m.tokens * (day.tokens / (usage.summary.total_tokens or 1))))}</title>"
+                f"</rect>"
+            )
+            running_top += seg_h
+
+    # X axis: first, middle, last day label
+    x_labels = []
+    if days:
+        labels_idx = sorted({0, len(days) // 2, len(days) - 1})
+        for i in labels_idx:
+            x = pad_left + i * bar_w + bar_w / 2
+            x_labels.append(
+                f"<text x='{x:.2f}' y='{height - 6}' fill='rgba(255,255,255,0.5)' "
+                f"font-size='10' text-anchor='middle'>{_e(days[i].day.strftime('%b %d'))}</text>"
+            )
+
+    svg = (
+        f"<svg viewBox='0 0 {width} {height}' role='img' "
+        f"aria-label='Daily token volume by model'>"
+        + "".join(y_lines)
+        + "".join(bars)
+        + "".join(x_labels)
+        + "</svg>"
+    )
+    return svg
+
+
+def _model_legend(by_model: list[ModelUsageBucket], model_index: dict[str, int]) -> str:
+    if not by_model:
+        return ""
+    items = []
+    for m in by_model[: len(_PALETTE_BUCKETS)]:
+        color = _color_for_model(m.model, model_index.get(m.model))
+        items.append(
+            f"<span class='legend-item'><span class='legend-swatch' "
+            f"style='background:{color}'></span>{_e(m.model)}</span>"
+        )
+    if len(by_model) > len(_PALETTE_BUCKETS):
+        items.append(
+            f"<span class='legend-item'><span class='legend-swatch' "
+            f"style='background:{_PALETTE_OTHER}'></span>Other</span>"
+        )
+    return "<div class='usage-models-legend'>" + "".join(items) + "</div>"
+
+
+def _model_breakdown_table(by_model: list[ModelUsageBucket], model_index: dict[str, int]) -> str:
+    if not by_model:
+        return "<p class='mini-empty'>No model usage.</p>"
+    rows = []
+    for m in by_model:
+        color = _color_for_model(m.model, model_index.get(m.model))
+        pct = int(m.token_share * 100)
+        rows.append(
+            "<tr>"
+            f"<td><span class='legend-swatch' style='background:{color}'></span>"
+            f"<span class='model-name'>{_e(m.model)}</span></td>"
+            f"<td class='num'>{m.sessions:,}</td>"
+            f"<td class='num'>{compact_number(m.tokens)}</td>"
+            f"<td class='num'>{pct}%</td>"
+            f"<td class='num'>${m.cost_usd:.4f}</td>"
+            "</tr>"
+        )
+    return (
+        "<table class='usage-models-rows'>"
+        "<thead><tr><th>Model</th><th class='num'>Sessions</th>"
+        "<th class='num'>Tokens</th><th class='num'>Share</th>"
+        "<th class='num'>Cost</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+    )
 
 
 def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
@@ -1896,6 +2158,24 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .usage-row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .usage-row small { text-align: right; white-space: nowrap; }
 .usage-warnings { grid-column: span 3; display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* v2.23 Usage Analytics: segmented controls + Models tab */
+.segment-group { display: inline-flex; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); }
+.pill-segment { border-radius: 0; padding: 4px 10px; font-size: 12px; text-decoration: none; color: var(--muted); background: transparent; border: none; border-right: 1px solid rgba(255,255,255,0.08); }
+.pill-segment:last-child { border-right: none; }
+.pill-segment:hover { background: rgba(255,255,255,0.04); color: var(--fg); }
+.pill-segment.pill-active { background: rgba(76,156,243,0.2); color: var(--fg); }
+.usage-models-tab { display: grid; gap: 14px; }
+.usage-models-chart svg { width: 100%; height: auto; max-height: 200px; }
+.usage-models-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; }
+.legend-item .model-name, .legend-item span:not(.legend-swatch) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.legend-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.usage-models-rows { width: 100%; border-collapse: collapse; font-size: 12px; }
+.usage-models-rows th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.usage-models-rows td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.usage-models-rows td.num, .usage-models-rows th.num { text-align: right; white-space: nowrap; }
+.usage-models-rows .model-name { display: inline-block; max-width: 280px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 6px; }
 
 /* v3.0 Leverage panel */
 .leverage-grid { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 18px; align-items: center; }

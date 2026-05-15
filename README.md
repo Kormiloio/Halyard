@@ -297,6 +297,57 @@ Agent state (hooks, API keys, budgets, active timer) lives in `~/.halyard/`, sep
 
 ---
 
+## Troubleshooting
+
+### `halyard usage` or the dashboard shows "missing tokens"
+
+Some captured sessions don't carry token data. The dashboard flags them as
+`missing tokens` and `halyard usage` reports them under
+`token_data_missing_sessions`. Common reasons:
+
+- **Claude Code seat sessions** — when a session is on a credits/seat plan
+  rather than the API, token counts may not be available in the hook
+  payload. The session is still recorded with `tokens_available=false`;
+  cost is reported as `$0.00` because there is no per-session API charge.
+  Use [the AI Work Ledger](#what-gets-captured) (`halyard report --ledger`)
+  to see allocated subscription cost for these.
+- **Manual or VS Code editor-task captures** — sessions recorded via
+  `halyard record-session` without an explicit `--input-tokens` /
+  `--output-tokens` arrive without token data. This is expected; the
+  capture is preserved for time/attribution.
+- **Codex imports** — the Codex Desktop import path reads from the local
+  rollout JSONL but may not surface token counts in all session formats.
+  Import is still useful for attribution and time.
+
+These rows are **not** quarantined and **not** lost — they appear in the
+log with `tokens_available=false` so downstream tooling can distinguish
+"no data" from "zero usage".
+
+### "Cost shows $0.00 but I know I'm paying for AI"
+
+Halyard records two cost classes:
+
+- **Direct API cost** (`cost_usd` on the session line) — per-call charge
+  from the provider, captured when the hook payload includes pricing.
+- **Allocated subscription cost** — your $20/month Claude Pro or $200/month
+  Claude Max is allocated across captured sessions proportionally. Run
+  `halyard report --ledger` to see this. Cost trust labels in the
+  dashboard (`captured` / `calculated` / `allocated`) tell you which lens
+  you're looking through.
+
+If `cost_usd` is consistently $0.00 *and* you have no `ai-plans.toml`,
+configure one with `halyard ai-plans add` so the ledger can allocate.
+
+### Dashboard shows "344 missing tokens" warning
+
+That's the same `token_data_missing_sessions` count surfaced as a pill on
+the Usage Analytics panel. It's a counter, not an error — see "missing
+tokens" above. If the number is climbing, check that your active AI tool's
+hook is sending token data (`halyard doctor` confirms hook health) and
+that recent sessions on the API plan aren't being dropped.
+
+---
+
 ## How it's being built
 
 This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-driven development. Every feature lives as a change folder under `openspec/changes/` with a proposal, specs, design, and task checklist.
