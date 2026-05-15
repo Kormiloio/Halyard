@@ -728,3 +728,93 @@ def register(app: typer.Typer) -> None:
         if result.monthly_usd is not None:
             parts.append(f"monthly ${result.monthly_usd:.2f}")
         console.print(f"Budget set for [bold cyan]{slug}[/]: {' '.join(parts)}")
+
+    @app.command()
+    def usage(
+        range_key: str = typer.Option(
+            "30d",
+            "--range",
+            help="Time window: all | 30d | 7d",
+        ),
+        json_: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+    ) -> None:
+        """Show usage analytics: sessions, tokens, streaks, peak hour, model mix."""
+        import json as _json
+        from dataclasses import asdict
+        from typing import cast
+
+        from halyard.ai_log import find_project_dir, parse_sessions
+        from halyard.hub import find_hub
+        from halyard.usage import UsageRangeKey, build_usage_analytics, compact_number
+
+        if range_key not in ("all", "30d", "7d"):
+            console.print(
+                "[bold red]Error:[/] --range must be one of: all, 30d, 7d"
+            )
+            raise typer.Exit(code=1)
+
+        project_dir = find_hub() or find_project_dir()
+        if project_dir is None:
+            console.print(
+                "[bold red]Error:[/] No Halyard project or hub found. "
+                "Run [bold]halyard init[/] first."
+            )
+            raise typer.Exit(code=1)
+
+        sessions = parse_sessions(project_dir)
+        analytics = build_usage_analytics(sessions, range_key=cast(UsageRangeKey, range_key))
+
+        if json_:
+            payload = {
+                "range": asdict(analytics.range),
+                "summary": asdict(analytics.summary),
+                "daily": [asdict(d) for d in analytics.daily],
+                "by_model": [asdict(m) for m in analytics.by_model],
+                "by_tool": [asdict(t) for t in analytics.by_tool],
+            }
+            # date objects → ISO strings
+            print(_json.dumps(payload, default=str, indent=2))
+            return
+
+        s = analytics.summary
+        console.print(f"\n[bold]Usage — {analytics.range.label}[/]")
+        console.print(
+            f"  {s.sessions:>5} sessions · "
+            f"{compact_number(s.total_tokens)} tokens · "
+            f"${s.total_cost_usd:.2f} cost"
+        )
+        console.print(
+            f"  {s.active_days} active days · "
+            f"current streak {s.current_streak_days}d · "
+            f"longest {s.longest_streak_days}d"
+        )
+        peak = "—" if s.peak_hour is None else f"{s.peak_hour:02d}:00"
+        favorite = s.favorite_model or "—"
+        console.print(f"  peak hour {peak} · favorite model {favorite}")
+
+        if s.unattributed_sessions:
+            console.print(
+                f"[yellow]  {s.unattributed_sessions} session(s) without project attribution[/]"
+            )
+        if s.token_data_missing_sessions:
+            console.print(
+                f"[yellow]  {s.token_data_missing_sessions} session(s) missing token data[/]"
+            )
+
+        if analytics.by_model:
+            console.print("\n[bold]Models[/]")
+            for mbucket in analytics.by_model[:5]:
+                pct = int(mbucket.token_share * 100)
+                console.print(
+                    f"  {mbucket.model:<30} "
+                    f"{compact_number(mbucket.tokens):>8} tokens  {pct:>3}%"
+                )
+
+        if analytics.by_tool:
+            console.print("\n[bold]Tools[/]")
+            for tbucket in analytics.by_tool:
+                console.print(
+                    f"  {tbucket.tool:<30} "
+                    f"{tbucket.sessions:>5} sessions  "
+                    f"{compact_number(tbucket.tokens):>8} tokens"
+                )

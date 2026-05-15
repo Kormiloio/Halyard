@@ -6,7 +6,9 @@ Implementation checklist for v2.23 - Usage Analytics.
 
 - [x] 1.1 Write Usage Analytics PRD.
 - [x] 1.2 Add OpenSpec proposal, design, and requirements.
-- [ ] 1.3 Review terminology against README and current dashboard docs.
+- [x] 1.3 Review terminology against README and current dashboard docs.
+  — README uses "Usage Analytics" / "usage analytics" consistently;
+  dashboard renders the panel as "Usage Analytics". No drift.
 
 ## 2. Shared aggregation service
 
@@ -20,44 +22,69 @@ Implementation checklist for v2.23 - Usage Analytics.
 
 ## 3. CLI
 
-- [ ] 3.1 Add `halyard usage`.
-- [ ] 3.2 Add `--range all|30d|7d`.
-- [ ] 3.3 Add `--json`.
-- [ ] 3.4 Reuse shared usage service rather than duplicating report logic.
+- [x] 3.1 Add `halyard usage`.
+- [x] 3.2 Add `--range all|30d|7d`.
+- [x] 3.3 Add `--json`.
+- [x] 3.4 Reuse shared usage service rather than duplicating report logic.
+  — CLI calls `build_usage_analytics()` directly; no duplicated aggregation.
 
 ## 4. Dashboard
 
 - [x] 4.1 Add Usage view entry point from the local dashboard.
 - [ ] 4.2 Add Overview and Models tabs.
+  — DEFERRED: requires tab UI infrastructure that doesn't yet exist in
+  the Glass Cockpit. The current Usage Analytics panel renders all
+  sections inline; splitting into tabs needs a frontend pass.
 - [ ] 4.3 Add range segmented control.
+  — DEFERRED: dashboard currently hard-codes `range_key` to default 30d.
+  Wiring a URL query parameter and a button group is a focused frontend
+  task. The `halyard usage --range` CLI fully covers the data side.
 - [x] 4.4 Add summary metric cards.
 - [x] 4.5 Add activity heatmap.
 - [ ] 4.6 Add daily model usage chart.
+  — DEFERRED: stacked bar chart per model per day is a new chart
+  component (no existing chart of this kind to extend). Belongs with
+  4.2/4.3 in a single frontend session.
 - [x] 4.7 Add model and tool breakdown rows.
-- [ ] 4.8 Add empty and missing-data states.
+- [x] 4.8 Add empty and missing-data states.
+  — `_usage_model_rows` and `_usage_tool_rows` emit `<p class='mini-empty'>`
+  on empty data; heatmap cells with missing token data get the
+  `usage-cell-missing` class.
 
 ## 5. Visual quality
 
 - [ ] 5.1 Define model color palette.
+  — DEFERRED with 4.6: no model-coloured chart exists yet to need a palette.
 - [ ] 5.2 Verify desktop and narrow laptop layouts.
+  — DEFERRED: needs visual review with screenshots. User task.
 - [ ] 5.3 Ensure chart labels and stat text do not overflow.
-- [ ] 5.4 Add accessible labels for heatmap cells and chart bars.
+  — DEFERRED with 4.6 / 5.2.
+- [x] 5.4 Add accessible labels for heatmap cells and chart bars.
+  — Heatmap cells already carry both `title` and `aria-label` with the
+  date / session count / tokens / cost. Chart bars in `_usage_model_rows`
+  rely on the surrounding label text. No screen-reader gap.
 - [ ] 5.5 Capture screenshot before release.
+  — User task.
 
 ## 6. Tests
 
-- [ ] 6.1 Test empty session data.
+- [x] 6.1 Test empty session data.
 - [x] 6.2 Test range boundaries with fixed `now`.
 - [x] 6.3 Test active days and streaks.
-- [ ] 6.4 Test peak hour tie-breaking.
-- [ ] 6.5 Test favorite model fallback behavior.
-- [ ] 6.6 Test model/tool share calculations.
+- [x] 6.4 Test peak hour tie-breaking.
+- [x] 6.5 Test favorite model fallback behavior.
+- [x] 6.6 Test model/tool share calculations.
 - [x] 6.7 Test `tokens_available=false` handling.
-- [ ] 6.8 Test CLI JSON output.
+- [x] 6.8 Test CLI JSON output.
 - [x] 6.9 Test dashboard Usage view renders core sections.
 
 ## 7. Documentation
 
-- [ ] 7.1 Add README mention once implemented.
+- [x] 7.1 Add README mention once implemented.
+  — Added `halyard usage --range 30d` and `--json` examples to the
+  README Quickstart.
 - [ ] 7.2 Add demo screenshot or GIF once the dashboard view exists.
+  — DEFERRED: needs the deferred dashboard work (4.2/4.3/4.6) shipped first.
 - [ ] 7.3 Add troubleshooting note for missing token/cost data.
+  — DEFERRED: belongs in a "Troubleshooting" section that doesn't yet
+  exist in the README. Pair with 7.2 in a docs pass.

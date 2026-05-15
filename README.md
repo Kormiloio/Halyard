@@ -167,6 +167,10 @@ halyard log "what did Cursor cost this week?"
 halyard report
 halyard dashboard
 
+# Stats-forward analytics — sessions, streaks, peak hour, model mix
+halyard usage --range 30d
+halyard usage --range 7d --json   # machine-readable
+
 # Or run the dashboard as a background launchd service (macOS):
 halyard install-service
 # Dashboard then listens on http://localhost:7432 — bookmark it.
