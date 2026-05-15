@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import tomllib
 from dataclasses import dataclass, replace
@@ -249,6 +250,18 @@ def scaffold_project(target_dir: Path, hub: bool = False) -> None:
 
     business_name = _detect_business_name()
     halyard_toml = _HALYARD_TOML_TEMPLATE.format(business_name=business_name)
+    # Defense in depth: business_name derives from `git config user.name`,
+    # which a cloned repo's local .git/config controls. The sanitizer
+    # should already make injection impossible; this round-trip guarantees
+    # it regardless — if the rendered TOML doesn't parse back to exactly
+    # the sanitized name, fall back to the safe default.
+    try:
+        parsed = tomllib.loads(halyard_toml)
+        ok = parsed.get("business", {}).get("name") == business_name
+    except tomllib.TOMLDecodeError:
+        ok = False
+    if not ok:
+        halyard_toml = _HALYARD_TOML_TEMPLATE.format(business_name=_DEFAULT_BUSINESS_NAME)
     config_file.write_text(halyard_toml)
     (target_dir / "clients.toml").write_text(_CLIENTS_TOML)
     (target_dir / "projects.toml").write_text(_PROJECTS_TOML)
@@ -508,6 +521,23 @@ def _is_valid_project(slug: str, project_dir: Path) -> bool:
     return False
 
 
+_DEFAULT_BUSINESS_NAME = "Your Name Consulting"
+
+
+def _sanitize_business_name(raw: str) -> str:
+    """Make a git user.name safe to embed in a double-quoted TOML string.
+
+    `git config user.name` is attacker-controllable via a cloned repo's
+    local .git/config. Strip the only characters that can break out of a
+    TOML basic string (`"` and `\\`) plus all control characters, collapse
+    whitespace, and length-cap. Empty result → safe default.
+    """
+    no_ctrl = re.sub(r"[\x00-\x1f\x7f]", " ", raw)
+    no_meta = no_ctrl.replace('"', "").replace("\\", "")
+    collapsed = " ".join(no_meta.split())[:80].strip()
+    return f"{collapsed} Consulting" if collapsed else _DEFAULT_BUSINESS_NAME
+
+
 def _detect_business_name() -> str:
     try:
         result = subprocess.run(
@@ -518,10 +548,10 @@ def _detect_business_name() -> str:
         )
         name = result.stdout.strip()
         if name:
-            return f"{name} Consulting"
+            return _sanitize_business_name(name)
     except Exception as e:
         _log_error("git config user.name failed in _detect_business_name", e)
-    return "Your Name Consulting"
+    return _DEFAULT_BUSINESS_NAME
 
 
 def _ensure_gitignore(path: Path) -> None:

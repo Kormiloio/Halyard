@@ -260,7 +260,17 @@ layers must read from this local source of truth; they do not replace it.
     with rationale. Spec in `openspec/changes/v2.38-review-hardening/`.
     **Status: complete (987 tests passing).**
 
-18. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+18. **v2.39 — Input injection hardening:** independent security review
+    findings the posture-level pass missed. TOML injection via a cloned
+    repo's `git config user.name` in `halyard init` closed (sanitize +
+    parse round-trip); untrusted Stop-hook `transcript_path` validated
+    (allowlisted root, no symlink, regular file, 25 MB cap, streamed
+    read); Gemini history reads size-bounded; `rate_history_from_git`
+    tolerates malformed commit diffs. Spec in
+    `openspec/changes/v2.39-input-injection/`.
+    **Status: complete (995 tests passing).**
+
+19. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

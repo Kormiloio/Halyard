@@ -9,7 +9,9 @@ Two entry points, wired up by `halyard install-hook`:
 from __future__ import annotations
 
 import json
+import os
 import sys
+import tempfile
 from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
@@ -273,6 +275,52 @@ def _clear_session_start() -> None:
     _CC_SESSION_FILE.unlink(missing_ok=True)
 
 
+_MAX_TRANSCRIPT_BYTES = 25 * 1024 * 1024  # 25 MB
+
+
+def _transcript_roots() -> list[Path]:
+    """Directories a legitimate transcript may live under.
+
+    Claude Code writes transcripts under the user's home (~/.claude/...);
+    tests and some setups use the system temp dir or the project tree.
+    Restricting to these blocks /etc, /proc, /sys, /dev, and other users'
+    files while not breaking any real layout.
+    """
+    roots = [Path.home(), Path(tempfile.gettempdir())]
+    with suppress(OSError):
+        roots.append(Path.cwd())
+    out: list[Path] = []
+    for r in roots:
+        with suppress(OSError):
+            out.append(r.resolve())
+    return out
+
+
+def _safe_transcript_path(raw: str) -> Path | None:
+    """Validate an untrusted Stop-hook ``transcript_path``.
+
+    The Stop payload is attacker-influenceable (a hostile process can pipe
+    a crafted payload to ``halyard cc-hook``). Only accept a real,
+    non-symlink, size-bounded file under an allowlisted root. Anything
+    else returns None and transcript enrichment is skipped.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    try:
+        if os.path.islink(os.path.expanduser(raw)):
+            return None
+        path = Path(raw).expanduser().resolve()
+        if not path.is_file():
+            return None
+        if not any(root == path or root in path.parents for root in _transcript_roots()):
+            return None
+        if path.stat().st_size > _MAX_TRANSCRIPT_BYTES:
+            return None
+    except OSError:
+        return None
+    return path
+
+
 def _read_from_transcript(
     transcript_path: str,
     since: datetime | None = None,
@@ -290,55 +338,55 @@ def _read_from_transcript(
     Returns (model, input_tokens, output_tokens, cache_read, cache_write, branch,
     assistant_message_count).
     """
+    path = _safe_transcript_path(transcript_path)
+    if path is None:
+        return None, 0, 0, 0, 0, None, 0
     try:
-        path = Path(transcript_path)
-        if not path.exists():
-            return None, 0, 0, 0, 0, None, 0
-
         model: str | None = None
         branch: str | None = None
         total_in = total_out = total_cr = total_cw = 0
         assistant_count = 0
 
-        for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
-            raw = raw.strip()
-            if not raw:
-                continue
-            try:
-                obj = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                raw = line.strip()
+                if not raw:
+                    continue
+                try:
+                    obj = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
 
-            if obj.get("type") != "assistant":
-                continue
+                if obj.get("type") != "assistant":
+                    continue
 
-            # Skip turns from before this session started
-            if since is not None:
-                ts_str = obj.get("timestamp", "")
-                if ts_str.endswith("Z"):
-                    with suppress(ValueError):
-                        # Transcript timestamps are UTC — convert to local naive
-                        ts = (
-                            datetime.fromisoformat(ts_str[:-1])
-                            .replace(tzinfo=UTC)
-                            .astimezone(tz=None)
-                            .replace(tzinfo=None)
-                        )
-                        if ts < since:
-                            continue
+                # Skip turns from before this session started
+                if since is not None:
+                    ts_str = obj.get("timestamp", "")
+                    if ts_str.endswith("Z"):
+                        with suppress(ValueError):
+                            # Transcript timestamps are UTC — convert to local naive
+                            ts = (
+                                datetime.fromisoformat(ts_str[:-1])
+                                .replace(tzinfo=UTC)
+                                .astimezone(tz=None)
+                                .replace(tzinfo=None)
+                            )
+                            if ts < since:
+                                continue
 
-            assistant_count += 1
-            msg = obj.get("message") or {}
-            if msg.get("model"):
-                model = str(msg["model"])
-            if obj.get("gitBranch") and branch is None:
-                branch = str(obj["gitBranch"])
+                assistant_count += 1
+                msg = obj.get("message") or {}
+                if msg.get("model"):
+                    model = str(msg["model"])
+                if obj.get("gitBranch") and branch is None:
+                    branch = str(obj["gitBranch"])
 
-            usage = msg.get("usage") or {}
-            total_in += int(usage.get("input_tokens", 0))
-            total_out += int(usage.get("output_tokens", 0))
-            total_cr += int(usage.get("cache_read_input_tokens", 0))
-            total_cw += int(usage.get("cache_creation_input_tokens", 0))
+                usage = msg.get("usage") or {}
+                total_in += int(usage.get("input_tokens", 0))
+                total_out += int(usage.get("output_tokens", 0))
+                total_cr += int(usage.get("cache_read_input_tokens", 0))
+                total_cw += int(usage.get("cache_creation_input_tokens", 0))
 
         return model, total_in, total_out, total_cr, total_cw, branch, assistant_count
     except (OSError, json.JSONDecodeError, ValueError):

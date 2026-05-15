@@ -76,11 +76,32 @@ class GeminiSessionSummary:
         )
 
 
+_MAX_HISTORY_BYTES = 25 * 1024 * 1024  # 25 MB
+
+
+def _read_capped(path: Path) -> str | None:
+    """Read a history file, refusing oversized ones.
+
+    `~/.gemini/tmp/.../session-*.json` is writable by any local process;
+    an attacker-staged multi-GB file would OOM the importer/hook. Treat
+    an oversized (or unreadable) file as absent.
+    """
+    try:
+        if path.stat().st_size > _MAX_HISTORY_BYTES:
+            return None
+        return path.read_text()
+    except OSError:
+        return None
+
+
 def parse_session_file(path: Path) -> GeminiSessionSummary | None:
     """Parse a Gemini CLI history JSON. Returns None on any error."""
+    text = _read_capped(path)
+    if text is None:
+        return None
     try:
-        data: dict[str, object] = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        data: dict[str, object] = json.loads(text)
+    except (json.JSONDecodeError, UnicodeDecodeError):
         return None
 
     try:
@@ -198,7 +219,10 @@ def find_session_file(session_id: str) -> Path | None:
     exact: list[Path] = []
     for path in matches:
         try:
-            data = json.loads(path.read_text())
+            text = _read_capped(path)
+            if text is None:
+                continue
+            data = json.loads(text)
             if str(data.get("sessionId") or "") == session_id:
                 exact.append(path)
         except (OSError, json.JSONDecodeError, UnicodeDecodeError):

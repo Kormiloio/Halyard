@@ -28,6 +28,18 @@ class AuditMismatch:
     rate_source: str = "structured"  # "structured" (front-matter) or "inferred" (regex)
 
 
+def _safe_float(s: str) -> float | None:
+    """Parse a float from untrusted git-diff text; None if malformed.
+
+    The `[0-9.]+` capture can match e.g. `1.2.3`; a crafted commit diff
+    must not abort the whole rate-history audit with a ValueError.
+    """
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
 def rate_history_from_toml(project_dir: Path) -> list[RateChange]:
     """Read rate changes from [[client.rate_history]] entries in clients.toml."""
     from halyard.invoicing import _read_clients
@@ -86,23 +98,25 @@ def rate_history_from_git(project_dir: Path) -> list[RateChange]:
                 current_slug = m.group(1)
         elif line.startswith("+hourly_rate") and "=" in line and commit_date:
             m = re.search(r"hourly_rate\s*=\s*([0-9.]+)", line)
-            if m and current_slug:
+            rate = _safe_float(m.group(1)) if m else None
+            if rate is not None and current_slug:
                 changes.append(
                     RateChange(
                         client_slug=current_slug,
                         effective_date=commit_date,
-                        rate=float(m.group(1)),
+                        rate=rate,
                         source=f"git:{commit_sha}",
                     )
                 )
         elif re.match(r"^\+rate\s*=", line) and commit_date and current_slug:
             m = re.search(r"rate\s*=\s*([0-9.]+)", line)
-            if m:
+            rate = _safe_float(m.group(1)) if m else None
+            if rate is not None:
                 changes.append(
                     RateChange(
                         client_slug=current_slug,
                         effective_date=commit_date,
-                        rate=float(m.group(1)),
+                        rate=rate,
                         source=f"git:{commit_sha}",
                     )
                 )
