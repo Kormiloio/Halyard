@@ -2,6 +2,11 @@
 
 Push-only: contributors decide when to sync.  The local log is never modified.
 Re-syncing the same records is idempotent (deduplicated by line hash).
+
+FROZEN — ENTERPRISE EXTRACTION CANDIDATE. This module is scaffolding for
+the planned ``halyard-enterprise`` package and is off-limits for new
+feature work in OSS Halyard. Bug fixes affecting solo-user paths only.
+See CONTRIBUTING.md.
 """
 
 from __future__ import annotations

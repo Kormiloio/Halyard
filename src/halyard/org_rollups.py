@@ -1,4 +1,10 @@
-"""Org-level rollup aggregation for v3 org admin dashboard."""
+"""Org-level rollup aggregation for v3 org admin dashboard.
+
+FROZEN — ENTERPRISE EXTRACTION CANDIDATE. This module is scaffolding for
+the planned ``halyard-enterprise`` package and is off-limits for new
+feature work in OSS Halyard. Bug fixes affecting solo-user paths only.
+See CONTRIBUTING.md.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,10 @@
-"""Org report formatters — Rich tables for the org admin CLI views."""
+"""Org report formatters — Rich tables for the org admin CLI views.
+
+FROZEN — ENTERPRISE EXTRACTION CANDIDATE. This module is scaffolding for
+the planned ``halyard-enterprise`` package and is off-limits for new
+feature work in OSS Halyard. Bug fixes affecting solo-user paths only.
+See CONTRIBUTING.md.
+"""
 
 from __future__ import annotations
 

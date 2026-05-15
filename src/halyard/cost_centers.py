@@ -6,6 +6,11 @@ Two sources, applied in priority order:
 
 Unattributed sessions are labelled "(unattributed)" and never assigned a
 cost center automatically.
+
+FROZEN — ENTERPRISE EXTRACTION CANDIDATE. This module is scaffolding for
+the planned ``halyard-enterprise`` package and is off-limits for new
+feature work in OSS Halyard. Bug fixes affecting solo-user paths only.
+See CONTRIBUTING.md.
 """
 
 from __future__ import annotations

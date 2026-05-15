@@ -5,6 +5,11 @@ normalized records from their local ai-sessions.log into this store.
 
 Schema is append-only.  The local_log_line_hash column enforces idempotency:
 re-syncing the same log line is a no-op.
+
+FROZEN — ENTERPRISE EXTRACTION CANDIDATE. This module is scaffolding for
+the planned ``halyard-enterprise`` package and is off-limits for new
+feature work in OSS Halyard. Bug fixes affecting solo-user paths only.
+See CONTRIBUTING.md.
 """
 
 from __future__ import annotations

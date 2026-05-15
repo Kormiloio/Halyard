@@ -2,6 +2,11 @@
 
 org.toml lives at the Halyard hub root and maps contributors (by git email)
 to teams and departments.  All org-level rollup work reads from this file.
+
+FROZEN — ENTERPRISE EXTRACTION CANDIDATE. This module is scaffolding for
+the planned ``halyard-enterprise`` package and is off-limits for new
+feature work in OSS Halyard. Bug fixes affecting solo-user paths only.
+See CONTRIBUTING.md.
 """
 
 from __future__ import annotations
