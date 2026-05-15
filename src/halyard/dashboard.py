@@ -459,7 +459,7 @@ def _voyage_panel(state: DashboardState) -> str:
         </div>"""
 
     return f"""
-      <article class="panel span-12">
+      <article class="panel span-12" data-panel="voyage">
         <div class="panel-head">
           <div>
             <p class="eyebrow">{_e(eyebrow)}</p>
@@ -596,6 +596,7 @@ def _render_state(
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;">
+        <button id="layout-reset" class="theme-toggle" aria-label="Reset panel layout" title="Reset panel layout to default">⊞ reset layout</button>
         <button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark mode">☀️</button>
         <div class="status status-{health_level}">{_e(health_level.title())}</div>
       </div>
@@ -611,9 +612,18 @@ def _render_state(
             if human_time.today_minutes > 0
             else ("today · auto-detected" if human_time.presence_minutes > 0 else "today"),
             "normal",
+            "human-time",
         )
     }
-      {_metric("AI Sessions", str(len(report.sessions)), report.period_label, "normal")}
+      {
+        _metric(
+            "AI Sessions",
+            str(len(report.sessions)),
+            report.period_label,
+            "normal",
+            "ai-sessions",
+        )
+    }
       {
         _metric(
             "AI Cost",
@@ -632,6 +642,7 @@ def _render_state(
                 else "captured API cost"
             ),
             "money",
+            "ai-cost",
         )
     }
     </section>
@@ -641,7 +652,7 @@ def _render_state(
       {_captains_quarters_panel(state.project_dir, report.sessions)}
       {_friends_panel(state.project_dir, report.sessions)}
 
-      <article class="panel span-12">
+      <article class="panel span-12" data-panel="usage">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Usage Analytics</p>
@@ -656,7 +667,7 @@ def _render_state(
         {_usage_panel(usage) if usage_tab == "overview" else _usage_models_panel(usage)}
       </article>
 
-      <article class="panel span-12">
+      <article class="panel span-12" data-panel="leverage">
         <div class="panel-head">
           <div>
             <p class="eyebrow">v3.0</p>
@@ -667,7 +678,7 @@ def _render_state(
         {_leverage_panel(state.all_sessions, state.generated_at)}
       </article>
 
-      <article class="panel span-7">
+      <article class="panel span-7" data-panel="sessions">
         <div class="panel-head">
           <div>
             <p class="eyebrow">{_morse("LOG")}</p>
@@ -678,7 +689,7 @@ def _render_state(
         {_sessions_table(report.sessions)}
       </article>
 
-      <article class="panel span-5">
+      <article class="panel span-5" data-panel="health">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Collector State</p>
@@ -690,7 +701,9 @@ def _render_state(
     }</div>
       </article>
 
-      <article class="panel span-12 attention-{_e("on" if report.unattributed_count else "off")}">
+      <article class="panel span-12 attention-{
+        _e("on" if report.unattributed_count else "off")
+    }" data-panel="adrift">
         <div class="panel-head">
           <div>
             <p class="eyebrow">· · · — — — · · ·</p>
@@ -701,7 +714,7 @@ def _render_state(
         {_unattributed_table(report.unattributed_sessions)}
       </article>
 
-      <article class="panel span-12">
+      <article class="panel span-12" data-panel="wake">
         <div class="panel-head">
           <div>
             <p class="eyebrow">{_morse("WAKE")}</p>
@@ -712,7 +725,7 @@ def _render_state(
         {_trail_heatmap_html(report.sessions, now)}
       </article>
 
-      <article class="panel span-6">
+      <article class="panel span-6" data-panel="timeclock">
         <div class="panel-head">
           <div>
             <p class="eyebrow">{_morse("TIME")}</p>
@@ -723,7 +736,7 @@ def _render_state(
         {_time_table(human_time.by_project)}
       </article>
 
-      <article class="panel span-6">
+      <article class="panel span-6" data-panel="projects">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Attribution</p>
@@ -734,7 +747,7 @@ def _render_state(
         {_bucket_table(report.by_project, "Project")}
       </article>
 
-      <article class="panel span-4">
+      <article class="panel span-4" data-panel="models">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Mix</p>
@@ -745,7 +758,7 @@ def _render_state(
         {_model_table(report.by_model)}
       </article>
 
-      <article class="panel span-4">
+      <article class="panel span-4" data-panel="tools">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Capture</p>
@@ -756,7 +769,7 @@ def _render_state(
         {_tool_table(report.by_tool_usage)}
       </article>
 
-      <article class="panel span-4">
+      <article class="panel span-4" data-panel="budget">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Spend Limits</p>
@@ -767,7 +780,7 @@ def _render_state(
         {_budget_panel(budgets)}
       </article>
 
-      <article class="panel span-12">
+      <article class="panel span-12" data-panel="costs">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Cost Allocation</p>
@@ -787,6 +800,7 @@ def _render_state(
     }
     </footer>
   </main>
+  {_layout_script()}
   {_celebration_script()}
   {_easter_egg_script()}
 </body>
@@ -880,7 +894,7 @@ def _captains_quarters_panel(project_dir: Path, sessions: list[AiSession]) -> st
     proof_html = f'<span class="{proof_cls}">{record.proof_score}%</span>'
 
     return f"""
-      <article class="panel span-12">
+      <article class="panel span-12" data-panel="captains-quarters">
         <div class="panel-head">
           <div>
             <p class="eyebrow">⚓ Captain's Quarters</p>
@@ -954,7 +968,7 @@ def _friends_panel(project_dir: Path, sessions: list[AiSession]) -> str:
 
     moored_count = sum(1 for v in summaries if v.stage == "moored")
     return f"""
-      <article class="panel span-12">
+      <article class="panel span-12" data-panel="friends">
         <div class="panel-head">
           <div>
             <p class="eyebrow">⛵ Friends of the Sea</p>
@@ -982,9 +996,9 @@ def _overall_health(state: DashboardState) -> str:
     return "healthy"
 
 
-def _metric(label: str, value: str, detail: str, tone: str) -> str:
+def _metric(label: str, value: str, detail: str, tone: str, panel_id: str) -> str:
     return f"""
-      <article class="metric metric-{tone}">
+      <article class="metric metric-{tone}" data-panel="{panel_id}">
         <span>{_e(label)}</span>
         <strong>{_e(value)}</strong>
         <small>{_e(detail)}</small>
@@ -1015,7 +1029,7 @@ def _timer_metric(active_timer: object) -> str:
         detail = ""
 
     return f"""
-      <article class="metric metric-focus">
+      <article class="metric metric-focus" data-panel="timer">
         <span>Active Project</span>
         <strong>{value}</strong>
         <small>{detail}</small>
@@ -1786,6 +1800,158 @@ def _panel_status_pill(text: str, state: str) -> str:
     return f"<span class='pill pill-{_e(state)}'>{_e(text)}</span>"
 
 
+def _layout_script() -> str:
+    """Client-side panel reorder/collapse, persisted in localStorage.
+
+    Server always emits the default order; this restores the user's saved
+    layout on every load (including the 10s auto-refresh). Wrapped so any
+    failure leaves the already-rendered dashboard fully visible.
+    """
+    return """<script>
+(function(){
+  try {
+    var ORDER_KEY = 'halyard-layout-order-v1';
+    var COLL_KEY  = 'halyard-layout-collapsed-v1';
+
+    function readJSON(k, fallback){
+      try { var v = JSON.parse(localStorage.getItem(k)); return v || fallback; }
+      catch(e){ return fallback; }
+    }
+    function containerKey(parent){
+      if (!parent) return null;
+      if (parent.classList.contains('grid')) return 'grid';
+      if (parent.classList.contains('metrics')) return 'metrics';
+      return null;
+    }
+
+    var collapsed = readJSON(COLL_KEY, []);
+    var collapsedSet = {};
+    collapsed.forEach(function(id){ collapsedSet[id] = true; });
+
+    function persistOrder(){
+      var out = {};
+      ['grid','metrics'].forEach(function(ck){
+        var parent = document.querySelector('.' + ck);
+        if (!parent) return;
+        out[ck] = Array.prototype.slice
+          .call(parent.querySelectorAll(':scope > [data-panel]'))
+          .map(function(el){ return el.getAttribute('data-panel'); });
+      });
+      localStorage.setItem(ORDER_KEY, JSON.stringify(out));
+    }
+    function persistCollapsed(){
+      localStorage.setItem(COLL_KEY, JSON.stringify(Object.keys(collapsedSet)));
+    }
+
+    function restoreOrder(){
+      var saved = readJSON(ORDER_KEY, {});
+      ['grid','metrics'].forEach(function(ck){
+        var parent = document.querySelector('.' + ck);
+        if (!parent || !saved[ck]) return;
+        var byId = {};
+        Array.prototype.slice
+          .call(parent.querySelectorAll(':scope > [data-panel]'))
+          .forEach(function(el){ byId[el.getAttribute('data-panel')] = el; });
+        // Saved ids first (in saved order), then any new/unknown panels
+        // keep their default relative position.
+        saved[ck].forEach(function(id){
+          if (byId[id]) { parent.appendChild(byId[id]); delete byId[id]; }
+        });
+        Object.keys(byId).forEach(function(id){ parent.appendChild(byId[id]); });
+      });
+    }
+
+    function setCollapsed(el, on){
+      el.classList.toggle('is-collapsed', on);
+      var t = el.querySelector(':scope > .panel-head .lay-toggle')
+           || el.querySelector(':scope > .lay-controls .lay-toggle');
+      if (t) { t.textContent = on ? '▸' : '▾'; t.title = on ? 'Expand' : 'Collapse'; }
+    }
+
+    var dragId = null;
+    function addControls(el){
+      var id = el.getAttribute('data-panel');
+      var host = el.querySelector(':scope > .panel-head');
+      var controls = document.createElement('div');
+      controls.className = 'lay-controls';
+      var handle = document.createElement('button');
+      handle.className = 'lay-handle'; handle.type = 'button';
+      handle.textContent = '⠿'; handle.title = 'Drag to reorder';
+      handle.setAttribute('aria-label', 'Drag to reorder panel');
+      var toggle = document.createElement('button');
+      toggle.className = 'lay-toggle'; toggle.type = 'button';
+      toggle.textContent = '▾'; toggle.title = 'Collapse';
+      toggle.setAttribute('aria-label', 'Collapse or expand panel');
+      controls.appendChild(handle); controls.appendChild(toggle);
+      if (host) { host.appendChild(controls); } else { el.appendChild(controls); }
+
+      toggle.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        var on = !el.classList.contains('is-collapsed');
+        if (on) { collapsedSet[id] = true; } else { delete collapsedSet[id]; }
+        setCollapsed(el, on);
+        persistCollapsed();
+      });
+
+      handle.addEventListener('mousedown', function(){ el.setAttribute('draggable','true'); });
+      handle.addEventListener('mouseup', function(){ el.removeAttribute('draggable'); });
+      el.addEventListener('dragstart', function(ev){
+        dragId = id; el.classList.add('lay-dragging');
+        try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', id); }
+        catch(e){}
+      });
+      el.addEventListener('dragend', function(){
+        dragId = null; el.removeAttribute('draggable');
+        el.classList.remove('lay-dragging');
+        document.querySelectorAll('.lay-over').forEach(function(n){
+          n.classList.remove('lay-over');
+        });
+      });
+      el.addEventListener('dragover', function(ev){
+        if (dragId === null || dragId === id) return;
+        var src = document.querySelector('[data-panel="' + dragId + '"]');
+        if (!src || src.parentElement !== el.parentElement) return;  // same container only
+        ev.preventDefault();
+        el.classList.add('lay-over');
+      });
+      el.addEventListener('dragleave', function(){ el.classList.remove('lay-over'); });
+      el.addEventListener('drop', function(ev){
+        el.classList.remove('lay-over');
+        if (dragId === null || dragId === id) return;
+        var src = document.querySelector('[data-panel="' + dragId + '"]');
+        if (!src || src.parentElement !== el.parentElement) return;
+        ev.preventDefault();
+        var parent = el.parentElement;
+        var rect = el.getBoundingClientRect();
+        var after = (ev.clientY - rect.top) > rect.height / 2;
+        parent.insertBefore(src, after ? el.nextSibling : el);
+        persistOrder();
+      });
+    }
+
+    restoreOrder();
+    Array.prototype.slice.call(document.querySelectorAll('[data-panel]'))
+      .forEach(function(el){
+        if (!containerKey(el.parentElement)) return;
+        addControls(el);
+        if (collapsedSet[el.getAttribute('data-panel')]) setCollapsed(el, true);
+      });
+
+    var resetBtn = document.getElementById('layout-reset');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function(){
+        localStorage.removeItem(ORDER_KEY);
+        localStorage.removeItem(COLL_KEY);
+        location.reload();
+      });
+    }
+  } catch (e) {
+    if (window.console) console.warn('Halyard layout script failed:', e);
+  }
+})();
+</script>"""
+
+
 def _celebration_script() -> str:
     return """<script>
 (function(){
@@ -2381,6 +2547,23 @@ body.light-mode .brand-mark svg { filter: drop-shadow(0 0 6px rgba(14,158,153,.3
   padding: 5px 10px; line-height: 1; transition: border-color .2s, color .2s;
 }
 .theme-toggle:hover { border-color: var(--cyan); color: var(--text); }
+/* ── v2.42 customizable layout ── */
+.lay-controls { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }
+.lay-handle, .lay-toggle {
+  background: none; border: 1px solid var(--line); border-radius: 6px;
+  color: var(--muted); cursor: pointer; font-size: 12px; line-height: 1;
+  padding: 3px 7px; transition: border-color .15s, color .15s;
+}
+.lay-handle { cursor: grab; }
+.lay-handle:hover, .lay-toggle:hover { border-color: var(--cyan); color: var(--text); }
+[data-panel].lay-dragging { opacity: .45; }
+[data-panel].lay-over { outline: 2px dashed var(--cyan); outline-offset: 2px; }
+.panel.is-collapsed, .metric.is-collapsed { min-height: 0; }
+.panel.is-collapsed > *:not(.panel-head),
+.metric.is-collapsed > *:not(.panel-head):not(span):not(.lay-controls) { display: none; }
+.metric.is-collapsed > strong, .metric.is-collapsed > small,
+.metric.is-collapsed > form { display: none; }
+.panel.is-collapsed .panel-head { margin-bottom: 0; }
 
 /* Night Watch mode — activated by clicking the logo 5x */
 body.night-watch { --bg: #0a0a0f; --surface: #0d0d14; --border: #1a1a2e; --text: #c8a8e9; --muted: #6a5a8a; }
