@@ -370,9 +370,7 @@ def _render_pr_refs_subsection(sessions: list[AiSession]) -> list[str]:
         bucket = by_ref[ref]
         # All sessions sharing a ref should agree on state; if not, prefer
         # the most recently resolved one.
-        bucket_sorted = sorted(
-            bucket, key=lambda s: s.outcome_resolved_at or "", reverse=True
-        )
+        bucket_sorted = sorted(bucket, key=lambda s: s.outcome_resolved_at or "", reverse=True)
         state = bucket_sorted[0].pr_state or "—"
         out.append(f"| {ref} | {state} | {len(bucket)} |")
     return out

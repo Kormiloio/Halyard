@@ -8,9 +8,7 @@ from halyard.ai_log import AiSession
 from halyard.dashboard import _leverage_panel
 
 
-def _s(
-    *, start: datetime, pr_state: str | None = None, pr_ref: str | None = None
-) -> AiSession:
+def _s(*, start: datetime, pr_state: str | None = None, pr_ref: str | None = None) -> AiSession:
     return AiSession(
         start=start,
         end=start + timedelta(minutes=10),

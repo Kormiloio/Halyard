@@ -73,9 +73,7 @@ def test_line_timestamp_plain_bash_returns_none() -> None:
     assert _line_timestamp("pytest tests/") is None
 
 
-def test_count_test_runs_no_history_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_count_test_runs_no_history_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """No history file anywhere → count is 0, no exception."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.delenv("HISTFILE", raising=False)

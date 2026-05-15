@@ -43,9 +43,7 @@ def test_locked_file_with_noop_lock_backend(
     assert path.read_text() == "noop-lock"
 
 
-def test_locked_file_releases_on_exception(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_locked_file_releases_on_exception(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """If the caller raises inside the with block, the lock is still released."""
     import halyard.ai_log as ai_log_mod
 

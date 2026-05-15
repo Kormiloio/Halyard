@@ -114,9 +114,7 @@ def test_shell_history_returns_only_an_integer(
     # Drop the same marker into shell history; the function must not echo it.
     bash_history = tmp_path / ".bash_history"
     bash_history.write_text(
-        "SECRET-A1B2=value pytest tests/\n"
-        "pytest tests/ # comment SECRET-C3D4\n"
-        "echo SECRET-E5F6\n"
+        "SECRET-A1B2=value pytest tests/\npytest tests/ # comment SECRET-C3D4\necho SECRET-E5F6\n"
     )
 
     now = datetime(2026, 5, 14, 12)

@@ -64,6 +64,7 @@ else:
         def _release_lock(fd: int) -> None:
             pass
 
+
 SPEC_URL = "https://halyard.dev/spec/ai-sessions/v1"
 HEADER = (
     f"; Halyard AI session log — spec: {SPEC_URL}\n"

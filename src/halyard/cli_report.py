@@ -586,9 +586,7 @@ def register(app: typer.Typer) -> None:
         from halyard.usage import UsageRangeKey, build_usage_analytics, compact_number
 
         if range_key not in ("all", "30d", "7d"):
-            console.print(
-                "[bold red]Error:[/] --range must be one of: all, 30d, 7d"
-            )
+            console.print("[bold red]Error:[/] --range must be one of: all, 30d, 7d")
             raise typer.Exit(code=1)
 
         project_dir = find_hub() or find_project_dir()
@@ -644,8 +642,7 @@ def register(app: typer.Typer) -> None:
             for mbucket in analytics.by_model[:5]:
                 pct = int(mbucket.token_share * 100)
                 console.print(
-                    f"  {mbucket.model:<30} "
-                    f"{compact_number(mbucket.tokens):>8} tokens  {pct:>3}%"
+                    f"  {mbucket.model:<30} {compact_number(mbucket.tokens):>8} tokens  {pct:>3}%"
                 )
 
         if analytics.by_tool:

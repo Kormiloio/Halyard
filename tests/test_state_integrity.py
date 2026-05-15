@@ -145,9 +145,7 @@ def test_read_active_project_returns_none_on_tamper(
     assert read_active_project() is None
 
 
-def test_find_hub_returns_none_on_tamper(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_find_hub_returns_none_on_tamper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("HALYARD_STATE_INTEGRITY", "hash")
     state_integrity._reset_cache_for_tests()

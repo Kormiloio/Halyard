@@ -479,9 +479,7 @@ def _render_state(
     human_time = state.human_time
     latest = state.latest_session
     health_level = _overall_health(state)
-    usage = build_usage_analytics(
-        state.all_sessions, range_key=usage_range, now=state.generated_at
-    )
+    usage = build_usage_analytics(state.all_sessions, range_key=usage_range, now=state.generated_at)
 
     # Budget data
     budgets = budget_status()
@@ -1143,9 +1141,7 @@ def _range_control(current: UsageRangeOpt, tab: UsageTabOpt) -> str:
         cls = "pill pill-segment"
         if key == current:
             cls += " pill-active"
-        parts.append(
-            f"<a class='{cls}' href='?range={key}&tab={tab}'>{_e(label)}</a>"
-        )
+        parts.append(f"<a class='{cls}' href='?range={key}&tab={tab}'>{_e(label)}</a>")
     return "<div class='segment-group' role='group' aria-label='Range'>" + "".join(parts) + "</div>"
 
 
@@ -1157,9 +1153,7 @@ def _tab_control(current: UsageTabOpt, usage_range: UsageRangeOpt) -> str:
         cls = "pill pill-segment"
         if key == current:
             cls += " pill-active"
-        parts.append(
-            f"<a class='{cls}' href='?range={usage_range}&tab={key}'>{_e(label)}</a>"
-        )
+        parts.append(f"<a class='{cls}' href='?range={usage_range}&tab={key}'>{_e(label)}</a>")
     return "<div class='segment-group' role='group' aria-label='Tab'>" + "".join(parts) + "</div>"
 
 
@@ -1219,7 +1213,11 @@ def _daily_model_chart(usage: UsageAnalytics, model_index: dict[str, int]) -> st
 
     # Y axis lines
     y_lines = []
-    for frac, label in [(0, "0"), (0.5, compact_number(int(max_tokens * 0.5))), (1.0, compact_number(max_tokens))]:
+    for frac, label in [
+        (0, "0"),
+        (0.5, compact_number(int(max_tokens * 0.5))),
+        (1.0, compact_number(max_tokens)),
+    ]:
         y = chart_h - frac * chart_h + 8
         y_lines.append(
             f"<line x1='{pad_left}' y1='{y}' x2='{pad_left + chart_w}' y2='{y}' "
@@ -1342,8 +1340,10 @@ def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
     unsynced = sum(1 for s in recent if not s.pr_state)
 
     leverage_pct = int((merged / total) * 100) if total else 0
-    fill_class = "leverage-high" if leverage_pct >= 50 else (
-        "leverage-mid" if leverage_pct >= 20 else "leverage-low"
+    fill_class = (
+        "leverage-high"
+        if leverage_pct >= 50
+        else ("leverage-mid" if leverage_pct >= 20 else "leverage-low")
     )
 
     rows = [

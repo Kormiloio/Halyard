@@ -25,17 +25,13 @@ def test_explicit_disable(tmp_path: Path) -> None:
 
 
 def test_explicit_shell_history_enable(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text(
-        "[outcomes]\nenabled = true\nshell_history = true\n"
-    )
+    (tmp_path / "halyard.toml").write_text("[outcomes]\nenabled = true\nshell_history = true\n")
     assert shell_history_enabled(tmp_path) is True
 
 
 def test_garbage_value_keeps_defaults(tmp_path: Path) -> None:
     """Non-boolean values are ignored — the documented contract is bool-only."""
-    (tmp_path / "halyard.toml").write_text(
-        "[outcomes]\nenabled = \"yes\"\nshell_history = 1\n"
-    )
+    (tmp_path / "halyard.toml").write_text('[outcomes]\nenabled = "yes"\nshell_history = 1\n')
     cfg = read_outcomes_config(tmp_path)
     assert cfg["enabled"] is True  # default
     assert cfg["shell_history"] is False  # default
