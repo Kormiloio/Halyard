@@ -302,9 +302,10 @@ layers must read from this local source of truth; they do not replace it.
     (including the 10s auto-refresh), constrains drag to within a
     container, and a topbar "reset layout" control returns to default.
     Fail-safe: a script error leaves the server-rendered dashboard fully
-    visible. Browser-verified. Spec in
+    visible. Controls sit top-right of every box; a topbar collapse/expand-all
+    master control toggles every box. Browser-verified. Spec in
     `openspec/changes/v2.42-dashboard-layout/`.
-    **Status: complete (1019 tests passing).**
+    **Status: complete (1020 tests passing).**
 
 22. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include

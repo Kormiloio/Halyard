@@ -596,6 +596,7 @@ def _render_state(
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;">
+        <button id="layout-toggle-all" class="theme-toggle" aria-label="Collapse or expand all panels" title="Collapse or expand all panels">▾ collapse all</button>
         <button id="layout-reset" class="theme-toggle" aria-label="Reset panel layout" title="Reset panel layout to default">⊞ reset layout</button>
         <button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark mode">☀️</button>
         <div class="status status-{health_level}">{_e(health_level.title())}</div>
@@ -1891,6 +1892,7 @@ def _layout_script() -> str:
         if (on) { collapsedSet[id] = true; } else { delete collapsedSet[id]; }
         setCollapsed(el, on);
         persistCollapsed();
+        if (typeof refreshAllBtn === 'function') refreshAllBtn();
       });
 
       handle.addEventListener('mousedown', function(){ el.setAttribute('draggable','true'); });
@@ -1936,6 +1938,33 @@ def _layout_script() -> str:
         addControls(el);
         if (collapsedSet[el.getAttribute('data-panel')]) setCollapsed(el, true);
       });
+
+    function layoutBoxes(){
+      return Array.prototype.slice.call(document.querySelectorAll('[data-panel]'))
+        .filter(function(el){ return containerKey(el.parentElement); });
+    }
+    var allBtn = document.getElementById('layout-toggle-all');
+    function refreshAllBtn(){
+      if (!allBtn) return;
+      var boxes = layoutBoxes();
+      var anyOpen = boxes.some(function(el){ return !el.classList.contains('is-collapsed'); });
+      // If anything is open the button collapses everything; else it expands.
+      allBtn.textContent = anyOpen ? '▾ collapse all' : '▸ expand all';
+    }
+    if (allBtn) {
+      allBtn.addEventListener('click', function(){
+        var boxes = layoutBoxes();
+        var on = boxes.some(function(el){ return !el.classList.contains('is-collapsed'); });
+        boxes.forEach(function(el){
+          var id = el.getAttribute('data-panel');
+          if (on) { collapsedSet[id] = true; } else { delete collapsedSet[id]; }
+          setCollapsed(el, on);
+        });
+        persistCollapsed();
+        refreshAllBtn();
+      });
+      refreshAllBtn();
+    }
 
     var resetBtn = document.getElementById('layout-reset');
     if (resetBtn) {
@@ -2549,6 +2578,10 @@ body.light-mode .brand-mark svg { filter: drop-shadow(0 0 6px rgba(14,158,153,.3
 .theme-toggle:hover { border-color: var(--cyan); color: var(--text); }
 /* ── v2.42 customizable layout ── */
 .lay-controls { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }
+/* Metrics have no .panel-head, so pin their controls to the top-right
+   corner of the card (consistent with where panel controls sit). */
+.metric { position: relative; }
+.metric > .lay-controls { position: absolute; top: 10px; right: 12px; margin-left: 0; }
 .lay-handle, .lay-toggle {
   background: none; border: 1px solid var(--line); border-radius: 6px;
   color: var(--muted); cursor: pointer; font-size: 12px; line-height: 1;

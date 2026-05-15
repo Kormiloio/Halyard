@@ -95,6 +95,15 @@ def test_reset_control_and_css_present(tmp_path: Path) -> None:
     assert ".lay-handle" in html
 
 
+def test_universal_toggle_and_metric_control_placement(tmp_path: Path) -> None:
+    html = _render(tmp_path)
+    # Master collapse/expand-all control at the top of the page.
+    assert 'id="layout-toggle-all"' in html
+    assert "expand all" in html
+    # Metric controls pinned to the card's top-right corner.
+    assert ".metric > .lay-controls { position: absolute;" in html
+
+
 def test_drag_constrained_to_same_container(tmp_path: Path) -> None:
     # The script must check parentElement equality before reordering.
     html = _render(tmp_path)

@@ -14,11 +14,28 @@ THEN the panels reorder within that container
 AND a drop whose target is in a different container is ignored
 (metric cards and grid panels do not interleave).
 
+## Requirement: Controls sit in the top-right of every box
+
+WHEN the drag/collapse controls are injected
+THEN they MUST appear in the top-right corner of the box for both grid
+panels and metric cards (metric cards, which have no panel header, pin
+the controls to the card's top-right corner).
+
 ## Requirement: Panels can be collapsed
 
 WHEN the user activates a panel's collapse toggle
 THEN the panel renders as header-only and the toggle indicates the
 collapsed state; activating it again restores the panel.
+
+## Requirement: Universal collapse/expand-all
+
+WHEN the user activates the top-of-page "collapse all / expand all"
+control
+THEN every layout box collapses if any is currently expanded, otherwise
+every box expands
+AND the collapsed set is persisted like individual toggles
+AND the control's label reflects the next action and stays in sync when
+individual panels are toggled.
 
 ## Requirement: Layout persists across reloads
 

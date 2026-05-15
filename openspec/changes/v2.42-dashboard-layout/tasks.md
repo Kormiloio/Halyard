@@ -31,3 +31,14 @@
 - [x] `mypy src/` clean
 - [x] roadmap entry + status in `openspec/project.md` (item 21)
 - [x] PRD reviewed — additive UX on the existing local dashboard; no scope/priority change. Behavior authoritative in `specs/dashboard-layout.md`.
+
+## v2.42.1 — UX refinement (post-feedback)
+
+- [x] Metric controls pinned to the card's top-right corner (CSS;
+  metrics have no panel-head)
+- [x] Topbar "collapse all / expand all" universal control
+- [x] Master button label tracks state + syncs on individual toggles
+- [x] Spec updated (controls placement + universal toggle requirements)
+- [x] Python test: #layout-toggle-all present
+- [x] Browser re-verify: metric controls top-right; collapse-all /
+  expand-all; label sync; persists across reload
