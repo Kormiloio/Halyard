@@ -91,7 +91,7 @@ What shipped in v2.24:
    bucket sessions by state: shipped (merged), in-flight (open), abandoned
    (closed), no PR, not synced.
 
-Spec: `openspec/changes/v2.24-outcome-metadata/`. 902 tests passing.
+Spec: `openspec/changes/archive/2026-05-09-v2.24-outcome-metadata/`. 902 tests passing.
 
 ---
 

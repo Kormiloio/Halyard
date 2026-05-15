@@ -131,8 +131,9 @@ When a collector temporarily reads a local transcript or history file, it is
 only to extract session metadata.
 
 The log is append-focused. Session records are `s ...` lines; corrections are
-separate amendment records keyed by a hash of the original line. Writers use
-POSIX `flock` so concurrent hooks do not interleave writes. Malformed records
+separate amendment records keyed by a hash of the original line. Writers
+hold an exclusive OS-level file lock (`fcntl.flock` on POSIX, `msvcrt.locking`
+on Windows) so concurrent hooks do not interleave writes. Malformed records
 are quarantined instead of crashing report generation.
 
 Cost handling is explicit about trust. Direct API usage can be captured or
@@ -307,46 +308,46 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 | Change | Description |
 |--------|-------------|
 | [`v0-time-and-invoice`](./openspec/changes/v0-time-and-invoice/) | Project skeleton, `halyard init`, human time tracking, invoice generation |
-| [`v0.1-log-and-invoice`](./openspec/changes/v0.1-log-and-invoice/) | `halyard log` natural-language query + `halyard invoice` |
-| [`v0.2-ai-agent-loop`](./openspec/changes/v0.2-ai-agent-loop/) | Structured-output AI agent loop for `halyard log` |
-| [`v0.3-provider-neutral-log`](./openspec/changes/v0.3-provider-neutral-log/) | OpenAI + local model support for `halyard log --agent openai` |
+| [`v0.1-log-and-invoice`](./openspec/changes/archive/2026-05-08-v0.1-log-and-invoice/) | `halyard log` natural-language query + `halyard invoice` |
+| [`v0.2-ai-agent-loop`](./openspec/changes/archive/2026-05-08-v0.2-ai-agent-loop/) | Structured-output AI agent loop for `halyard log` |
+| [`v0.3-provider-neutral-log`](./openspec/changes/archive/2026-05-07-v0.3-provider-neutral-log/) | OpenAI + local model support for `halyard log --agent openai` |
 | [`v1-ai-intelligence`](./openspec/changes/archive/2026-05-07-v1-ai-intelligence/) | AI session schema + Claude Code collector + local reports |
 | [`v1.5-multi-tool-collectors`](./openspec/changes/archive/2026-05-07-v1.5-multi-tool-collectors/) | Cursor, Gemini CLI, and Codex collectors |
-| [`v2-ai-work-ledger`](./openspec/changes/v2-ai-work-ledger/) | Cost allocation for seat/credit plans, trust-labeled reports, `confirm-attribution`, invoice evidence appendix |
+| [`v2-ai-work-ledger`](./openspec/changes/archive/2026-05-07-v2-ai-work-ledger/) | Cost allocation for seat/credit plans, trust-labeled reports, `confirm-attribution`, invoice evidence appendix |
 | [`v2-local-activity-dashboard`](./openspec/changes/v2-local-activity-dashboard/) | Glass Cockpit local browser dashboard (`halyard dashboard`) |
 | [`v2.1-dynamic-pricing`](./openspec/changes/archive/2026-05-07-v2.1-dynamic-pricing/) | `halyard update-pricing` — live pricing table sync |
 | [`v2.2-budget-limits`](./openspec/changes/archive/2026-05-07-v2.2-budget-limits/) | Per-project daily/monthly budget alerts |
 | [`v2.3-gemini-history`](./openspec/changes/archive/2026-05-07-v2.3-gemini-history/) | Gemini history file enrichment + `halyard import-gemini` |
-| [`v2.4-data-integrity`](./openspec/changes/v2.4-data-integrity/) | Quarantine, recoverable unattributed log, parser hardening |
-| [`v2.5-cli-decoupling`](./openspec/changes/v2.5-cli-decoupling/) | Service layer extracted from CLI; orchestration module |
-| [`v2.6-rich-session-telemetry`](./openspec/changes/v2.6-rich-session-telemetry/) | Tool calls, errors, wall/active time, code delta, and model breakdown fields |
-| [`v2.7-ai-work-health`](./openspec/changes/v2.7-ai-work-health/) | Local work-health signals such as error rate and repeated attempts |
-| [`v2.8-calendar-blocks`](./openspec/changes/v2.8-calendar-blocks/) | Calendar export for captured sessions; future scheduling is deferred |
-| [`v2.9-onboarding-doctor`](./openspec/changes/v2.9-onboarding-doctor/) | `halyard doctor` setup diagnosis |
-| [`v2.10-guided-setup`](./openspec/changes/v2.10-guided-setup/) | Guided hook setup and first-run readiness flow |
-| [`v2.11-hook-normalization`](./openspec/changes/v2.11-hook-normalization/) | Normalized hook installation commands |
-| [`v2.12-glass-cockpit-service`](./openspec/changes/v2.12-glass-cockpit-service/) | Background service support for the local dashboard |
-| [`v2.13-backtracking-attribution`](./openspec/changes/v2.13-backtracking-attribution/) | Backfill and time-window attribution cleanup |
-| [`v2.14-sqlite-read-model`](./openspec/changes/v2.14-sqlite-read-model/) | SQLite read-model cache over plain-text source files |
-| [`v2.15-transaction-history`](./openspec/changes/v2.15-transaction-history/) | Rate history and invoice audit support |
-| [`v4-tui`](./openspec/changes/v4-tui/) | Textual interactive terminal dashboard (`halyard tui`) |
+| [`v2.4-data-integrity`](./openspec/changes/archive/2026-05-08-v2.4-data-integrity/) | Quarantine, recoverable unattributed log, parser hardening |
+| [`v2.5-cli-decoupling`](./openspec/changes/archive/2026-05-07-v2.5-cli-decoupling/) | Service layer extracted from CLI; orchestration module |
+| [`v2.6-rich-session-telemetry`](./openspec/changes/archive/2026-05-08-v2.6-rich-session-telemetry/) | Tool calls, errors, wall/active time, code delta, and model breakdown fields |
+| [`v2.7-ai-work-health`](./openspec/changes/archive/2026-05-08-v2.7-ai-work-health/) | Local work-health signals such as error rate and repeated attempts |
+| [`v2.8-calendar-blocks`](./openspec/changes/archive/2026-05-08-v2.8-calendar-blocks/) | Calendar export for captured sessions; future scheduling is deferred |
+| [`v2.9-onboarding-doctor`](./openspec/changes/archive/2026-05-08-v2.9-onboarding-doctor/) | `halyard doctor` setup diagnosis |
+| [`v2.10-guided-setup`](./openspec/changes/archive/2026-05-08-v2.10-guided-setup/) | Guided hook setup and first-run readiness flow |
+| [`v2.11-hook-normalization`](./openspec/changes/archive/2026-05-08-v2.11-hook-normalization/) | Normalized hook installation commands |
+| [`v2.12-glass-cockpit-service`](./openspec/changes/archive/2026-05-14-v2.12-glass-cockpit-service/) | Background service support for the local dashboard |
+| [`v2.13-backtracking-attribution`](./openspec/changes/archive/2026-05-08-v2.13-backtracking-attribution/) | Backfill and time-window attribution cleanup |
+| [`v2.14-sqlite-read-model`](./openspec/changes/archive/2026-05-14-v2.14-sqlite-read-model/) | SQLite read-model cache over plain-text source files |
+| [`v2.15-transaction-history`](./openspec/changes/archive/2026-05-08-v2.15-transaction-history/) | Rate history and invoice audit support |
+| [`v4-tui`](./openspec/changes/archive/2026-05-09-v4-tui/) | Textual interactive terminal dashboard (`halyard tui`) |
 | [`v2.16-distribution-and-security`](./openspec/changes/v2.16-distribution-and-security/) | Distribution checks, dashboard auth, and launch-readiness hardening |
-| [`v2.17-log-integrity`](./openspec/changes/v2.17-log-integrity/) | Locking, append-only correction records, and shared timer orchestration |
-| [`v2.18-cache-and-audit-hardening`](./openspec/changes/v2.18-cache-and-audit-hardening/) | SQLite cache, invoice audit, pricing, and integrity hardening |
-| [`v2.20-security-remediation`](./openspec/changes/v2.20-security-remediation/) | Targeted security remediation from the first AppSec review |
-| [`v2.21-attribution-provenance`](./openspec/changes/v2.21-attribution-provenance/) | Attribution provenance (`attr_method`) for billing and audit clarity |
+| [`v2.17-log-integrity`](./openspec/changes/archive/2026-05-14-v2.17-log-integrity/) | Locking, append-only correction records, and shared timer orchestration |
+| [`v2.18-cache-and-audit-hardening`](./openspec/changes/archive/2026-05-09-v2.18-cache-and-audit-hardening/) | SQLite cache, invoice audit, pricing, and integrity hardening |
+| [`v2.20-security-remediation`](./openspec/changes/archive/2026-05-08-v2.20-security-remediation/) | Targeted security remediation from the first AppSec review |
+| [`v2.21-attribution-provenance`](./openspec/changes/archive/2026-05-08-v2.21-attribution-provenance/) | Attribution provenance (`attr_method`) for billing and audit clarity |
 | [`v2.22-security-architecture`](./openspec/changes/v2.22-security-architecture/) | Architectural security follow-ups and coverage gaps |
 | [`v2.23-usage-analytics`](./openspec/changes/v2.23-usage-analytics/) | Stats-forward usage analytics: activity heatmap, streaks, peak hour, and model share |
-| [`v2.24-outcome-metadata`](./openspec/changes/v2.24-outcome-metadata/) | Branch as first-class field, commit count, code delta, PR linkage (`halyard outcome sync`) |
-| [`v2.25-honors-and-achievements`](./openspec/changes/v2.25-honors-and-achievements/) | Ranks, stripes, medals, and service record (`halyard honors`) |
-| [`v2.26-passport-and-friends`](./openspec/changes/v2.26-passport-and-friends/) | Passport stamps + Friends of the Sea voyage stages and sea creatures (`halyard voyage`) |
+| [`v2.24-outcome-metadata`](./openspec/changes/archive/2026-05-09-v2.24-outcome-metadata/) | Branch as first-class field, commit count, code delta, PR linkage (`halyard outcome sync`) |
+| [`v2.25-honors-and-achievements`](./openspec/changes/archive/2026-05-09-v2.25-honors-and-achievements/) | Ranks, stripes, medals, and service record (`halyard honors`) |
+| [`v2.26-passport-and-friends`](./openspec/changes/archive/2026-05-09-v2.26-passport-and-friends/) | Passport stamps + Friends of the Sea voyage stages and sea creatures (`halyard voyage`) |
 
 ### Gated Future Work
 
 | Change | Description |
 |--------|-------------|
 | [`v3.0-outcome-graph`](./openspec/changes/v3.0-outcome-graph/) | Connect AI sessions to commits, PRs, tests, and outcomes; gated on design-partner pull |
-| [`v3-org-admin-dashboard`](./openspec/changes/v3-org-admin-dashboard/) | Team, manager, CIO, and finance rollups; deferred until enterprise readiness |
+| [`v3-org-admin-dashboard`](./openspec/changes/archive/2026-05-08-v3-org-admin-dashboard/) | Team, manager, CIO, and finance rollups; deferred until enterprise readiness |
 
 ---
 

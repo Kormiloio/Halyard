@@ -3,7 +3,7 @@
 **Status:** Proposed
 **Date:** May 14, 2026
 **Companion ARD:** `docs/ARD-vscode-extension-and-metadata-parity.md`
-**OpenSpec change:** `openspec/changes/v2.32-vscode-extension-metadata-parity/`
+**OpenSpec change:** `openspec/changes/archive/2026-05-14-v2.32-vscode-extension-metadata-parity/`
 
 ---
 

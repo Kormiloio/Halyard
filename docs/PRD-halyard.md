@@ -248,7 +248,7 @@ explicit opt-in feature with its own spec.
 
 The API proxy approach (intercepting HTTPS traffic) was evaluated and rejected
 for v1.5 in favor of per-tool hooks. See
-`openspec/changes/v1.5-multi-tool-collectors/proposal.md` for the full
+`openspec/changes/archive/2026-05-07-v1.5-multi-tool-collectors/proposal.md` for the full
 rationale.
 
 ---
@@ -322,7 +322,7 @@ core ledger and OSS install base are established.
 
 A pre-launch architecture and security review on 2026-05-10 identified seven
 issues that must be resolved before the public OSS release. All seven are
-addressed in v2.29. Full spec: `openspec/changes/v2.29-pre-ship-hardening/`.
+addressed in v2.29. Full spec: `openspec/changes/archive/2026-05-14-v2.29-pre-ship-hardening/`.
 
 ### 1. Windows platform safety
 `fcntl` is a POSIX-only module. Halyard will not be installed on Windows without
