@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -102,6 +103,56 @@ def _cc_hook_commands_from_path(path: Path) -> set[str]:
     return keys
 
 
+class HookWriteError(OSError):
+    """A hook settings file could not be written.
+
+    Subclasses OSError so the best-effort auto-install path in
+    ``_auto_install_detected_hooks`` (which does ``except OSError``)
+    keeps degrading gracefully — a read-only Gemini config must never
+    hard-fail ``halyard init``. The explicit ``halyard install-hook-*``
+    commands catch this specifically and surface the actionable message.
+    """
+
+    def __init__(self, settings_path: Path, original: OSError) -> None:
+        self.settings_path = settings_path
+        self.original = original
+        super().__init__(
+            f"could not write {settings_path} — {original.strerror}. "
+            "The file may be read-only or managed by an MDM / config tool "
+            "(e.g. Orbit deploys ~/.gemini as read-only). "
+            "Fix the file's write permission, or add the hook manually."
+        )
+
+
+def _write_settings(settings_path: Path, content: str) -> None:
+    """Write a hook settings file, raising HookWriteError on failure.
+
+    Settings files like ``~/.gemini/settings.json`` are sometimes deployed
+    read-only by an MDM or config-management tool (e.g. Orbit). An
+    unguarded ``write_text`` would crash with a raw traceback.
+    """
+    try:
+        settings_path.write_text(content)
+    except OSError as exc:
+        raise HookWriteError(settings_path, exc) from exc
+
+
+def _run_installer(fn: Callable[[], None]) -> None:
+    """Run an explicit ``halyard install-hook-*`` command body.
+
+    Converts a HookWriteError into a clean actionable message and a
+    non-zero exit, instead of letting the raw traceback escape. The
+    best-effort auto-install path does NOT use this — it relies on the
+    ``except OSError`` in ``_auto_install_detected_hooks`` so a read-only
+    config never hard-fails ``halyard init``.
+    """
+    try:
+        fn()
+    except HookWriteError as exc:
+        console.print(f"[bold red]Error:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+
+
 def _do_install_hook_claude(global_: bool = False) -> None:
     if global_:
         settings_path = Path.home() / ".claude" / "settings.json"
@@ -153,7 +204,7 @@ def _do_install_hook_claude(global_: bool = False) -> None:
             current.extend(resolved)
             added.append(event)
 
-    settings_path.write_text(json.dumps(existing, indent=2) + "\n")
+    _write_settings(settings_path, json.dumps(existing, indent=2) + "\n")
 
     if added:
         console.print(f"[bold green]Claude Code hooks installed[/] in [bold]{settings_path}[/]")
@@ -191,7 +242,7 @@ def _do_install_hook_gemini() -> None:
             )
             added.append(event)
 
-    settings_path.write_text(json.dumps(existing, indent=2) + "\n")
+    _write_settings(settings_path, json.dumps(existing, indent=2) + "\n")
 
     if added:
         console.print(f"[bold green]Gemini CLI hooks installed[/] in [bold]{settings_path}[/]")
@@ -223,7 +274,7 @@ def _do_install_hook_cursor() -> None:
             current.append({"command": command})
             added.append(event)
 
-    settings_path.write_text(json.dumps(existing, indent=2) + "\n")
+    _write_settings(settings_path, json.dumps(existing, indent=2) + "\n")
 
     if added:
         console.print(f"[bold green]Cursor hooks installed[/] in [bold]{settings_path}[/]")
@@ -288,7 +339,7 @@ def _do_install_vscode_tasks() -> Path:
         tasks.append(_vscode_record_task(command))
 
     existing["inputs"] = _merge_vscode_inputs(existing.get("inputs"))
-    settings_path.write_text(json.dumps(existing, indent=2) + "\n")
+    _write_settings(settings_path, json.dumps(existing, indent=2) + "\n")
     return settings_path
 
 
@@ -382,7 +433,7 @@ def register(app: typer.Typer) -> None:
         ),
     ) -> None:
         """Install Claude Code hooks to auto-capture AI sessions."""
-        _do_install_hook_claude(global_=global_)
+        _run_installer(lambda: _do_install_hook_claude(global_=global_))
 
     @app.command(name="install-hook", hidden=True)
     def install_hook(
@@ -393,27 +444,27 @@ def register(app: typer.Typer) -> None:
         ),
     ) -> None:
         """Deprecated alias for install-hook-claude."""
-        _do_install_hook_claude(global_=global_)
+        _run_installer(lambda: _do_install_hook_claude(global_=global_))
 
     @app.command(name="install-hook-gemini")
     def install_hook_gemini() -> None:
         """Install Gemini CLI hooks to auto-capture AI sessions."""
-        _do_install_hook_gemini()
+        _run_installer(_do_install_hook_gemini)
 
     @app.command(name="install-gemini-hook", hidden=True)
     def install_gemini_hook() -> None:
         """Deprecated alias for install-hook-gemini."""
-        _do_install_hook_gemini()
+        _run_installer(_do_install_hook_gemini)
 
     @app.command(name="install-hook-cursor")
     def install_hook_cursor() -> None:
         """Install Cursor hooks to auto-capture AI sessions."""
-        _do_install_hook_cursor()
+        _run_installer(_do_install_hook_cursor)
 
     @app.command(name="install-cursor-hook", hidden=True)
     def install_cursor_hook() -> None:
         """Deprecated alias for install-hook-cursor."""
-        _do_install_hook_cursor()
+        _run_installer(_do_install_hook_cursor)
 
     @app.command(name="install-vscode-tasks")
     def install_vscode_tasks() -> None:
