@@ -26,6 +26,8 @@ from typing import Literal, cast
 IntegrityMode = Literal["off", "hash"]
 
 _DEFAULT_MODE: IntegrityMode = "off"
+# Cached per process; invalidated via clear_integrity_mode_cache(). CLI
+# invocations are short-lived so stale reads are not a concern.
 _MODE_CACHE: IntegrityMode | None = None
 
 

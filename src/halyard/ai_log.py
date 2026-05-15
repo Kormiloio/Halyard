@@ -430,7 +430,7 @@ def append_session(project_dir: Path, session: AiSession) -> None:
         total_cost = sum(s.cost_usd for s in sessions)
         for msg in check_milestones(len(sessions), total_cost):
             print(f"[halyard] {msg}", file=sys.stderr)
-    except Exception:
+    except Exception:  # easter eggs must never interrupt session logging
         pass
 
 
@@ -879,7 +879,7 @@ def maybe_show_dashboard_hint() -> None:
                     "[halyard] Arrr! The captain's log be updated. Sail on, ye code-slinger!",
                     file=sys.stderr,
                 )
-        except Exception:
+        except Exception:  # easter eggs must never suppress the dashboard hint
             pass
         return
     flag.parent.mkdir(parents=True, exist_ok=True)
@@ -890,7 +890,7 @@ def maybe_show_dashboard_hint() -> None:
 
         if is_pirate_day():
             hint = "[halyard] First watch logged, matey! Chart yer course: halyard dashboard --open"
-    except Exception:
+    except Exception:  # easter eggs must never suppress the first-session hint
         pass
     print(hint, file=sys.stderr)
 

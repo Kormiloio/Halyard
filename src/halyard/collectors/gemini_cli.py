@@ -64,7 +64,7 @@ def record_session_start() -> int:
 
             warning = check_budget(active, project_dir)
             if warning:
-                print(warning)
+                print(warning)  # budget warning: hooks write to stdout for tool pickup
 
     now_str = payload.get("timestamp") or datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     state = {
@@ -248,8 +248,9 @@ def handle_agent_stop() -> int:
         append_session(project_dir, session)
     else:
         path = write_unattributed_session(session)
+        # stderr: hooks communicate back to the tool via stderr, not stdout
         print(
-            f"[halyard] session saved to {path} — run 'halyard assign-unattributed' to review.",
+            f"[halyard] session saved to {path} — run 'halyard adopt' in this directory.",
             file=sys.stderr,
         )
     _reset_state(payload)

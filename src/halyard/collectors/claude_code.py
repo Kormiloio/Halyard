@@ -53,7 +53,7 @@ def record_session_start() -> int:
 
             warning = check_budget(active, project_dir)
             if warning:
-                print(warning)
+                print(warning)  # budget warning: hooks write to stdout for tool pickup
 
     cwd = Path.cwd()
     _CC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -72,7 +72,7 @@ def record_session_start() -> int:
         if at_project_dir and (at_project_dir / "time.timeclock").exists():
             at_project = read_active_project() or infer_project(cwd) or "unattributed"
             auto_timer_activity(at_project, at_project_dir / "time.timeclock")
-    except Exception:
+    except Exception:  # auto-timer must never crash a hook
         pass
 
     # Late-night easter egg — fires once per session start between midnight and 5am
@@ -81,7 +81,7 @@ def record_session_start() -> int:
 
         if is_late_night():
             print(f"[halyard] {late_night_message()}", file=sys.stderr)
-    except Exception:
+    except Exception:  # easter eggs must never crash a hook
         pass
 
     return 0
@@ -205,8 +205,9 @@ def handle_stop_hook() -> int:
         append_session(project_dir, session)
     else:
         path = write_unattributed_session(session)
+        # stderr: hooks communicate back to the tool via stderr, not stdout
         print(
-            f"[halyard] session saved to {path} — run 'halyard assign-unattributed' to review.",
+            f"[halyard] session saved to {path} — run 'halyard adopt' in this directory.",
             file=sys.stderr,
         )
 
@@ -215,7 +216,7 @@ def handle_stop_hook() -> int:
         from halyard.auto_timer import auto_timer_update_activity
 
         auto_timer_update_activity()
-    except Exception:
+    except Exception:  # auto-timer must never crash a hook
         pass
 
     maybe_show_dashboard_hint()

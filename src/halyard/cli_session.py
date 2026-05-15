@@ -174,7 +174,7 @@ def register(app: typer.Typer) -> None:
             from halyard.auto_timer import auto_timer_close_now
 
             auto_timer_close_now()
-        except Exception:
+        except Exception:  # auto-timer close must not break the stop command
             pass
 
         if result.was_running:

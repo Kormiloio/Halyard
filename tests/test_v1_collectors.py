@@ -138,7 +138,7 @@ def test_stop_hook_writes_unattributed_when_not_in_halyard_project(tmp_path: Pat
         rc = handle_stop_hook()
     assert rc == 0
     write_unattributed.assert_called_once()
-    assert "assign-unattributed" in stderr.getvalue()
+    assert "halyard adopt" in stderr.getvalue()
 
 
 def test_stop_hook_picks_up_active_project(tmp_path: Path) -> None:

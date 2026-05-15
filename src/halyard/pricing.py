@@ -52,7 +52,9 @@ _CACHE_WRITE_MULTIPLIER = 1.25  # cache writes = 125% of input price
 _LOCAL_PRICING_FILE = Path.home() / ".halyard" / "pricing.toml"
 _REMOTE_URL = "https://raw.githubusercontent.com/Kormiloio/Halyard/main/pricing/models.toml"
 
-# Cached merged table; computed once per process
+# Cached merged table; computed once per process. Invalidated explicitly via
+# invalidate_pricing_cache() when the user runs `halyard update-pricing`.
+# Short-lived CLI processes never need mid-run invalidation.
 _merged_table: dict[str, tuple[float, float]] | None = None
 
 

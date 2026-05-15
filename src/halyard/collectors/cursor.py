@@ -59,7 +59,7 @@ def record_session_start() -> int:
 
             warning = check_budget(active, project_dir)
             if warning:
-                print(warning)
+                print(warning)  # budget warning: hooks write to stdout for tool pickup
 
     cwd = Path.cwd()
     _CURSOR_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -176,8 +176,9 @@ def handle_stop_hook() -> int:
         append_session(project_dir, session)
     else:
         path = write_unattributed_session(session)
+        # stderr: hooks communicate back to the tool via stderr, not stdout
         print(
-            f"[halyard] session saved to {path} — run 'halyard assign-unattributed' to review.",
+            f"[halyard] session saved to {path} — run 'halyard adopt' in this directory.",
             file=sys.stderr,
         )
     maybe_show_dashboard_hint()
