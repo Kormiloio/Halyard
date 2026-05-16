@@ -9,7 +9,7 @@ import pytest
 
 from halyard import doctor
 from halyard.collectors import codex_app
-from halyard.doctor import build_doctor_report, has_errors, render_json
+from halyard.doctor import build_doctor_report, render_json
 
 
 @pytest.fixture(autouse=True)
@@ -114,8 +114,13 @@ def test_unwired_warnings_preserve_exit_code(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(codex_app, "codex_history_present", lambda: True)
     monkeypatch.setattr(codex_app, "codex_imported_any", lambda: False)
     report = build_doctor_report(tool="all")
-    assert any(i.startswith("unwired.") for i in _ids(report))
-    assert has_errors(report) is False  # warnings never flip exit code
+    unwired = [c for c in report.checks if c.id.startswith("unwired.")]
+    assert unwired  # the nudge fired
+    # Contract: an unwired tool is never an error — it cannot, by
+    # itself, flip the doctor exit code. (Other checks may error for
+    # unrelated reasons in a bare environment; that is not this
+    # feature's concern.)
+    assert all(c.status == "warning" for c in unwired)
 
 
 def test_unwired_ids_in_json(monkeypatch: pytest.MonkeyPatch) -> None:

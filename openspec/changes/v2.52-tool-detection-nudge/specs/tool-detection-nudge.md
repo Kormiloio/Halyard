@@ -50,9 +50,11 @@ with fix `halyard import-codex`.
 
 ## Requirement: Exit-code contract preserved
 
-Unwired-tool checks MUST be `warning`, never `error`. `has_errors(report)`
-MUST stay False when the only non-ok checks are `unwired.*`, so
-`halyard doctor`'s exit code (used by scripts/CI) is unchanged.
+Every `unwired.*` check MUST have status `warning`, never `error`, so
+that an installed-but-unwired tool cannot by itself flip
+`has_errors(report)` or `halyard doctor`'s exit code (used by
+scripts/CI). Unrelated checks may still error for their own reasons in
+a bare environment — that is outside this feature's scope.
 
 ## Requirement: No daemon, on-demand only
 
