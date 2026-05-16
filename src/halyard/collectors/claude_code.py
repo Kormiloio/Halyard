@@ -26,7 +26,7 @@ from halyard.ai_log import (
     read_active_project,
     write_unattributed_session,
 )
-from halyard.collectors import session_has_evidence
+from halyard.collectors import session_has_evidence, session_is_implausible
 from halyard.git_context import (
     commits_in_window,
     current_branch,
@@ -207,7 +207,7 @@ def handle_stop_hook() -> int:
     # A Stop fire with no evidence of a real turn (transcript/token
     # resolution failed AND no interactions/tools/code/real model) is
     # not a session — don't write a claude-unknown 0/0 $0 stub.
-    if not session_has_evidence(session):
+    if not session_has_evidence(session) or session_is_implausible(session):
         return 0
 
     if can_append_project_log and project_dir is not None:

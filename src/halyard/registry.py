@@ -7,14 +7,54 @@ as `halyard db sync`. CWD walk-up and hub discovery are fallbacks.
 
 from __future__ import annotations
 
+import contextlib
+import tempfile
 from pathlib import Path
 
 REGISTRY_PATH = Path.home() / ".halyard" / "projects"
 _HEADER = "# Halyard project registry — one absolute path per line\n"
 
 
+def _temp_roots() -> list[Path]:
+    """Every dir tree that counts as 'temporary'.
+
+    `tempfile.gettempdir()` alone is insufficient on macOS (it returns
+    /var/folders/…), so /tmp and /private/tmp (smoke/manual runs) and
+    the resolved $TMPDIR are all treated as temp.
+    """
+    raw = ["/tmp", "/private/tmp", "/var/folders", "/private/var/folders"]
+    with contextlib.suppress(OSError):
+        raw.append(tempfile.gettempdir())
+    roots: list[Path] = []
+    for r in raw:
+        try:
+            roots.append(Path(r).resolve())
+        except OSError:
+            continue
+    return roots
+
+
+def _under_tempdir(path: Path) -> bool:
+    """True if *path* resolves under any temporary directory tree.
+
+    A real Halyard project never lives in a temp dir; this stops a test
+    suite's / smoke run's `halyard init` from permanently polluting the
+    user's real ~/.halyard/projects.
+    """
+    try:
+        rp = path.resolve()
+    except OSError:
+        return False
+    return any(rp == t or t in rp.parents for t in _temp_roots())
+
+
 def register_project(path: Path) -> None:
-    """Append path to the registry if not already present. Idempotent."""
+    """Append path to the registry if not already present. Idempotent.
+
+    Paths under the system temp dir are ignored (never a real project).
+    """
+    if _under_tempdir(path):
+        return
     resolved = str(path.resolve())
     existing = _read_raw_paths()
     if resolved not in existing:

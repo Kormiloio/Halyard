@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from halyard.collectors.cursor import handle_stop_hook, record_session_start
+
+_RECENT_START = (datetime.now() - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%S")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -75,13 +77,13 @@ def test_record_session_start_is_idempotent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     state_file = tmp_path / "cursor-session"
-    state_file.write_text("2026-05-07T10:00:00")
+    state_file.write_text(_RECENT_START)
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
 
     record_session_start()
 
     # Should not overwrite existing timestamp
-    assert state_file.read_text().strip() == "2026-05-07T10:00:00"
+    assert state_file.read_text().strip() == _RECENT_START
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +94,7 @@ def test_record_session_start_is_idempotent(
 def test_handle_stop_hook_writes_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text("2026-05-07T10:00:00")
+    state_file.write_text(_RECENT_START)
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: "acme:web")
 
@@ -118,7 +120,7 @@ def test_handle_stop_hook_clears_state_file(
 ) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text("2026-05-07T10:00:00")
+    state_file.write_text(_RECENT_START)
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
 
@@ -134,7 +136,7 @@ def test_handle_stop_hook_uses_workspace_root_for_project(
     # Project is not the cwd — discovered via workspace_roots
     project = _halyard_project(tmp_path / "deep" / "workspace")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text("2026-05-07T10:00:00")
+    state_file.write_text(_RECENT_START)
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
 
@@ -151,7 +153,7 @@ def test_handle_stop_hook_skips_when_no_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     state_file = tmp_path / "cursor-session"
-    state_file.write_text("2026-05-07T10:00:00")
+    state_file.write_text(_RECENT_START)
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
 
     with _patch_stdin(_stop_payload(workspace_roots=["/nonexistent/path"])):
@@ -182,7 +184,7 @@ def test_handle_stop_hook_uses_now_when_no_start_file(
 def test_handle_stop_hook_cache_tokens(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text("2026-05-07T10:00:00")
+    state_file.write_text(_RECENT_START)
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
 
@@ -211,7 +213,7 @@ def test_handle_stop_hook_records_safe_metadata_counts(
 ) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text("2026-05-07T10:00:00")
+    state_file.write_text(_RECENT_START)
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
 
@@ -257,7 +259,7 @@ def test_handle_stop_hook_skips_evidence_free_fire(
     # without a Cursor turn) — it must NOT become a ledger row.
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text("2026-05-07T10:00:00")
+    state_file.write_text(_RECENT_START)
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
 
@@ -281,7 +283,7 @@ def test_cursor_timer_attribution_sets_attr_method_timer(
     """When active timer is running, attr_method=timer and no attribution:inferred tag."""
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text("2026-05-07T10:00:00")
+    state_file.write_text(_RECENT_START)
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     # Patch on the collector module so the `from … import` binding is replaced
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: "acme:auth")
@@ -308,7 +310,7 @@ def test_cursor_ws_root_attribution_sets_attr_method_ws_root(
     """
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text("2026-05-07T10:00:00")
+    state_file.write_text(_RECENT_START)
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
     # Simulate infer_project returning a slug for the workspace root path

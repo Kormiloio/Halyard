@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -15,6 +15,8 @@ from halyard.ai_log import AI_LOG_FILENAME, HEADER, parse_sessions
 from halyard.cli import app
 from halyard.cli_hooks import _CC_HOOKS, _resolve_claude_hook_entries
 from halyard.collectors.claude_code import handle_stop_hook, record_session_start
+
+_RECENT_START = (datetime.now() - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%S")
 
 runner = CliRunner()
 
@@ -74,7 +76,7 @@ def _run_stop_hook(tmp_path: Path, payload: dict) -> int:  # type: ignore[type-a
 def test_stop_hook_writes_session_record(tmp_path: Path) -> None:
     _init_project(tmp_path)
     CC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CC_SESSION_FILE.write_text("2026-05-06T10:00:00")
+    CC_SESSION_FILE.write_text(_RECENT_START)
 
     payload = {
         "model": "claude-sonnet-4-6",
@@ -97,7 +99,7 @@ def test_stop_hook_writes_session_record(tmp_path: Path) -> None:
 def test_stop_hook_clears_session_file(tmp_path: Path) -> None:
     _init_project(tmp_path)
     CC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CC_SESSION_FILE.write_text("2026-05-06T10:00:00")
+    CC_SESSION_FILE.write_text(_RECENT_START)
 
     _run_stop_hook(tmp_path, {"model": "claude-sonnet-4-6", "usage": {}})
 

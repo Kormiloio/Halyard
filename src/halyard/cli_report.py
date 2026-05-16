@@ -417,19 +417,22 @@ def register(app: typer.Typer) -> None:
             None, "--project-dir", help="Halyard project directory (default: auto-detect)."
         ),
     ) -> None:
-        """Start the local Halyard Glass Cockpit dashboard."""
-        from halyard.ai_log import find_project_dir
-        from halyard.dashboard import run_dashboard
-        from halyard.hub import find_hub
+        """Start the local Halyard Glass Cockpit dashboard.
 
-        project_dir = project_dir_opt or find_hub() or find_project_dir()
-        if project_dir is None:
+        With no --project-dir, aggregates every registered project (+ hub)
+        so the default view is your total real work, not a single log.
+        """
+        from halyard.dashboard import run_dashboard
+        from halyard.reports import aggregate_session_dirs
+
+        if project_dir_opt is None and not aggregate_session_dirs():
             console.print(
                 "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
             )
             raise typer.Exit(code=1)
 
-        run_dashboard(project_dir, port=port, open_browser=open_)
+        # None ⇒ aggregate across all real project logs + hub.
+        run_dashboard(project_dir_opt, port=port, open_browser=open_)
 
     @app.command(name="tui")
     def tui_cmd(

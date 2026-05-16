@@ -366,7 +366,21 @@ layers must read from this local source of truth; they do not replace it.
     Spec in `openspec/changes/v2.47-claude-code-evidence/`.
     **Status: complete (1053 tests passing).**
 
-27. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+27. **v2.48 — Dashboard data correctness:** `halyard dashboard` with no
+    `--project-dir` now aggregates the de-duplicated union of every
+    registered project log (registry ∩ existing) + hub instead of
+    showing only the (junk) hub — the default view is total real work
+    (`build_ai_report` gained an optional `sessions=` arg to enable
+    this; header reads `All Projects · N`). Collectors reject
+    implausible hook sessions (>12h span — the frozen-`2026-05-07`
+    synthetic Cursor rows). `registry.register_project` refuses temp-dir
+    paths and a conftest fixture isolates the registry so the test
+    suite can never pollute `~/.halyard/projects` again. Operational:
+    pruned 711 temp registry paths + re-cleaned the hub log (backups
+    kept). Spec in `openspec/changes/v2.48-dashboard-data-correctness/`.
+    **Status: complete (1059 tests passing).**
+
+28. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

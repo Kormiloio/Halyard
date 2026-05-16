@@ -10,12 +10,15 @@ attribution source, not a lower-priority one that also resolved.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from halyard.ai_log import AI_LOG_FILENAME, parse_sessions
+
+_RECENT_START = (datetime.now() - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%S")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -63,7 +66,7 @@ def test_timer_takes_precedence_over_ws_root(
     """When active timer AND workspace_root both resolve a project, attr_method=timer."""
     project = _halyard_project(tmp_path / "project", slug="acme:web")
     session_file = tmp_path / "cursor-session"
-    session_file.write_text("2026-05-08T10:00:00")
+    session_file.write_text(_RECENT_START)
 
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", session_file)
     # Timer is active → read_active_project returns a slug
@@ -100,7 +103,7 @@ def test_timer_takes_precedence_over_git(tmp_path: Path, monkeypatch: pytest.Mon
     """When active timer AND git both resolve a project, attr_method=timer."""
     project = _halyard_project(tmp_path / "project", slug="globex:api")
     session_file = tmp_path / "cc-session"
-    session_file.write_text("2026-05-08T09:00:00")
+    session_file.write_text(_RECENT_START)
 
     monkeypatch.setattr("halyard.collectors.claude_code._CC_SESSION_FILE", session_file)
     # Timer active
@@ -137,7 +140,7 @@ def test_ws_root_takes_precedence_over_git(tmp_path: Path, monkeypatch: pytest.M
     """When no active timer but workspace_root resolves a project, attr_method=ws_root (not git)."""
     project = _halyard_project(tmp_path / "project", slug="vcti:site")
     session_file = tmp_path / "cursor-session"
-    session_file.write_text("2026-05-08T11:00:00")
+    session_file.write_text(_RECENT_START)
 
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", session_file)
     # No active timer

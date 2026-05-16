@@ -6,6 +6,21 @@ from halyard.ai_log import AiSession
 
 _UNKNOWN_MODELS = {"", "default"}
 
+# A single AI turn captured by a stop hook cannot plausibly span this
+# long. Synthetic/broken payloads (e.g. a frozen session-start that
+# never advances) produce multi-day "sessions"; reject them.
+_MAX_SESSION_SECONDS = 12 * 3600
+
+
+def session_is_implausible(session: AiSession) -> bool:
+    """True if the session's duration is impossibly long for one turn.
+
+    Guards against synthetic hook payloads with a frozen/ancient start
+    (the constant ``start=2026-05-07`` Cursor rows) that the evidence
+    predicate cannot catch because they carry nonzero tokens.
+    """
+    return (session.end - session.start).total_seconds() > _MAX_SESSION_SECONDS
+
 
 def _model_is_real(model: str) -> bool:
     return bool(model) and model not in _UNKNOWN_MODELS and not model.endswith("-unknown")

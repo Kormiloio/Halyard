@@ -86,6 +86,9 @@ class DashboardState:
     latest_session: AiSession | None
     all_sessions: list[AiSession] = field(default_factory=list)
     generated_at: datetime = field(default_factory=datetime.now)
+    # >0 when this state aggregates multiple project logs (number of
+    # source dirs); 0 for a single-project view.
+    aggregate_count: int = 0
 
 
 def build_ai_report(
@@ -93,10 +96,17 @@ def build_ai_report(
     *,
     all_time: bool = False,
     now: datetime | None = None,
+    sessions: list[AiSession] | None = None,
 ) -> AiReport:
-    """Build the AI usage summary shared by CLI and dashboard."""
+    """Build the AI usage summary shared by CLI and dashboard.
+
+    When *sessions* is given, it is used as-is and the project
+    directory is NOT read (enables cross-project aggregation). When
+    omitted, behaviour is unchanged: parse ``project_dir``.
+    """
     clock = now or datetime.now()
-    sessions = parse_sessions(project_dir)
+    if sessions is None:
+        sessions = parse_sessions(project_dir)
     period_label = "All time"
 
     if not all_time:
@@ -323,6 +333,106 @@ def build_dashboard_state(project_dir: Path) -> DashboardState:
         latest_session=latest_session,
         all_sessions=all_sessions,
         health=build_health_checks(project_dir, report=report, active_timer=active_timer),
+    )
+
+
+def aggregate_session_dirs() -> list[Path]:
+    """Return every real session source: registered projects + hub.
+
+    `read_registry()` already filters to existing dirs with
+    halyard.toml, so dead/temp registry entries are excluded. Only dirs
+    that actually have an ai-sessions.log are kept; de-duped by resolved
+    path, stable order (registry first, then hub).
+    """
+    from halyard.hub import find_hub
+    from halyard.registry import read_registry
+
+    seen: set[str] = set()
+    dirs: list[Path] = []
+    candidates = list(read_registry())
+    hub = find_hub()
+    if hub is not None:
+        candidates.append(hub)
+    for d in candidates:
+        key = str(d.resolve())
+        if key in seen:
+            continue
+        if (d / AI_LOG_FILENAME).exists():
+            seen.add(key)
+            dirs.append(d)
+    return dirs
+
+
+def _dedup_sessions(sessions: list[AiSession]) -> list[AiSession]:
+    """De-dup sessions that appear in more than one source log."""
+    seen: set[tuple[object, ...]] = set()
+    out: list[AiSession] = []
+    for s in sessions:
+        key = (
+            s.start,
+            s.end,
+            s.tool,
+            s.model,
+            s.input_tokens,
+            s.output_tokens,
+            s.project,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(s)
+    return out
+
+
+def build_aggregate_dashboard_state() -> DashboardState:
+    """Dashboard state over the union of all real project logs + hub.
+
+    Session-derived panels reflect total real work. The inherently
+    per-project bits (timeclock, plans, budget, file-health) are scoped
+    to a `primary` dir: the current project if inside one, else the
+    hub, else the first source.
+    """
+    from contextlib import suppress
+
+    from halyard.ai_log import find_project_dir
+    from halyard.hub import find_hub
+
+    with suppress(Exception):
+        from halyard.collectors.codex_app import import_codex_sessions
+
+        import_codex_sessions()
+
+    dirs = aggregate_session_dirs()
+    merged: list[AiSession] = []
+    for d in dirs:
+        merged.extend(parse_sessions(d))
+    all_sessions = _dedup_sessions(merged)
+
+    primary = find_project_dir() or find_hub() or (dirs[0] if dirs else Path.cwd())
+
+    report = build_ai_report(primary, all_time=False, sessions=all_sessions)
+    active_timer = read_active_timer()
+    raw_human = build_human_time_report(primary)
+    now = datetime.now()
+    presence_minutes, presence_label = _compute_presence_today(all_sessions, now)
+    human_time = HumanTimeReport(
+        today_minutes=raw_human.today_minutes,
+        month_minutes=raw_human.month_minutes,
+        by_project=raw_human.by_project,
+        presence_minutes=presence_minutes,
+        presence_label=presence_label,
+    )
+    latest_session = max(report.sessions, key=lambda s: s.end, default=None)
+
+    return DashboardState(
+        project_dir=primary,
+        report=report,
+        human_time=human_time,
+        active_timer=active_timer,
+        latest_session=latest_session,
+        all_sessions=all_sessions,
+        health=build_health_checks(primary, report=report, active_timer=active_timer),
+        aggregate_count=len(dirs),
     )
 
 

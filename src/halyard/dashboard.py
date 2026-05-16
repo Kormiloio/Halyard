@@ -41,7 +41,7 @@ DASHBOARD_PORT = 7432
 
 
 def run_dashboard(
-    project_dir: Path, *, port: int = DASHBOARD_PORT, open_browser: bool = False
+    project_dir: Path | None, *, port: int = DASHBOARD_PORT, open_browser: bool = False
 ) -> str:
     """Start the dashboard server and block until interrupted."""
     host = "127.0.0.1"
@@ -68,28 +68,48 @@ UsageTabOpt = Literal["overview", "models"]
 
 
 def render_dashboard(
-    project_dir: Path,
+    project_dir: Path | None = None,
     *,
     usage_range: UsageRangeOpt = "30d",
     usage_tab: UsageTabOpt = "overview",
 ) -> str:
     """Render the dashboard HTML for tests and the HTTP handler.
 
+    ``project_dir is None`` → aggregate every real registered project
+    log + hub (the default for ``halyard dashboard``). An explicit path
+    scopes to that single project.
+
     ``usage_range`` controls the Usage Analytics window (7d/30d/all).
     ``usage_tab`` selects between the Overview panel and the per-day-by-
     model breakdown panel.
     """
-    return _render_state(
-        build_dashboard_state(project_dir),
-        usage_range=usage_range,
-        usage_tab=usage_tab,
+    from halyard.reports import build_aggregate_dashboard_state
+
+    state = (
+        build_aggregate_dashboard_state()
+        if project_dir is None
+        else build_dashboard_state(project_dir)
     )
+    return _render_state(state, usage_range=usage_range, usage_tab=usage_tab)
 
 
-def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRequestHandler]:
+def _handler_for(
+    project_dir: Path | None, token: str | None = None
+) -> type[BaseHTTPRequestHandler]:
     from halyard.service import _load_or_create_token
 
     _token: str = token if token is not None else _load_or_create_token()
+
+    # GET renders `project_dir` (None ⇒ aggregate every real project).
+    # POST timer/voyage actions need a concrete dir: the current
+    # project, else the hub, else cwd.
+    def _action_dir() -> Path:
+        if project_dir is not None:
+            return project_dir
+        from halyard.ai_log import find_project_dir
+        from halyard.hub import find_hub
+
+        return find_project_dir() or find_hub() or Path.cwd()
 
     class DashboardHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -167,13 +187,13 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
 
                     account = slug.replace("/", ":", 1)
                     with suppress(TimerAlreadyRunning):
-                        start_timer(project_dir, account)
+                        start_timer(_action_dir(), account)
 
             elif self.path == "/api/stop":
                 # v2.17 task 5.5: delegate to shared stop_timer
                 from halyard.orchestration import stop_timer
 
-                stop_timer(project_dir)
+                stop_timer(_action_dir())
                 self.send_response(HTTPStatus.FOUND)
                 self.send_header("Location", "/?stopped=1")
                 self.end_headers()
@@ -183,12 +203,13 @@ def _handler_for(project_dir: Path, token: str | None = None) -> type[BaseHTTPRe
                 from halyard.ai_log import parse_sessions
                 from halyard.voyages import check_auto_complete
 
-                all_sessions = parse_sessions(project_dir)
+                _adir = _action_dir()
+                all_sessions = parse_sessions(_adir)
                 sessions_by_project: dict[str, list[AiSession]] = {}
                 for s in all_sessions:
                     if s.project:
                         sessions_by_project.setdefault(s.project, []).append(s)
-                check_auto_complete(project_dir, sessions_by_project)
+                check_auto_complete(_adir, sessions_by_project)
 
             self.send_response(HTTPStatus.FOUND)
             self.send_header("Location", "/")
@@ -592,7 +613,11 @@ def _render_state(
         </div>
         <div>
           <p class="eyebrow">Halyard · The Bridge · Web Dashboard</p>
-          <h1>{_e(state.project_dir.name)}</h1>
+          <h1>{
+        _e(f"All Projects · {state.aggregate_count}")
+        if state.aggregate_count
+        else _e(state.project_dir.name)
+    }</h1>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;">
