@@ -1,7 +1,7 @@
 # PRD: Halyard
 
 **Status:** Current public product PRD
-**Last meaningful update:** May 9, 2026
+**Last meaningful update:** May 16, 2026
 **Companion:** [`current-direction.md`](current-direction.md)
 
 ---
@@ -43,6 +43,37 @@ and is preparing for an OSS community launch (HN / Reddit / Lobsters).
 
 **Strategic sequence:** users and trust before paid tiers. No paid features are
 discussed in any OSS-facing surface until the community has validated the format.
+
+---
+
+## Update — May 16, 2026
+
+**Agent access shipped (v2.50–v2.52).** Halyard's thesis is "AI Work
+Intelligence," but until now the ledger was only reachable through human
+surfaces (CLI, dashboard, TUI). The agent that *generates* the work
+could not ask about it. Three changes close that gap:
+
+- **`halyard mcp` (v2.50)** — a read-only MCP server (stdio) exposing
+  six tools: `work_summary`, `sessions`, `spend_in_range`,
+  `project_breakdown`, `cost_by_model`, `outcomes_status`. Any MCP
+  client (Claude Code, Cursor, Gemini CLI, others) can query the local
+  aggregate ledger in-context. No tool mutates anything; only metadata
+  already in the ledger is returned (never prompts, code, or
+  transcripts) — consistent with the capture privacy boundary. The
+  `mcp` SDK is an optional extra; the core install is unchanged.
+- **MCP auto-registration (v2.51)** — `halyard init` / `halyard setup`
+  register the server into each detected client's config
+  (`~/.claude.json`, `~/.cursor/mcp.json`, `~/.gemini/settings.json`),
+  so the end user never hand-edits JSON. Idempotent; foreign servers
+  preserved.
+- **Unwired-tool nudge (v2.52)** — `halyard doctor` warns when a
+  supported AI tool is installed but has no Halyard integration
+  (hooks *or* MCP), or when Codex history exists but was never
+  imported. On-demand, no daemon; surfaces through the existing health
+  report so dashboard/TUI inherit it.
+
+This is additive and upholds every non-negotiable: read-only, local,
+plain-text source of truth, metadata-only, no required daemon.
 
 ---
 
@@ -159,6 +190,7 @@ Halyard ships in layers, each proving the next:
 | v2.18 | Cache + Audit Hardening | Is the local cache stable enough to rely on? | Active |
 | OSS Launch | Community Release | Do real users trust and use the format? | Next |
 | v2.24 | Outcome Metadata | Does each session carry branch, commits, code delta, PR? | Shipped |
+| v2.50 | Agent Access (MCP) | Can the agent that generates the work query the ledger in-context? | Shipped |
 | v2.19 | Attestable Appendix | Can I prove AI-assisted work to someone else safely? | Gated on v2.24 |
 | v3.0 | Outcome Graph | Did AI-assisted work connect to outcomes? | Design-partner gated |
 | v3+ | Org Intelligence | What is the org getting from AI investment? | Deferred |
@@ -218,6 +250,16 @@ Every cost figure carries a trust level: **captured** (real token data),
 **calculated** (derived from pricing table), **allocated** (proportioned from
 a plan), or **inferred** (estimated). Reports and dashboards show trust labels
 so users understand what they're looking at.
+
+### MCP server (agent access)
+A **read-only** MCP server, `halyard mcp` (stdio), lets the AI agent that
+generates the work query the ledger in-context. It exposes six tools over the
+aggregate data layer — `work_summary` (one-call rollup), `sessions`,
+`spend_in_range`, `project_breakdown`, `cost_by_model`, `outcomes_status`. It
+is auto-registered into detected MCP clients during `halyard init` / `halyard
+setup`, runs nothing long-lived (the client spawns it per session), and
+returns only ledger metadata — never prompts, code, or transcripts. The `mcp`
+SDK is an optional install extra; the core product is unaffected if absent.
 
 ---
 

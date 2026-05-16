@@ -95,6 +95,39 @@ Spec: `openspec/changes/archive/2026-05-09-v2.24-outcome-metadata/`. 902 tests p
 
 ---
 
+## Agent Access (MCP) — Shipped (v2.50–v2.52)
+
+The thesis is "AI Work Intelligence," but the ledger was only reachable
+through human surfaces — the agent that *generates* the work could not
+ask about it. This closes that gap, OSS-scoped and read-only.
+
+| Capability | Status |
+|---|---|
+| `halyard mcp` read-only MCP server (stdio), 6 tools | v2.50 |
+| Auto-registration into detected MCP clients on init/setup | v2.51 |
+| `halyard doctor` warns on installed-but-unwired tools | v2.52 |
+
+- **v2.50** — `work_summary`, `sessions`, `spend_in_range`,
+  `project_breakdown`, `cost_by_model`, `outcomes_status` over the
+  aggregate data layer. No mutation, no daemon (client spawns per
+  session), metadata only — never prompts/code/transcripts. `mcp` SDK
+  is an optional extra; core install unchanged.
+- **v2.51** — `halyard init` / `setup` write `mcpServers.halyard` into
+  `~/.claude.json`, `~/.cursor/mcp.json`, `~/.gemini/settings.json`,
+  idempotently, preserving foreign servers. End users never edit JSON.
+- **v2.52** — `halyard doctor` flags a supported tool that is
+  installed but has neither hooks nor MCP, and Codex history not yet
+  imported. On-demand, flows through the existing health report.
+
+Followed by a data-trust hardening run (v2.53–v2.56): a parse-time
+synthetic-row guard, future-dated-session rejection + `seed-demo` fix,
+`DbError` instead of `SystemExit`, a `session_hash` collision guard,
+migration self-heal, active-timer integrity coverage, and shared slug
+validation. Specs: `openspec/changes/v2.50-…` through `v2.53-…` plus
+roadmap items in `openspec/project.md`.
+
+---
+
 ## Current Build Sequence
 
 1. **v2.18** — Cache and audit hardening: project registry, schema migrations,
@@ -164,6 +197,13 @@ Spec: `openspec/changes/archive/2026-05-09-v2.24-outcome-metadata/`. 902 tests p
     mirrored there (`org.py`, `org_store.py`, `org_rollups.py`,
     `org_reports.py`, `cost_centers.py`, `sync.py`, `cli_org.py`) are
     frozen in OSS — see CONTRIBUTING.md.
+17. **v2.50–v2.56** — Agent access + ledger-trust hardening —
+    **shipped**: read-only `halyard mcp` server, MCP auto-registration,
+    `doctor` unwired-tool nudge, then a data-correctness run (synthetic
+    /future-row read guards, seed-demo fix, DbError, hash-collision
+    guard, migration self-heal, active-timer integrity, slug
+    validation). See the "Agent Access (MCP)" section above and
+    `openspec/project.md` items 29–35. 1142 tests + 19 vscode.
 
 ---
 
