@@ -122,6 +122,10 @@ def register(app: typer.Typer) -> None:
             False, "--ledger", help="Include allocated seat/credits costs from ai-plans.toml."
         ),
         outcomes: bool = typer.Option(False, "--outcomes", help="Show outcome bucket totals."),
+        json_: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+        json_sessions: bool = typer.Option(
+            False, "--json-sessions", help="With --json, include the per-session array."
+        ),
     ) -> None:
         """Show AI usage, cost, and human time summary."""
         from datetime import datetime
@@ -136,23 +140,29 @@ def register(app: typer.Typer) -> None:
 
         project_dir = find_project_dir()
         if project_dir is None:
+            if json_:
+                from halyard.jsonio import emit
+
+                emit({"error": "No Halyard project found. Run 'halyard init' first."})
+                raise typer.Exit(code=1)
             console.print(
                 "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
             )
             raise typer.Exit(code=1)
 
-        age, is_stale = check_pricing_staleness()
-        if is_stale:
-            if age is None:
-                console.print(
-                    "[yellow]⚠  No local pricing table found.[/] "
-                    "Run [bold]halyard update-pricing[/] to fetch current model prices."
-                )
-            else:
-                console.print(
-                    f"[yellow]⚠  Pricing table last updated {age} days ago.[/] "
-                    "Run [bold]halyard update-pricing[/] to refresh."
-                )
+        if not json_:
+            age, is_stale = check_pricing_staleness()
+            if is_stale:
+                if age is None:
+                    console.print(
+                        "[yellow]⚠  No local pricing table found.[/] "
+                        "Run [bold]halyard update-pricing[/] to fetch current model prices."
+                    )
+                else:
+                    console.print(
+                        f"[yellow]⚠  Pricing table last updated {age} days ago.[/] "
+                        "Run [bold]halyard update-pricing[/] to refresh."
+                    )
 
         now = datetime.now()
         if month:
@@ -168,6 +178,38 @@ def register(app: typer.Typer) -> None:
             project_dir, project=project, client=client, all_time=all_time, now=period
         )
         human = build_human_time_report(project_dir, now=period)
+
+        if json_:
+            from halyard.attribution import attribution_mix
+            from halyard.jsonio import emit
+
+            payload: dict[str, object] = {
+                "period_label": ai_report.period_label,
+                "filter": {"project": project, "client": client},
+                "totals": {
+                    "cost_usd": round(ai_report.total_cost, 4),
+                    "input_tokens": ai_report.total_input_tokens,
+                    "output_tokens": ai_report.total_output_tokens,
+                    "cache_read_tokens": ai_report.total_cache_read_tokens,
+                    "cache_write_tokens": ai_report.total_cache_write_tokens,
+                    "tool_calls": ai_report.total_tool_calls,
+                    "tool_errors": ai_report.total_tool_errors,
+                },
+                "human_time": {
+                    "month_minutes": human.month_minutes,
+                    "today_minutes": human.today_minutes,
+                },
+                "by_project": ai_report.by_project,
+                "by_model": ai_report.by_model,
+                "by_tool": ai_report.by_tool,
+                "by_tool_usage": ai_report.by_tool_usage,
+                "attribution": attribution_mix(ai_report.sessions),
+                "unattributed_count": ai_report.unattributed_count,
+            }
+            if json_sessions:
+                payload["sessions"] = ai_report.sessions
+            emit(payload)
+            return
 
         filter_label = f" — {project or client}" if (project or client) else ""
         console.print(f"\n[bold]Report — {ai_report.period_label}{filter_label}[/]")
@@ -336,6 +378,9 @@ def register(app: typer.Typer) -> None:
         verify: Path = typer.Option(
             None, "--verify", help="Verify an existing artifact's integrity digest and exit."
         ),
+        json_: bool = typer.Option(
+            False, "--json", help="Emit structured metrics (no digest) instead of the artifact."
+        ),
     ) -> None:
         """Emit a standalone AI-work evidence artifact with an integrity digest.
 
@@ -345,6 +390,10 @@ def register(app: typer.Typer) -> None:
         feature.
         """
         from halyard.evidence import build_evidence_artifact, verify_evidence_artifact
+
+        if verify is not None and json_:
+            console.print("[bold red]Error:[/] --verify and --json are mutually exclusive.")
+            raise typer.Exit(code=1)
 
         if verify is not None:
             if not verify.is_file():
@@ -370,10 +419,30 @@ def register(app: typer.Typer) -> None:
 
         project_dir = find_project_dir()
         if project_dir is None:
+            if json_:
+                from halyard.jsonio import emit
+
+                emit({"error": "No Halyard project found. Run 'halyard init' first."})
+                raise typer.Exit(code=1)
             console.print(
                 "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
             )
             raise typer.Exit(code=1)
+
+        if json_:
+            from halyard.evidence import build_evidence_data
+            from halyard.jsonio import emit
+
+            emit(
+                build_evidence_data(
+                    project_dir,
+                    project=project,
+                    client=client,
+                    all_time=all_time,
+                    month=month,
+                )
+            )
+            return
 
         artifact = build_evidence_artifact(
             project_dir, project=project, client=client, all_time=all_time, month=month
@@ -400,7 +469,6 @@ def register(app: typer.Typer) -> None:
         format_: str = typer.Option("text", "--format", help="text | json"),
     ) -> None:
         """Show AI work health signals for the current period."""
-        import json as _json
         from datetime import datetime, timedelta
 
         from halyard.ai_log import find_project_dir, parse_sessions
@@ -435,7 +503,9 @@ def register(app: typer.Typer) -> None:
         health_report = build_health_report(sessions, period=p)
 
         if format_ == "json":
-            sys.stdout.write(_json.dumps(render_json(health_report), indent=2) + "\n")
+            from halyard.jsonio import emit
+
+            emit(render_json(health_report))
         else:
             console.print(render_text(health_report))
 
@@ -589,13 +659,50 @@ def register(app: typer.Typer) -> None:
         console.print("Pricing table saved to [bold]~/.halyard/pricing.toml[/].")
 
     @app.command()
-    def budget() -> None:
+    def budget(
+        json_: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+    ) -> None:
         """Show current AI spend vs. configured budget limits for all projects."""
         from datetime import datetime
 
         from halyard.budget import budget_status, load_budgets
 
         budgets = load_budgets()
+
+        if json_:
+            from halyard.jsonio import emit
+
+            def _row(spend: float, limit: float | None) -> dict[str, object]:
+                if limit is None:
+                    return {
+                        "spend_usd": round(spend, 4),
+                        "limit_usd": None,
+                        "pct": None,
+                        "state": "ok",
+                    }
+                pct = round(spend / limit * 100, 1) if limit else None
+                return {
+                    "spend_usd": round(spend, 4),
+                    "limit_usd": limit,
+                    "pct": pct,
+                    "state": "over" if spend > limit else "ok",
+                }
+
+            if not budgets:
+                emit([])
+                return
+            emit(
+                [
+                    {
+                        "project": s.slug,
+                        "today": _row(s.today_spend, s.today_limit),
+                        "month": _row(s.month_spend, s.month_limit),
+                    }
+                    for s in budget_status(now=datetime.now())
+                ]
+            )
+            return
+
         if not budgets:
             console.print(
                 "[yellow]No budgets configured.[/] "
@@ -667,8 +774,6 @@ def register(app: typer.Typer) -> None:
         json_: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
     ) -> None:
         """Show usage analytics: sessions, tokens, streaks, peak hour, model mix."""
-        import json as _json
-        from dataclasses import asdict
         from typing import cast
 
         from halyard.ai_log import find_project_dir, parse_sessions
@@ -691,15 +796,17 @@ def register(app: typer.Typer) -> None:
         analytics = build_usage_analytics(sessions, range_key=cast(UsageRangeKey, range_key))
 
         if json_:
-            payload = {
-                "range": asdict(analytics.range),
-                "summary": asdict(analytics.summary),
-                "daily": [asdict(d) for d in analytics.daily],
-                "by_model": [asdict(m) for m in analytics.by_model],
-                "by_tool": [asdict(t) for t in analytics.by_tool],
-            }
-            # date objects → ISO strings
-            print(_json.dumps(payload, default=str, indent=2))
+            from halyard.jsonio import emit
+
+            emit(
+                {
+                    "range": analytics.range,
+                    "summary": analytics.summary,
+                    "daily": analytics.daily,
+                    "by_model": analytics.by_model,
+                    "by_tool": analytics.by_tool,
+                }
+            )
             return
 
         s = analytics.summary

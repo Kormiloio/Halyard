@@ -79,6 +79,84 @@ def build_evidence_artifact(
     return assemble_artifact(body)
 
 
+def build_evidence_data(
+    project_dir: Path,
+    *,
+    project: str | None = None,
+    client: str | None = None,
+    all_time: bool = False,
+    month: str | None = None,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Structured form of the evidence appendix (v2.69 `--json`).
+
+    Same selection + numbers as the markdown appendix, as data. There
+    is deliberately **no digest** here: the v2.68 integrity digest is
+    defined over the markdown artifact only; this JSON is unsigned
+    data, not a digested artifact.
+    """
+    from collections import defaultdict
+
+    from halyard.ai_plans import read_ai_plans
+    from halyard.ledger import build_ledger
+    from halyard.reports import build_filtered_ai_report, parse_timeclock
+
+    clock = now or datetime.now()
+    period = datetime.strptime(month, "%Y-%m") if month else clock
+    report = build_filtered_ai_report(
+        project_dir, project=project, client=client, all_time=all_time, now=period
+    )
+    sessions = report.sessions
+
+    by_ref: dict[str, list] = defaultdict(list)  # type: ignore[type-arg]
+    for s in sessions:
+        if s.pr_ref:
+            by_ref[s.pr_ref].append(s)
+    pr_refs = []
+    for ref in sorted(by_ref):
+        bucket = sorted(by_ref[ref], key=lambda s: s.outcome_resolved_at or "", reverse=True)
+        pr_refs.append({"ref": ref, "state": bucket[0].pr_state or None, "sessions": len(bucket)})
+
+    data: dict[str, object] = {
+        "period_label": report.period_label,
+        "filter": {"project": project, "client": client},
+        "tools": sorted({s.tool for s in sessions}),
+        "models": sorted({s.model for s in sessions}),
+        "metrics": {
+            "sessions": len(sessions),
+            "active_minutes": sum(
+                max(1, int((s.end - s.start).total_seconds() // 60)) for s in sessions
+            ),
+            "input_tokens": report.total_input_tokens,
+            "output_tokens": report.total_output_tokens,
+            "cache_read_tokens": report.total_cache_read_tokens,
+            "cache_write_tokens": report.total_cache_write_tokens,
+        },
+        "pr_refs": pr_refs,
+        "digest": None,  # explicit: JSON is not a digested artifact
+    }
+
+    if sessions:
+        ps = min(s.start for s in sessions)
+        summary = build_ledger(
+            sessions,
+            read_ai_plans(project_dir),
+            parse_timeclock(project_dir / "time.timeclock"),
+            year=ps.year,
+            month=ps.month,
+        )
+        data["cost"] = {
+            "direct_usd": round(summary.total_direct_usd, 4),
+            "allocated_usd": round(summary.total_allocated_usd, 4),
+            "total_usd": round(summary.total_usd, 4),
+        }
+        data["has_inferred_attribution"] = any(e.has_inferred_attribution for e in summary.entries)
+    else:
+        data["cost"] = {"direct_usd": 0.0, "allocated_usd": 0.0, "total_usd": 0.0}
+        data["has_inferred_attribution"] = False
+    return data
+
+
 def verify_evidence_artifact(text: str) -> bool:
     """True iff the embedded digest matches a re-hash of the body.
 

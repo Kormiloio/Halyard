@@ -182,6 +182,21 @@ Required capabilities:
   not authorship proof; cryptographic attestation is a Halyard
   Enterprise feature (the moved v2.19), out of OSS scope.
 
+## JSON output (v2.69)
+
+`report`, `usage`, `budget`, `status`, `evidence`, `health`, and
+`doctor` accept `--json` (health uses `--format json`), emitting a
+single JSON object/array via one shared `jsonio` seam: datetimes are
+ISO 8601, `Path` is a string, private (`_`) fields are omitted, and
+`--json` suppresses all human/Rich output. Errors are still emitted
+as `{"error": "..."}` with a non-zero exit so a script never has to
+parse prose. The schema is **semi-stable and additive-only**: new
+keys may appear; existing key names/types do not change without a
+note here. No published JSON Schema file until an external consumer
+exists. `evidence --json` is structured metrics with **no digest** —
+the v2.68 integrity digest is defined over the markdown artifact
+only; the JSON form is unsigned data.
+
 ## Later Scope
 
 - API proxy collector for Anthropic, OpenAI, Gemini, and OpenRouter (deferred;

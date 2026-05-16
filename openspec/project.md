@@ -646,6 +646,31 @@ layers must read from this local source of truth; they do not replace it.
    `openspec/changes/v2.68-local-evidence-appendix/`.
    **Status: complete (1217 tests passing).**
 
+47. **v2.69 — Machine-readable JSON output:** unify + complete the
+   `--json` surface. Audit found it already exists inconsistently
+   (doctor/health/usage/log/outcome, 3 shapes); flagship `report`,
+   `budget`, `status` have none. Adds a shared `jsonio` seam,
+   migrates the existing ones onto it (keys preserved), adds
+   `report/budget/status/evidence --json`, documents an additive
+   -only contract. `evidence --json` carries no digest (the v2.68
+   digest covers markdown only). `jsonio` seam (datetime→ISO,
+   Path→str, `_`-fields skipped); `usage` migrated + `health` routed
+   through it; doctor/log/outcome left on their existing valid JSON
+   emitters (documented deviation — migration was churn/risk, no
+   user gain). Spec in `openspec/changes/v2.69-json-output/`.
+   **Status: complete (1223 tests passing).**
+
+48. **v2.70 — TUI ↔ web dashboard parity:** the owner-decided lift of
+   the TUI-deferral policy. TUI is a generation behind: no moat pane
+   (cost-by-client, attribution-confidence, leakage, billable
+   evidence) and no leverage pane. Adds both as text-mode panes
+   reusing `moat.py`/`attribution.py`/report builders; factors the
+   inline leverage math into a shared `leverage.summarize` consumed
+   by both web + TUI (single source of truth). Testable-text layer
+   only (v2.64 `UsagePane` pattern; no Pilot harness). Spec in
+   `openspec/changes/v2.70-tui-dashboard-parity/`.
+   **Status: proposed (spec only).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — connecting sessions to commits, PRs, tests, and
@@ -668,7 +693,13 @@ layers must read from this local source of truth; they do not replace it.
   is exercised directly (it renders to `last_rendered_text`, no Pilot
   harness needed) because the parity surface is the strategic
   first-impression; this is a deliberate, scoped exception, not a
-  reversal of the broader deferral.
+  reversal of the broader deferral. **Lift (v2.70, owner decision
+  2026-05-16):** the carve-out is generalised — the TUI must be on
+  par with the web dashboard, so the new moat + leverage parity panes
+  also render to `last_rendered_text` and are unit-tested directly.
+  The Pilot-harness deferral still stands for the untouched legacy
+  widgets; this lifts it only for the parity panes whose correctness
+  lives in their rendered text.
 - The public `ai-sessions.log` spec is published only after at least one
   external tool emits the format. Writing the spec before adoption exists is
   vanity work.

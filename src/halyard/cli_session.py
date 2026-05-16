@@ -302,11 +302,30 @@ def register(app: typer.Typer) -> None:
             console.print("  Skipped: " + ", ".join(parts) + ".")
 
     @app.command()
-    def status() -> None:
+    def status(
+        json_: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+    ) -> None:
         """Show the active timer, or report that none is running."""
         from halyard.reports import read_active_timer
 
         active = read_active_timer()
+
+        if json_:
+            from halyard.jsonio import emit
+
+            if active is None:
+                emit({"active": False})
+            else:
+                emit(
+                    {
+                        "active": True,
+                        "slug": active.slug,
+                        "started": active.started,
+                        "elapsed_minutes": active.elapsed_minutes,
+                    }
+                )
+            return
+
         if active is None:
             console.print(
                 "[yellow]No active timer.[/] Start one with [bold]halyard start <project>[/]."

@@ -171,6 +171,10 @@ halyard dashboard
 halyard usage --range 30d
 halyard usage --range 7d --json   # machine-readable
 
+# --json on report/usage/budget/status/evidence/health/doctor for CI + scripts
+halyard report --all --json | jq '.totals.cost_usd'
+halyard budget --json | jq '.[] | select(.month.state=="over")'   # spend gate
+
 # Or run the dashboard as a background launchd service (macOS):
 halyard install-service
 # Dashboard then listens on http://localhost:7432 — bookmark it.
