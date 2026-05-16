@@ -150,7 +150,8 @@ def test_multi_model_sets_breakdown(tmp_path: Path) -> None:
     )
     _run(proj, {"transcript_path": str(tp)})
     s = parse_sessions(proj)[0]
-    assert s.model_breakdown == "claude-haiku-4-5:1|claude-opus-4-7:1"
+    # v2.61 usage form: model:in/out/cr/cw, sorted by model name
+    assert s.model_breakdown == "claude-haiku-4-5:4/2/0/0|claude-opus-4-7:10/5/0/0"
 
 
 def test_single_model_no_breakdown(tmp_path: Path) -> None:

@@ -190,6 +190,19 @@ def _safe_field(value: str) -> str:
     return _UNSAFE_FIELD_RE.sub("_", value)[:128]
 
 
+def _safe_breakdown(value: str) -> str:
+    """Sanitize the model_breakdown token *without* the 128-char cap.
+
+    The v2.61 usage-form grammar (`model:in/out/cr/cw|...`) for a 3-4
+    model session can exceed 128 chars; capping would truncate a
+    segment and force a (safe but lossy) fall back to single-model
+    attribution. The grammar contains no whitespace/`=`, so only the
+    record-splitting characters are neutralised; length is preserved so
+    multi-model cost stays correct.
+    """
+    return _UNSAFE_FIELD_RE.sub("_", value)
+
+
 def _encode_free_text(value: str) -> str:
     """Percent-encode a free-text value for safe storage in a key=value log token.
 
@@ -373,7 +386,7 @@ class AiSession:
         if self.code_removed is not None:
             kvs.append(f"code_removed={self.code_removed}")
         if self.model_breakdown:
-            kvs.append(f"model_breakdown={_safe_field(self.model_breakdown)}")
+            kvs.append(f"model_breakdown={_safe_breakdown(self.model_breakdown)}")
         if self.resume_command:
             kvs.append(f"resume_command={_encode_free_text(self.resume_command)}")
         if self.branch:

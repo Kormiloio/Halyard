@@ -41,6 +41,10 @@ from halyard.git_context import (
     numstat_delta,
 )
 from halyard.hub import find_hub
+from halyard.model_breakdown import ModelSeg
+from halyard.model_breakdown import cost_of as _breakdown_cost
+from halyard.model_breakdown import encode as _encode_breakdown
+from halyard.model_breakdown import primary_model as _primary_model
 from halyard.pricing import calculate_cost, model_is_known
 
 _CC_SESSION_FILE = Path.home() / ".halyard" / "cc-session"
@@ -161,12 +165,26 @@ def handle_stop_hook() -> int:
         tool_errors = ts.tool_errors
         wall_seconds = ts.wall_seconds
         model_breakdown = ts.model_breakdown
+        # Multi-model session: primary = highest-cost model so the
+        # one-line summary stays meaningful.
+        if model_breakdown and ts.primary_model:
+            model = ts.primary_model
 
     if not model:
         model = "claude-unknown"
 
     tokens_available = input_tokens > 0 or output_tokens > 0
-    cost = calculate_cost(model, input_tokens, output_tokens, cache_read, cache_write)
+    # Multi-model: cost is Σ per-model (correct pricing per model);
+    # single-model: unchanged.
+    if model_breakdown:
+        _bc = _breakdown_cost(model_breakdown)
+        cost = (
+            _bc
+            if _bc is not None
+            else calculate_cost(model, input_tokens, output_tokens, cache_read, cache_write)
+        )
+    else:
+        cost = calculate_cost(model, input_tokens, output_tokens, cache_read, cache_write)
 
     # v2.24: commit count and code delta
     commit_count = commits_in_window(cwd, start, now)
@@ -378,16 +396,27 @@ class _TranscriptStats:
     tool_errors: int | None = None
     session_id: str | None = None
     wall_seconds: int | None = None
-    # model -> assistant-turn count, for model_breakdown (count form;
-    # v2.61 generalises to per-model usage).
-    model_tally: dict[str, int] = field(default_factory=dict)
+    # model -> [input, output, cache_read, cache_write] (v2.61 usage form)
+    model_usage: dict[str, list[int]] = field(default_factory=dict)
+
+    def _segs(self) -> list[ModelSeg]:
+        return [
+            ModelSeg(m, u[0], u[1], u[2], u[3]) for m, u in sorted(self.model_usage.items()) if m
+        ]
 
     @property
     def model_breakdown(self) -> str | None:
-        real = {m: n for m, n in self.model_tally.items() if m}
-        if len(real) < 2:
+        segs = self._segs()
+        if len(segs) < 2:
             return None
-        return "|".join(f"{m}:{n}" for m, n in sorted(real.items()))
+        return _encode_breakdown(segs)
+
+    @property
+    def primary_model(self) -> str | None:
+        segs = self._segs()
+        if len(segs) < 2:
+            return None
+        return _primary_model(segs)
 
 
 def _transcript_ts(obj: dict[str, object], since: datetime | None) -> datetime | None:
@@ -465,17 +494,27 @@ def _read_from_transcript(
 
                 if etype == "assistant":
                     stats.assistant_count += 1
+                    cur_model: str | None = None
                     if isinstance(msg, dict) and msg.get("model"):
-                        m = str(msg["model"])
-                        stats.model = m
-                        stats.model_tally[m] = stats.model_tally.get(m, 0) + 1
+                        cur_model = str(msg["model"])
+                        stats.model = cur_model
                     if obj.get("gitBranch") and stats.branch is None:
                         stats.branch = str(obj["gitBranch"])
                     usage = msg.get("usage") or {} if isinstance(msg, dict) else {}
-                    stats.input_tokens += int(usage.get("input_tokens", 0))
-                    stats.output_tokens += int(usage.get("output_tokens", 0))
-                    stats.cache_read += int(usage.get("cache_read_input_tokens", 0))
-                    stats.cache_write += int(usage.get("cache_creation_input_tokens", 0))
+                    u_in = int(usage.get("input_tokens", 0))
+                    u_out = int(usage.get("output_tokens", 0))
+                    u_cr = int(usage.get("cache_read_input_tokens", 0))
+                    u_cw = int(usage.get("cache_creation_input_tokens", 0))
+                    stats.input_tokens += u_in
+                    stats.output_tokens += u_out
+                    stats.cache_read += u_cr
+                    stats.cache_write += u_cw
+                    if cur_model:
+                        acc = stats.model_usage.setdefault(cur_model, [0, 0, 0, 0])
+                        acc[0] += u_in
+                        acc[1] += u_out
+                        acc[2] += u_cr
+                        acc[3] += u_cw
                     if isinstance(content, list):
                         tool_calls += sum(
                             1

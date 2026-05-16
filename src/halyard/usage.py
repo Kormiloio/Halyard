@@ -323,7 +323,22 @@ def _model_buckets(sessions: list[AiSession]) -> list[ModelUsageBucket]:
             "cost": 0.0,
         }
     )
+    from halyard.model_breakdown import iter_model_usage
+    from halyard.model_breakdown import parse as _parse_breakdown
+
     for session in sessions:
+        if _parse_breakdown(session.model_breakdown) is not None:
+            # Multi-model: attribute each model its own tokens + cost.
+            for model, m_in, m_out, m_cr, m_cw, m_cost in iter_model_usage(session):
+                row = rows[model]
+                row["sessions"] = int(row["sessions"]) + 1
+                row["input"] = int(row["input"]) + m_in
+                row["output"] = int(row["output"]) + m_out
+                row["cache_read"] = int(row["cache_read"]) + m_cr
+                row["cache_write"] = int(row["cache_write"]) + m_cw
+                row["cost"] = float(row["cost"]) + m_cost
+            continue
+        # Single-model: byte-identical to pre-v2.61 behaviour.
         row = rows[session.model]
         row["sessions"] = int(row["sessions"]) + 1
         row["input"] = int(row["input"]) + _known_input(session)

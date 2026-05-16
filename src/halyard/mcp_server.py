@@ -146,10 +146,20 @@ def _project_breakdown(period: Period = "30d") -> list[dict[str, Any]]:
 
 
 def _cost_by_model(period: Period = "30d") -> list[dict[str, Any]]:
+    from halyard.model_breakdown import iter_model_usage
+    from halyard.model_breakdown import parse as _parse_breakdown
+
     start, end, _ = _window(period)
     agg: dict[str, dict[str, float]] = {}
     for s in _aggregate_sessions():
         if not _in_window(s, start, end):
+            continue
+        if _parse_breakdown(s.model_breakdown) is not None:
+            for model, m_in, m_out, _cr, _cw, m_cost in iter_model_usage(s):
+                e = agg.setdefault(model, {"sessions": 0, "tokens": 0, "cost": 0.0})
+                e["sessions"] += 1
+                e["tokens"] += m_in + m_out
+                e["cost"] += m_cost
             continue
         e = agg.setdefault(s.model, {"sessions": 0, "tokens": 0, "cost": 0.0})
         e["sessions"] += 1

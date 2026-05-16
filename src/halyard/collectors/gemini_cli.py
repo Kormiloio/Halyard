@@ -49,6 +49,10 @@ from halyard.collectors.gemini_history import (
 )
 from halyard.git_context import commits_in_window, current_branch, current_remote, infer_project
 from halyard.hub import find_hub
+from halyard.model_breakdown import ModelSeg
+from halyard.model_breakdown import cost_of as _breakdown_cost
+from halyard.model_breakdown import encode as _encode_breakdown
+from halyard.model_breakdown import primary_model as _primary_model
 from halyard.pricing import calculate_cost
 
 _GC_SESSION_FILE = Path.home() / ".halyard" / "gc-session"
@@ -198,6 +202,16 @@ def handle_agent_stop() -> int:
             rich_tool_errors = history_summary.total_tool_errors
         rich_wall_seconds = max(0, int((now - start).total_seconds()))
         rich_model_breakdown = _format_model_breakdown(history_summary.model_stats) or None
+        # Multi-model: cost is Σ per-model and the primary model is the
+        # costliest, so per-model rollups and the one-line model stay
+        # correct. Single-model: untouched (rich_model_breakdown None).
+        if rich_model_breakdown:
+            _segs = _model_segs(history_summary.model_stats)
+            if _segs:
+                model = _primary_model(_segs)
+            _bc = _breakdown_cost(rich_model_breakdown)
+            if _bc is not None:
+                cost = _bc
         rich_code_added = history_summary.code_added
         rich_code_removed = history_summary.code_removed
         rich_resume_command = history_summary.resume_command
@@ -315,7 +329,19 @@ def _reset_state(payload: dict) -> None:  # type: ignore[type-arg]
     _GC_SESSION_FILE.write_text(json.dumps(state))
 
 
+def _model_segs(model_stats: list[GeminiModelStats]) -> list[ModelSeg]:
+    return [
+        ModelSeg(s.model, s.input_tokens, s.output_tokens, s.cache_tokens, 0)
+        for s in model_stats
+        if s.model and s.requests > 0
+    ]
+
+
 def _format_model_breakdown(model_stats: list[GeminiModelStats]) -> str:
-    """Compact model breakdown: 'gemini-2.0-flash:3|gemini-2.0-pro:1'."""
-    parts = [f"{s.model}:{s.requests}" for s in model_stats if s.requests > 0]
-    return "|".join(parts)
+    """v2.61 usage-form breakdown, only for genuinely multi-model
+    sessions (``model:in/out/cr/cw|…``). Single-model → '' so the
+    caller keeps ``model_breakdown=None`` and the single-model path."""
+    segs = _model_segs(model_stats)
+    if len(segs) < 2:
+        return ""
+    return _encode_breakdown(segs)

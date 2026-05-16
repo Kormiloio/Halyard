@@ -532,7 +532,7 @@ layers must read from this local source of truth; they do not replace it.
     misattribute to one `model`. Generalise `model_breakdown` to
     per-model usage; cost = Σ per-model; shared `iter_model_usage`
     seam. Spec in `openspec/changes/v2.61-multimodel-attribution/`.
-    **Status: proposed (spec only).** Depends on v2.60.
+    **Status: complete (1168 tests passing).**
 
 39. **v2.62 — Cache-aware cost correctness:** audit per-collector
     input/cache token semantics (possible double-count); enforce
