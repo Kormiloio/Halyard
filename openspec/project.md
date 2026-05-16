@@ -553,7 +553,20 @@ layers must read from this local source of truth; they do not replace it.
     primary. Spec in `openspec/changes/v2.64-stats-graphs-parity/`.
     **Status: proposed (spec only).** Best after v2.60–v2.61.
 
-42. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+42. **v2.65 — Attribution integrity & visibility:** the under-protected
+    moat half. `attr_method` collapses the inference chain into `git`
+    and attribution has no confidence label (cost has trust labels;
+    attribution has none). Records the real rung (`repo-map`/`toml`/
+    `git-auto`), derives an `attribution_confidence`
+    (timer>mapped>toml>auto>none) surfaced in CLI/dashboard/MCP like
+    cost trust, adds a `doctor` attribution-quality canary (adrift-rate
+    + per-remote regression, v2.59 pattern, `warning`-only), and emits
+    exact per-remote `link-repo`/`adopt` remediation (propose, never
+    write). Back-compat (legacy `git`→`auto`); no cost-path change.
+    Spec in `openspec/changes/v2.65-attribution-integrity-visibility/`.
+    **Status: proposed (spec only).**
+
+43. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 
