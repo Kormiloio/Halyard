@@ -37,6 +37,8 @@ strategy/
 .halyard-cache/
 .halyard/active
 ai-sessions.log
+ai-sessions.log.bak*
+ai-sessions.removed-*.log
 halyard.toml
 clients.toml
 projects.toml
