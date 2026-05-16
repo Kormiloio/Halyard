@@ -197,7 +197,38 @@ def read_active_timer(active_path: Path | None = None) -> ActiveTimer | None:
     if not active_path.exists():
         return None
 
-    data = dict(line.split("=", 1) for line in active_path.read_text().splitlines() if "=" in line)
+    from halyard.state_integrity import (
+        IntegrityError,
+        current_mode,
+        detect_sidecar_mode,
+        read_trusted_state,
+    )
+
+    # The active-timer file is global; its governing project (and thus
+    # integrity mode) is the project that owns the referenced timeclock.
+    # Derive that mode, but never let a (tamperable) in-file path
+    # downgrade verification below an existing sidecar — sidecar
+    # presence proves integrity was enabled.
+    raw_first = active_path.read_text()
+    tc = next(
+        (ln.split("=", 1)[1] for ln in raw_first.splitlines() if ln.startswith("timeclock=")),
+        None,
+    )
+    project_dir = Path(tc).parent if tc else None
+    mode = current_mode(project_dir)
+    sidecar_mode = detect_sidecar_mode(active_path)
+    if sidecar_mode is not None and mode == "off":
+        mode = sidecar_mode
+
+    try:
+        verified = read_trusted_state(active_path, mode=mode)
+    except IntegrityError:
+        # Fail closed: a tampered active-timer file is not trusted.
+        return None
+    if verified is None:
+        return None
+
+    data = dict(line.split("=", 1) for line in verified.splitlines() if "=" in line)
     slug = data.get("slug")
     if not slug:
         return None

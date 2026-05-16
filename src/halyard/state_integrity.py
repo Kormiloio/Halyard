@@ -60,6 +60,23 @@ def _sidecar(path: Path, mode: IntegrityMode) -> Path:
     return path.with_suffix(path.suffix + suffix)
 
 
+def detect_sidecar_mode(path: Path) -> IntegrityMode | None:
+    """Return the integrity mode implied by an existing sidecar, if any.
+
+    Used for *global* state files (e.g. ``~/.halyard/active``) whose
+    governing project — and therefore mode — would otherwise be derived
+    from tamperable in-file content. If a sidecar exists, verification
+    was enabled and must not be silently downgraded to ``off`` just
+    because a (possibly tampered) path no longer resolves to a project
+    with integrity configured. ``hmac`` wins over ``hash``.
+    """
+    if _sidecar(path, "hmac").exists():
+        return "hmac"
+    if _sidecar(path, "hash").exists():
+        return "hash"
+    return None
+
+
 def _integrity_key(*, create: bool) -> bytes:
     """Return the 32-byte HMAC key.
 

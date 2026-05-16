@@ -134,6 +134,36 @@ def db_path() -> Path:
     return _DB_PATH
 
 
+def _apply_migration(conn: sqlite3.Connection, sql: str) -> None:
+    """Apply a (possibly multi-statement) migration idempotently.
+
+    ``executescript`` aborts at the first failing statement. If a prior
+    run died part-way through a multi-ALTER migration, re-running it
+    hits "duplicate column name" on an already-applied ALTER and
+    ``executescript`` would stop there — leaving the *remaining*
+    columns unapplied while ``user_version`` still gets bumped, so the
+    schema is permanently incomplete.
+
+    Apply each statement independently instead, tolerating
+    already-applied errors per statement so a partially-applied
+    migration fully self-heals on the next run regardless of where the
+    prior crash occurred.
+    """
+    for raw in sql.split(";"):
+        stmt = raw.strip()
+        if not stmt or stmt.startswith("--"):
+            continue
+        try:
+            conn.execute(stmt)
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            already_applied = "duplicate column name" in msg or "already exists" in msg
+            if not already_applied:
+                conn.rollback()
+                conn.close()
+                raise
+
+
 def get_db() -> sqlite3.Connection:
     """Open (and migrate if needed) the cache database.
 
@@ -180,18 +210,7 @@ def get_db() -> sqlite3.Connection:
                     "No plain-text data is lost."
                 )
             if sql.strip() and sql.strip() != "-- no-op":
-                try:
-                    conn.executescript(sql)
-                except sqlite3.OperationalError as exc:
-                    # A prior run may have died after applying an ALTER but
-                    # before bumping user_version. Re-running the ALTER then
-                    # fails with "duplicate column name" — treat that as
-                    # already-applied so the migration self-heals instead of
-                    # bricking the cache forever. Any other error is real.
-                    if "duplicate column name" not in str(exc).lower():
-                        conn.rollback()
-                        conn.close()
-                        raise
+                _apply_migration(conn, sql)
             conn.execute(f"PRAGMA user_version = {from_version + 1}")
             conn.commit()
             version = from_version + 1

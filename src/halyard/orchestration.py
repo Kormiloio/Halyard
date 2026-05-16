@@ -62,10 +62,16 @@ def write_active_timer(timeclock: Path, slug: str, started: str) -> None:
     :func:`halyard.state_integrity.write_trusted_state` so a hash sidecar
     is refreshed in lockstep when integrity mode is enabled.
     """
-    from halyard.state_integrity import write_trusted_state
+    from halyard.state_integrity import current_mode, write_trusted_state
 
     content = f"timeclock={timeclock}\nslug={slug}\nstarted={started}\n"
-    write_trusted_state(_reports_mod._HALYARD_ACTIVE, content)
+    # The active-timer file is global, but its integrity is governed by
+    # the project that owns the timeclock. Resolve that mode explicitly
+    # (current_mode() with no project_dir is always "off"), so a project
+    # with state_integrity enabled actually gets a sidecar written —
+    # which read_active_timer then verifies.
+    mode = current_mode(timeclock.parent)
+    write_trusted_state(_reports_mod._HALYARD_ACTIVE, content, mode=mode)
 
 
 def start_timer(project_dir: Path, slug: str) -> ActiveTimer:
