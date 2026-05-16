@@ -316,6 +316,84 @@ def register(app: typer.Typer) -> None:
         console.print("─" * 48 + "\n")
 
     @app.command()
+    def evidence(
+        all_time: bool = typer.Option(
+            False, "--all", help="All time instead of the current month."
+        ),
+        project: str | None = typer.Option(
+            None, "--project", help="Filter to a project slug (client:project)."
+        ),
+        client: str | None = typer.Option(
+            None, "--client", help="Filter to all projects for a client."
+        ),
+        month: str | None = typer.Option(
+            None, "--month", help="Billing month as YYYY-MM. Defaults to current month."
+        ),
+        out: Path = typer.Option(
+            None, "--out", help="Write the artifact to this path instead of stdout."
+        ),
+        force: bool = typer.Option(False, "--force", help="Overwrite an existing --out file."),
+        verify: Path = typer.Option(
+            None, "--verify", help="Verify an existing artifact's integrity digest and exit."
+        ),
+    ) -> None:
+        """Emit a standalone AI-work evidence artifact with an integrity digest.
+
+        Unsigned and keyless: the digest is tamper-evident (anyone can
+        re-hash the file) but is NOT a signature and does not prove
+        authorship. Cryptographic attestation is a Halyard Enterprise
+        feature.
+        """
+        from halyard.evidence import build_evidence_artifact, verify_evidence_artifact
+
+        if verify is not None:
+            if not verify.is_file():
+                console.print(f"[bold red]Error:[/] No such file: {verify}")
+                raise typer.Exit(code=1)
+            ok = verify_evidence_artifact(verify.read_text(encoding="utf-8"))
+            if ok:
+                console.print(f"[green]✓ Evidence digest verified:[/] {verify}")
+                raise typer.Exit(code=0)
+            console.print(f"[bold red]✗ Digest mismatch — artifact was modified:[/] {verify}")
+            raise typer.Exit(code=1)
+
+        if month:
+            from datetime import datetime
+
+            try:
+                datetime.strptime(month, "%Y-%m")
+            except ValueError:
+                console.print("[bold red]Error:[/] --month must be YYYY-MM (e.g. 2026-05).")
+                raise typer.Exit(code=1) from None
+
+        from halyard.ai_log import find_project_dir
+
+        project_dir = find_project_dir()
+        if project_dir is None:
+            console.print(
+                "[bold red]Error:[/] No Halyard project found. Run [bold]halyard init[/] first."
+            )
+            raise typer.Exit(code=1)
+
+        artifact = build_evidence_artifact(
+            project_dir, project=project, client=client, all_time=all_time, month=month
+        )
+
+        if out is not None:
+            if out.exists() and not force:
+                console.print(
+                    f"[bold red]Error:[/] {out} exists — pass [bold]--force[/] to overwrite."
+                )
+                raise typer.Exit(code=1)
+            out.write_text(artifact, encoding="utf-8")
+            console.print(f"[green]Evidence artifact written:[/] {out}")
+            return
+
+        # Print the exact artifact bytes (no Rich markup) so a piped
+        # file keeps a valid digest.
+        print(artifact, end="")
+
+    @app.command()
     def health(
         period: str = typer.Option("month", "--period", help="today | week | month | all"),
         project: str | None = typer.Option(None, "--project", help="Filter to a project slug."),
