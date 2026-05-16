@@ -177,12 +177,22 @@ def test_app_wiring_includes_both_panes(tmp_path: Path) -> None:
     async def _run() -> None:
         store = SessionStore(log)
         app = HalyardApp(store=store)
-        async with app.run_test() as pilot:
+        # Small viewport so the stacked side-pane overflows and the
+        # scroll-to-moat binding has something to do.
+        async with app.run_test(size=(80, 20)) as pilot:
             moat = pilot.app.query_one(MoatPane)
             lev = pilot.app.query_one(LeveragePane)
             assert moat.id == "moat-pane"
             assert lev.id == "leverage-pane"
             assert moat.last_rendered_text
             assert lev.last_rendered_text
+
+            side = pilot.app.query_one("#side-pane")
+            assert side.allow_vertical_scroll  # container must be scrollable
+            await pilot.press("o")
+            await pilot.pause()
+            # `o` scrolls the moat pane into view; with the panes above
+            # it that means a non-zero vertical scroll offset.
+            assert side.scroll_offset.y > 0
 
     asyncio.run(_run())

@@ -14,6 +14,7 @@ Screen {
 #side-pane {
     width: 1fr;
     height: 1fr;
+    overflow-y: auto;
 }
 
 #session-feed,
@@ -22,6 +23,8 @@ Screen {
 #captain-pane,
 #voyage-pane,
 #usage-pane,
+#moat-pane,
+#leverage-pane,
 #budget-pane,
 #model-pane {
     border: solid $primary;
