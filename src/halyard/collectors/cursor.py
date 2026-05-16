@@ -74,6 +74,13 @@ def record_session_start() -> int:
 
 def handle_stop_hook() -> int:
     """Called by stop hook. Reads JSON payload from stdin, writes session record."""
+    # A real turn always records its start via beforeSubmitPrompt
+    # (record_session_start writes this file). No state file ⇒ a
+    # stop-only fire (e.g. an external daemon triggering the hook) ⇒
+    # not a real turn, do not record.
+    if not _CURSOR_SESSION_FILE.exists():
+        return 0
+
     payload = _read_payload()
 
     project_dir = _resolve_project_dir(payload) or find_hub()

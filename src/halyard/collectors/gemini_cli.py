@@ -114,6 +114,10 @@ def handle_agent_stop() -> int:
     """Called by AfterAgent hook. Writes a session record and resets token accumulators."""
     payload = _read_payload()
     state = _read_state()
+    # No gc-session ⇒ SessionStart never ran ⇒ AfterAgent fired without
+    # a real turn (e.g. an external daemon). Not a session.
+    if state is None:
+        return 0
 
     cwd_str = (state or {}).get("cwd") or payload.get("cwd") or ""
     cwd = Path(cwd_str) if cwd_str else Path.cwd()

@@ -164,21 +164,25 @@ def test_handle_stop_hook_skips_when_no_project(
     assert not state_file.exists()
 
 
-def test_handle_stop_hook_uses_now_when_no_start_file(
+def test_handle_stop_hook_skips_when_no_start_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # v2.49: a stop fire with no recorded session-start (no
+    # beforeSubmitPrompt) is not a real turn — e.g. an external daemon
+    # triggering the hook — so nothing is written.
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session-missing"
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
 
     with _patch_stdin(_stop_payload(workspace_roots=[str(project)])):
-        handle_stop_hook()
+        rc = handle_stop_hook()
 
+    assert rc == 0
     data_lines = [
         ln for ln in (project / "ai-sessions.log").read_text().splitlines() if ln.startswith("s ")
     ]
-    assert len(data_lines) == 1
+    assert data_lines == []
 
 
 def test_handle_stop_hook_cache_tokens(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

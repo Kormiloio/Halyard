@@ -380,7 +380,21 @@ layers must read from this local source of truth; they do not replace it.
     kept). Spec in `openspec/changes/v2.48-dashboard-data-correctness/`.
     **Status: complete (1059 tests passing).**
 
-28. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+28. **v2.49 — Cursor/Gemini stop requires a recorded session start:**
+    an external daemon (thedotmack claude-mem `worker-service.cjs`) was
+    firing the Cursor `stop` / Gemini `AfterAgent` hooks with canned
+    `2000/400` & `100/50` payloads — plausible duration + nonzero tokens,
+    so v2.46/v2.48 guards couldn't catch them. The tell: no
+    `cursor-session`/`gc-session` state file (the start phase never
+    ran). `handle_stop_hook` now returns early if `cursor-session` is
+    absent; `handle_agent_stop` returns early if `_read_state()` is
+    None. Real two-phase lifecycles always record a start first, so no
+    real session is lost; stop-only synthetic fires produce nothing.
+    Claude Code unaffected. Spec in
+    `openspec/changes/v2.49-require-session-start/`.
+    **Status: complete (1062 tests passing).**
+
+29. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 
