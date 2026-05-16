@@ -41,7 +41,8 @@ dev = [
     "pip-audit>=2.7",  # L-4: CVE scanning for dependencies
 ]
 openai = ["openai>=1.0"]
-all = ["openai>=1.0"]
+mcp = ["mcp>=1.2"]
+all = ["openai>=1.0", "mcp>=1.2"]
 
 [project.scripts]
 halyard = "halyard.cli:app"
@@ -78,3 +79,13 @@ python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+
+# Optional MCP SDK has no type stubs and is not installed in the core
+# environment; its absence must not fail the type gate.
+[[tool.mypy.overrides]]
+module = "mcp.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "halyard.mcp_server"
+disable_error_code = ["untyped-decorator"]

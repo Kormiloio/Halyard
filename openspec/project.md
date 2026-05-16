@@ -394,7 +394,21 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.49-require-session-start/`.
     **Status: complete (1062 tests passing).**
 
-29. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+29. **v2.50 — Read-only MCP server:** `halyard mcp` (stdio) exposes the
+    aggregate ledger to MCP clients (Claude Code / Cursor) so the agent
+    that *generates* the work can query it in-context. Six read-only
+    tools — `work_summary` (flagship rollup), `sessions`,
+    `spend_in_range`, `project_breakdown`, `cost_by_model`,
+    `outcomes_status` — over the v2.48 aggregate data layer. No
+    mutations, no daemon (client spawns per session), metadata only (no
+    prompts/code/transcripts). `mcp` SDK is an optional extra
+    (`pip install 'halyard[mcp]'`); the command lazy-imports and prints
+    an actionable message if absent — core install unchanged. Ships a
+    repo-root `.mcp.json` for one-step registration. Spec in
+    `openspec/changes/v2.50-mcp-server/`.
+    **Status: complete (1068 tests passing).**
+
+30. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

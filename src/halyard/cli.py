@@ -71,13 +71,21 @@ def default(
 # Top-level command groups (register pattern)
 # ---------------------------------------------------------------------------
 
-from halyard import cli_hooks, cli_importers, cli_report, cli_session, cli_setup  # noqa: E402
+from halyard import (  # noqa: E402
+    cli_hooks,
+    cli_importers,
+    cli_mcp,
+    cli_report,
+    cli_session,
+    cli_setup,
+)
 
 cli_hooks.register(app)
 cli_setup.register(app)
 cli_session.register(app)
 cli_importers.register(app)
 cli_report.register(app)
+cli_mcp.register(app)
 
 
 # ---------------------------------------------------------------------------

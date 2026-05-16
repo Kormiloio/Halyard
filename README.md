@@ -185,6 +185,10 @@ halyard tui
 # Guided setup installs supported hooks and checks readiness:
 halyard setup
 
+# Ask your agent about your own AI work (read-only MCP server):
+pip install 'halyard[mcp]'
+halyard mcp            # stdio MCP server for Claude Code / Cursor
+
 # Or install hooks manually:
 halyard install-hook          # Claude Code
 halyard install-cursor-hook   # Cursor
@@ -232,6 +236,23 @@ halyard voyage complete acme             # manually moor a project
 See [`docs/demo.md`](docs/demo.md) for a full walkthrough — self-guided and
 live presentation script in one document. If capture does not show up, start
 with [`docs/troubleshooting.md`](docs/troubleshooting.md).
+
+## MCP server (ask your agent about your AI work)
+
+`halyard mcp` runs a **read-only** MCP server over stdio so Claude Code,
+Cursor, or any MCP client can query your local ledger in-context — e.g.
+"how much did I spend this week?", "did this work ship?", "what's my
+adrift rate?". It exposes `work_summary`, `sessions`, `spend_in_range`,
+`project_breakdown`, `cost_by_model`, and `outcomes_status`. No tool
+writes anything; only metadata already in the ledger is returned (never
+prompts, code, or transcripts). It needs the optional extra
+(`pip install 'halyard[mcp]'`).
+
+Register it (the repo ships a ready [`.mcp.json`](.mcp.json)):
+
+```json
+{ "mcpServers": { "halyard": { "command": "halyard", "args": ["mcp"] } } }
+```
 
 ---
 
