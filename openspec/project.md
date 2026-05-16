@@ -520,7 +520,40 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.59-collector-drift-canary/`; 8 tests.
     **Status: complete (1150 tests passing).**
 
-37. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+37. **v2.60 — Claude Code collector enrichment:** the primary tool is
+    the weakest collector — populate `session_id`, `tool_calls/errors`,
+    `wall_seconds`, `user_message_count`, `model_breakdown` from the
+    Stop payload/transcript (unavailable-is-`None`, no schema change).
+    Spec in `openspec/changes/v2.60-claude-code-enrichment/`.
+    **Status: proposed (spec only).**
+
+38. **v2.61 — Multi-model session attribution:** one session uses many
+    models (router/main/subagent); cost + per-model rollups currently
+    misattribute to one `model`. Generalise `model_breakdown` to
+    per-model usage; cost = Σ per-model; shared `iter_model_usage`
+    seam. Spec in `openspec/changes/v2.61-multimodel-attribution/`.
+    **Status: proposed (spec only).** Depends on v2.60.
+
+39. **v2.62 — Cache-aware cost correctness:** audit per-collector
+    input/cache token semantics (possible double-count); enforce
+    fresh-input invariant; capture `cache_write` for Gemini/Codex.
+    Spec in `openspec/changes/v2.62-cache-cost-correctness/`.
+    **Status: proposed (spec only).**
+
+40. **v2.63 — Session time decomposition:** add `api_seconds` /
+    `tool_seconds` (+ derived `agent_active_seconds`); capture where
+    the tool exposes it (Gemini `/quit`, Codex). Spec in
+    `openspec/changes/v2.63-session-time-decomposition/`.
+    **Status: proposed (spec only).**
+
+41. **v2.64 — Stats & graphs parity surface:** match the table-stakes
+    stats single-tool dashboards show (heatmap, per-model time series,
+    streaks, messages, peak hour) on existing `UsageAnalytics` data —
+    the "parity floor" so the moat lands. Additive; moat panels stay
+    primary. Spec in `openspec/changes/v2.64-stats-graphs-parity/`.
+    **Status: proposed (spec only).** Best after v2.60–v2.61.
+
+42. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

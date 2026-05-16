@@ -236,3 +236,15 @@ They should be built when user pull or design-partner evidence justifies them.
 - OSS community trust before paid tiers.
 - Build for individual voluntary adoption before enterprise aggregation.
 - The format is earned by adoption, not declared by spec.
+- **Parity floor, win on the moat.** A developer's first reaction to
+  Halyard is a comparison to the stat screen their AI tool already
+  shows. If Halyard shows *less* than that, the verdict is "I already
+  get this — Halyard doesn't add enough to care," and they never reach
+  the moat. So Halyard MUST at least match the table-stakes stats
+  single-tool dashboards show (sessions, messages, tokens, active
+  days, streaks, peak hour, favorite model, activity heatmap,
+  per-model time series). It then *wins* on what no single-tool view
+  has: cost in $, project/client attribution, cross-tool unification,
+  outcome/PR linkage, local plaintext ownership. Parity is the price
+  of admission; the moat is the reason to stay. Parity work is
+  additive — it never removes or demotes a moat surface to make room.
