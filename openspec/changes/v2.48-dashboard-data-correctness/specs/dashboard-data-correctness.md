@@ -24,7 +24,8 @@ AND WHEN `sessions` is omitted it MUST behave exactly as before
 WHEN a Gemini/Cursor/Claude-Code stop hook would record a session
 whose `end - start` exceeds 12 hours
 THEN it MUST NOT be written (state still reset), in addition to the
-existing evidence-free guard.
+existing evidence-free guard. "Implausible" also covers a negative
+duration (end before start) — physically impossible for one turn.
 
 ## Requirement: The test suite never mutates the real registry
 

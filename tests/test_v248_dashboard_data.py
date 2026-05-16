@@ -102,6 +102,16 @@ def test_session_is_implausible() -> None:
         cost_usd=0.0,
     )
     assert session_is_implausible(long) is True
+    neg = AiSession(
+        start=datetime(2026, 5, 7, 10, 0, 0),
+        end=datetime(2026, 5, 7, 8, 58, 57),  # end before start
+        tool="cursor",
+        model="claude-3.5-sonnet",
+        input_tokens=2000,
+        output_tokens=400,
+        cost_usd=0.0,
+    )
+    assert session_is_implausible(neg) is True
 
 
 def test_cursor_drops_implausible_synthetic(

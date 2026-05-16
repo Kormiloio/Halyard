@@ -13,13 +13,15 @@ _MAX_SESSION_SECONDS = 12 * 3600
 
 
 def session_is_implausible(session: AiSession) -> bool:
-    """True if the session's duration is impossibly long for one turn.
+    """True if the session's duration is impossible for one turn.
 
-    Guards against synthetic hook payloads with a frozen/ancient start
-    (the constant ``start=2026-05-07`` Cursor rows) that the evidence
-    predicate cannot catch because they carry nonzero tokens.
+    Catches synthetic hook payloads the evidence predicate can't (they
+    carry nonzero tokens): a frozen/ancient start producing a multi-day
+    span (>12h), or end-before-start (negative duration) — both are
+    physically impossible for a single real turn.
     """
-    return (session.end - session.start).total_seconds() > _MAX_SESSION_SECONDS
+    duration = (session.end - session.start).total_seconds()
+    return duration < 0 or duration > _MAX_SESSION_SECONDS
 
 
 def _model_is_real(model: str) -> bool:
