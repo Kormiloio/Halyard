@@ -377,6 +377,79 @@ def _do_install_hook_cursor() -> None:
     console.print(f"[bold green]Cursor hooks installed[/] in [bold]{settings_path}[/]")
 
 
+# --- MCP server auto-registration (v2.51) ---------------------------------
+
+_MCP_SERVER_NAME = "halyard"
+
+# client -> (label, the file that client reads its `mcpServers` map
+# from). Claude Code's USER-scoped MCP servers live in ~/.claude.json,
+# a different file from the ~/.claude/settings.json hooks go in.
+_MCP_CLIENTS: dict[str, tuple[str, Path]] = {
+    "claude": ("Claude Code", Path.home() / ".claude.json"),
+    "cursor": ("Cursor", Path.home() / ".cursor" / "mcp.json"),
+    "gemini": ("Gemini CLI", Path.home() / ".gemini" / "settings.json"),
+}
+
+
+def _mcp_entry(exe: str) -> dict[str, Any]:
+    """The `halyard` MCP server entry — identical shape for every client."""
+    return {"command": exe, "args": ["mcp"]}
+
+
+def _do_install_mcp(client: str) -> None:
+    """Register the read-only `halyard mcp` server in *client*'s config.
+
+    Touches only the single ``mcpServers.halyard`` key: foreign servers
+    (e.g. claude-mem) are never read or modified, and every other
+    top-level key in the (often large) config is round-tripped intact.
+    Re-running overwrites a stale exe path; a current entry is a
+    byte-stable no-op.
+    """
+    label, path = _MCP_CLIENTS[client]
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: dict[str, Any] = _load_existing_settings(path)
+
+    servers = existing.setdefault("mcpServers", {})
+    if not isinstance(servers, dict):
+        raise HookWriteError(
+            path,
+            OSError("mcpServers is not an object"),
+            message=(
+                f"{path} has a non-object 'mcpServers'; refusing to overwrite it. "
+                "Fix or remove that key, then re-run."
+            ),
+        )
+
+    servers[_MCP_SERVER_NAME] = _mcp_entry(_halyard_exe())
+
+    new_text = json.dumps(existing, indent=2) + "\n"
+    if _settings_unchanged(path, new_text):
+        console.print(f"[yellow]{label} MCP server already registered[/] in [bold]{path}[/]")
+        return
+    _write_settings(path, new_text)
+    console.print(f"[bold green]{label} MCP server registered[/] in [bold]{path}[/]")
+
+
+def _auto_install_detected_mcp() -> None:
+    """Register the MCP server for every MCP client detected on PATH."""
+    found: list[str] = []
+    failed: list[str] = []
+
+    for binary, (label, _path) in _MCP_CLIENTS.items():
+        if shutil.which(binary):
+            try:
+                _do_install_mcp(binary)
+                found.append(label)
+            except OSError:
+                failed.append(f"{label} (run halyard install-mcp-{binary})")
+
+    if found:
+        console.print(f"[bold green]Auto-registered MCP server:[/] {', '.join(found)}")
+    if failed:
+        console.print(f"[yellow]MCP register failed:[/] {', '.join(failed)}")
+
+
 def _vscode_record_task(command: str) -> dict[str, Any]:
     return {
         "label": _VSCODE_TASK_LABEL,
@@ -555,6 +628,26 @@ def register(app: typer.Typer) -> None:
     def install_cursor_hook() -> None:
         """Deprecated alias for install-hook-cursor."""
         _run_installer(_do_install_hook_cursor)
+
+    @app.command(name="install-mcp-claude")
+    def install_mcp_claude() -> None:
+        """Register the read-only Halyard MCP server with Claude Code."""
+        _run_installer(lambda: _do_install_mcp("claude"))
+
+    @app.command(name="install-mcp-cursor")
+    def install_mcp_cursor() -> None:
+        """Register the read-only Halyard MCP server with Cursor."""
+        _run_installer(lambda: _do_install_mcp("cursor"))
+
+    @app.command(name="install-mcp-gemini")
+    def install_mcp_gemini() -> None:
+        """Register the read-only Halyard MCP server with Gemini CLI."""
+        _run_installer(lambda: _do_install_mcp("gemini"))
+
+    @app.command(name="install-mcp", hidden=True)
+    def install_mcp() -> None:
+        """Register the Halyard MCP server with every detected client."""
+        _auto_install_detected_mcp()
 
     @app.command(name="install-vscode-tasks")
     def install_vscode_tasks() -> None:

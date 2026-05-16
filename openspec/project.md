@@ -408,7 +408,21 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.50-mcp-server/`.
     **Status: complete (1068 tests passing).**
 
-30. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+30. **v2.51 — MCP auto-registration:** `halyard init` / `halyard setup`
+    now auto-registers the v2.50 read-only MCP server with every MCP
+    client detected on PATH (Claude Code → `~/.claude.json`, Cursor →
+    `~/.cursor/mcp.json`, Gemini CLI → `~/.gemini/settings.json`), so
+    end users never hand-edit a config file. Reuses the hook-install
+    machinery: PATH-gated, best-effort `OSError` in the auto path,
+    no-clobber via `_load_existing_settings`, byte-stable no-op via
+    `_settings_unchanged`, foreign servers (e.g. `claude-mem`)
+    preserved — only the single `mcpServers.halyard` key is touched.
+    Explicit `halyard install-mcp-claude|cursor|gemini` mirror the
+    `install-hook-*` set. Spec in
+    `openspec/changes/v2.51-mcp-autoregister/`.
+    **Status: complete (1077 tests passing).**
+
+31. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

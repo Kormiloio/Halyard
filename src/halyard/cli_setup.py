@@ -30,12 +30,16 @@ def register(app: typer.Typer) -> None:
         ),
     ) -> None:
         """Scaffold a new Halyard project in the current directory."""
-        from halyard.cli_hooks import _auto_install_detected_hooks
+        from halyard.cli_hooks import (
+            _auto_install_detected_hooks,
+            _auto_install_detected_mcp,
+        )
         from halyard.orchestration import scaffold_project
 
         scaffold_project(Path.cwd(), hub=hub)
         if not no_interactive:
             _auto_install_detected_hooks()
+            _auto_install_detected_mcp()
 
     @app.command()
     def hub(
@@ -116,6 +120,7 @@ def register(app: typer.Typer) -> None:
             _do_install_hook_claude,
             _do_install_hook_cursor,
             _do_install_hook_gemini,
+            _do_install_mcp,
         )
         from halyard.doctor import build_doctor_report, render_text
         from halyard.setup import next_step_text, readiness, resolve_selection, tool_label
@@ -184,6 +189,7 @@ def register(app: typer.Typer) -> None:
                         _do_install_hook_cursor()
                     elif selected == "gemini":
                         _do_install_hook_gemini()
+                    _do_install_mcp(selected)
                 except OSError as exc:
                     install_errors.append(f"{tool_label(selected)}: {exc}")
                     console.print(

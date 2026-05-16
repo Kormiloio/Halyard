@@ -248,7 +248,19 @@ writes anything; only metadata already in the ledger is returned (never
 prompts, code, or transcripts). It needs the optional extra
 (`pip install 'halyard[mcp]'`).
 
-Register it (the repo ships a ready [`.mcp.json`](.mcp.json)):
+`halyard init` (and `halyard setup`) **auto-registers** it with every
+MCP client detected on your PATH — Claude Code, Cursor, Gemini CLI — so
+you never edit a config file. Re-run any time, or register one client
+explicitly:
+
+```bash
+halyard install-mcp-claude     # or -cursor / -gemini
+```
+
+It writes a single `mcpServers.halyard` entry to each client's config
+(`~/.claude.json`, `~/.cursor/mcp.json`, `~/.gemini/settings.json`),
+preserving every other server. The Halyard repo also ships a ready
+[`.mcp.json`](.mcp.json) for Claude Code zero-config pickup in-repo:
 
 ```json
 { "mcpServers": { "halyard": { "command": "halyard", "args": ["mcp"] } } }
