@@ -24,6 +24,37 @@ def session_is_implausible(session: AiSession) -> bool:
     return duration < 0 or duration > _MAX_SESSION_SECONDS
 
 
+# Exact canned payloads the thedotmack claude-mem worker-service.cjs
+# daemon appends directly to ai-sessions.log, bypassing every collector
+# write guard. Token pair + legacy model + $0 + no project is a
+# machine fingerprint genuine current work cannot reproduce.
+_SYNTHETIC_FINGERPRINTS: set[tuple[int, int, str]] = {
+    (2000, 400, "claude-3.5-sonnet"),
+    (100, 50, "gemini-2.0-pro"),
+}
+
+
+def session_is_synthetic_telemetry(session: AiSession) -> bool:
+    """True for the claude-mem daemon's canned, unattributed $0 rows.
+
+    Deliberately narrow: requires the exact token pair, the exact
+    legacy model string, zero cost, and no project simultaneously —
+    a combination real current sessions never produce, so there are no
+    false positives. The durable defence is applying this at read time
+    (parse_sessions), since the daemon writes the log directly and
+    never touches a Halyard collector.
+    """
+    if session.cost_usd != 0:
+        return False
+    if session.project:
+        return False
+    return (
+        session.input_tokens,
+        session.output_tokens,
+        session.model,
+    ) in _SYNTHETIC_FINGERPRINTS
+
+
 def _model_is_real(model: str) -> bool:
     return bool(model) and model not in _UNKNOWN_MODELS and not model.endswith("-unknown")
 

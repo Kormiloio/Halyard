@@ -433,7 +433,24 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.52-tool-detection-nudge/`.
     **Status: complete (1088 tests passing).**
 
-32. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+32. **v2.53 — Parse-time synthetic-telemetry guard:** the v2.45–v2.49
+    guards lived in the hook collectors, but the contaminating writer
+    (thedotmack claude-mem `worker-service.cjs`) appends canned rows to
+    `ai-sessions.log` directly, bypassing every write guard. v2.53
+    moves the defence to the read chokepoint:
+    `collectors.session_is_synthetic_telemetry` recognises the exact
+    canned fingerprint (`(2000,400,"claude-3.5-sonnet")` /
+    `(100,50,"gemini-2.0-pro")` with `cost==0` and no project — a
+    combination genuine current work cannot produce) and
+    `ai_log.parse_sessions` excludes those rows, so no surface (CLI,
+    dashboard, aggregate, MCP) ever sees them. Raw lines stay in the
+    log (immutable, auditable; no quarantine write — parse runs per
+    render). Also `or`-ed into the three collector write guards
+    (defence in depth). Spec in
+    `openspec/changes/v2.53-synthetic-read-guard/`.
+    **Status: complete (1096 tests passing).**
+
+33. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

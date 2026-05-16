@@ -488,7 +488,15 @@ def parse_sessions(project_dir: Path) -> list[AiSession]:
         for amendment in amendments_by_hash.get(h, []):
             session.apply_amendment(amendment)
 
-    return sessions
+    # Durable synthetic-telemetry guard (v2.53): an external writer
+    # (claude-mem daemon) appends canned rows directly to the log,
+    # bypassing every collector write guard. Exclude them at the read
+    # chokepoint so no surface ever sees them. The raw lines remain in
+    # the file (immutable, auditable); they are simply not surfaced.
+    # Local import: collectors imports ai_log (cycle otherwise).
+    from halyard.collectors import session_is_synthetic_telemetry
+
+    return [s for s in sessions if not session_is_synthetic_telemetry(s)]
 
 
 def assign_unattributed_sessions(project_dir: Path, project: str) -> int:
