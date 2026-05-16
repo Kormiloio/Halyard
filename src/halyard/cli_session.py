@@ -624,7 +624,6 @@ def register(app: typer.Typer) -> None:
             raise typer.Exit(code=1)
 
         now = _dt.now()
-        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
         rng = random.Random(42)  # deterministic seed for reproducible demos
 
@@ -670,12 +669,22 @@ def register(app: typer.Typer) -> None:
         ]
         # fmt: on
 
+        # Anchor the timeline so the most recent demo session lands
+        # ~yesterday and the rest run backwards into the past — never
+        # the future, no matter when in the month seed-demo is run.
+        # (Previously anchored to month-start + offset, which produced
+        # future-dated rows mid-month that polluted newest-first views.)
+        max_off = max(int(r[-1]) for r in sessions_spec)
+        anchor_day = (now - _td(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+
         added: list[AiSession] = []
         for row in sessions_spec:
             proj, tool, cost, inp, out, mins, tcalls, terrs, cadd, crem, day_off = row
             base_hour = rng.randint(8, 17)
             base_min = rng.randint(0, 45)
-            start = month_start + _td(days=day_off, hours=base_hour, minutes=base_min)
+            start = (
+                anchor_day - _td(days=max_off - day_off) + _td(hours=base_hour, minutes=base_min)
+            )
             end = start + _td(minutes=mins)
             tags: list[str] = []
             if proj in ("acme:auth", "acme:api"):

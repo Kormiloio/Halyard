@@ -493,10 +493,19 @@ def parse_sessions(project_dir: Path) -> list[AiSession]:
     # bypassing every collector write guard. Exclude them at the read
     # chokepoint so no surface ever sees them. The raw lines remain in
     # the file (immutable, auditable); they are simply not surfaced.
+    # Also drop future-dated rows: a genuine turn cannot start in the
+    # future, and an external writer can append any timestamp (observed:
+    # rows dated days ahead, polluting the top of every newest-first
+    # view). Narrow on purpose — only the future check, so long-but-real
+    # historical sessions are never retroactively hidden.
     # Local import: collectors imports ai_log (cycle otherwise).
-    from halyard.collectors import session_is_synthetic_telemetry
+    from halyard.collectors import session_is_synthetic_telemetry, session_starts_in_future
 
-    return [s for s in sessions if not session_is_synthetic_telemetry(s)]
+    return [
+        s
+        for s in sessions
+        if not session_is_synthetic_telemetry(s) and not session_starts_in_future(s)
+    ]
 
 
 def assign_unattributed_sessions(project_dir: Path, project: str) -> int:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from halyard.ai_log import AiSession
 
 _UNKNOWN_MODELS = {"", "default"}
@@ -11,17 +13,38 @@ _UNKNOWN_MODELS = {"", "default"}
 # never advances) produce multi-day "sessions"; reject them.
 _MAX_SESSION_SECONDS = 12 * 3600
 
+# Grace for benign clock skew / timezone slop. A session whose start is
+# beyond this far in the future has not happened yet — impossible.
+_FUTURE_START_GRACE_SECONDS = 5 * 60
 
-def session_is_implausible(session: AiSession) -> bool:
-    """True if the session's duration is impossible for one turn.
 
-    Catches synthetic hook payloads the evidence predicate can't (they
-    carry nonzero tokens): a frozen/ancient start producing a multi-day
-    span (>12h), or end-before-start (negative duration) — both are
-    physically impossible for a single real turn.
+def session_starts_in_future(session: AiSession, *, now: datetime | None = None) -> bool:
+    """True if the session's start has not happened yet.
+
+    A genuine turn cannot start in the future. An external writer can
+    append rows with any timestamp (observed: rows dated days ahead);
+    these must never surface. Narrow on purpose — only the future
+    check, so applying it at read time can't retroactively hide
+    long-but-real historical sessions.
+    """
+    clock = now or datetime.now()
+    return (session.start - clock).total_seconds() > _FUTURE_START_GRACE_SECONDS
+
+
+def session_is_implausible(session: AiSession, *, now: datetime | None = None) -> bool:
+    """True if the session is physically impossible for one real turn.
+
+    Catches synthetic/garbage payloads the evidence predicate can't
+    (they carry nonzero tokens):
+    - a multi-day span (>12h),
+    - end-before-start (negative duration),
+    - a start in the future (the turn has not happened yet).
+    All three are impossible for a single genuine turn.
     """
     duration = (session.end - session.start).total_seconds()
-    return duration < 0 or duration > _MAX_SESSION_SECONDS
+    if duration < 0 or duration > _MAX_SESSION_SECONDS:
+        return True
+    return session_starts_in_future(session, now=now)
 
 
 # Exact canned payloads the thedotmack claude-mem worker-service.cjs

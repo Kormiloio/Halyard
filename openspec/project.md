@@ -450,7 +450,22 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.53-synthetic-read-guard/`.
     **Status: complete (1096 tests passing).**
 
-33. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+33. **v2.54 — Future-dated sessions are impossible:** a session whose
+    start is in the future cannot have happened; such rows sorted to
+    the top of every newest-first view. Root cause was `seed-demo`
+    itself: it anchored demo sessions to `month_start + day_offset`,
+    so running it mid-month produced future-dated rows in the real
+    ledger. Fix: `seed-demo` anchors the timeline to ~yesterday
+    backwards (never future, regardless of run date); new
+    `collectors.session_starts_in_future` (5-min skew grace) folded
+    into `session_is_implausible` (write-path defence) and applied at
+    the `parse_sessions` read chokepoint (narrow — future only, so
+    long-but-real history is never retroactively hidden). Raw lines
+    stay in the log (read-only exclusion, like v2.53). Bug-class fix
+    (spec-exempt); 5 tests in `tests/test_v254_future_session_guard.py`.
+    **Status: complete (1112 tests passing).**
+
+34. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 
