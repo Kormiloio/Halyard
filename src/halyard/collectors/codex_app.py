@@ -253,6 +253,30 @@ def _save_imported_state(ids: set[str]) -> None:
     _IMPORTED_STATE_FILE.write_text("\n".join(sorted(ids)) + "\n")
 
 
+def codex_history_present() -> bool:
+    """True if Codex Desktop has on-disk session rollouts available to import.
+
+    Recomputes the path from ``Path.home()`` (not the import-time
+    constant) so it stays correct under a relocated home in tests.
+    Read-only: never imports or mutates anything.
+    """
+    sessions_dir = Path.home() / ".codex" / "sessions"
+    if not sessions_dir.exists():
+        return False
+    return next(sessions_dir.rglob("rollout-*.jsonl"), None) is not None
+
+
+def codex_imported_any() -> bool:
+    """True if at least one Codex session has already been imported."""
+    state = Path.home() / ".halyard" / "codex-imported"
+    if not state.exists():
+        return False
+    try:
+        return any(line.strip() for line in state.read_text().splitlines())
+    except OSError:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

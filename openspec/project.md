@@ -422,7 +422,18 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.51-mcp-autoregister/`.
     **Status: complete (1077 tests passing).**
 
-31. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+31. **v2.52 — Unwired-tool detection nudge:** `halyard doctor` flags a
+    supported AI tool that is installed but has zero Halyard
+    integration — live-hook tools on PATH with neither hooks nor the
+    MCP server, and Codex with on-disk history but nothing imported —
+    emitting a `warn` (never `error`, exit-code contract preserved)
+    with the exact one-line fix. Read-only, on-demand, no daemon;
+    flows through the existing `DoctorReport` so dashboard/TUI health
+    surfaces inherit it. Spec in
+    `openspec/changes/v2.52-tool-detection-nudge/`.
+    **Status: complete (1088 tests passing).**
+
+32. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

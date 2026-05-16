@@ -199,6 +199,7 @@ halyard install-vscode-tasks  # VS Code manual capture task
 halyard record-session --tool vscode --model github-copilot --minutes 15 --note "Copilot chat"
 
 # Diagnose setup and verify first capture
+# (also warns about AI tools installed but not wired into Halyard)
 halyard doctor
 halyard doctor --first-capture
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -52,6 +53,7 @@ def build_doctor_report(
     checks.extend(_project_checks(project_dir, hub_dir))
     checks.extend(_hub_checks(project_dir, hub_dir))
     checks.extend(_hook_checks(tool, current))
+    checks.extend(_unwired_tool_checks(tool, current))
     checks.extend(_collector_state_checks())
     if first_capture:
         checks.append(_first_capture_check(project_dir, hub_dir, now=now or datetime.now()))
@@ -283,6 +285,93 @@ def _gemini_hook_check(*, required: bool) -> DoctorCheck:
         detail="hooks missing",
         fix="halyard install-gemini-hook",
     )
+
+
+# client -> mcpServers config file, relative to ~ (recomputed per call
+# so a relocated home in tests is honoured, matching the hook checks).
+_MCP_CONFIG_REL: dict[str, tuple[str, ...]] = {
+    "claude": (".claude.json",),
+    "cursor": (".cursor", "mcp.json"),
+    "gemini": (".gemini", "settings.json"),
+}
+
+
+def _mcp_registered(client: str) -> bool:
+    """True if the Halyard MCP server is registered in *client*'s config.
+
+    Basename-matches the server command so a moved venv still counts as
+    wired (mirrors the hook installers' path-agnostic matching).
+    """
+    path = Path.home().joinpath(*_MCP_CONFIG_REL[client])
+    data = _read_json(path)
+    if not isinstance(data, dict):
+        return False
+    servers = data.get("mcpServers")
+    if not isinstance(servers, dict):
+        return False
+    entry = servers.get("halyard")
+    if not isinstance(entry, dict):
+        return False
+    command = entry.get("command")
+    if not isinstance(command, str) or not command:
+        return False
+    return Path(command).name in ("halyard", "halyard.exe")
+
+
+def _unwired_tool_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
+    """Warn about supported AI tools that are installed but not wired.
+
+    A live-hook tool counts as wired if it has Halyard hooks OR the
+    Halyard MCP server for its scope; the nudge fires only when a
+    detected tool has zero Halyard integration. Codex (import model)
+    warns when on-disk history exists but nothing has been imported.
+    Always `warning`, never `error`, so the doctor exit code is
+    unaffected.
+    """
+    scopes = ("claude", "cursor", "gemini") if tool == "all" else (tool,)
+    hook_status = {
+        "claude": lambda: _claude_hook_check(current, required=False).status,
+        "cursor": lambda: _cursor_hook_check(required=False).status,
+        "gemini": lambda: _gemini_hook_check(required=False).status,
+    }
+    labels = {"claude": "Claude Code", "cursor": "Cursor", "gemini": "Gemini CLI"}
+    install_hook = {
+        "claude": "halyard install-hook-claude",
+        "cursor": "halyard install-hook-cursor",
+        "gemini": "halyard install-hook-gemini",
+    }
+
+    checks: list[DoctorCheck] = []
+    for scope in scopes:
+        on_path = shutil.which(scope) is not None
+        has_hook = hook_status[scope]() == "ok"
+        has_mcp = _mcp_registered(scope)
+        if on_path and not has_hook and not has_mcp:
+            checks.append(
+                DoctorCheck(
+                    id=f"unwired.{scope}",
+                    label=f"{labels[scope]} (unwired)",
+                    status="warning",
+                    detail="installed but no Halyard hooks or MCP server",
+                    fix=f"halyard setup  (or {install_hook[scope]})",
+                )
+            )
+
+    if tool == "all":
+        from halyard.collectors.codex_app import codex_history_present, codex_imported_any
+
+        if codex_history_present() and not codex_imported_any():
+            checks.append(
+                DoctorCheck(
+                    id="unwired.codex",
+                    label="Codex (unwired)",
+                    status="warning",
+                    detail="Codex Desktop history on disk but none imported",
+                    fix="halyard import-codex",
+                )
+            )
+
+    return checks
 
 
 def _integrity_check(home_state: Path) -> DoctorCheck:
