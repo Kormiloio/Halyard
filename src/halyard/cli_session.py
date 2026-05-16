@@ -122,10 +122,12 @@ def register(app: typer.Typer) -> None:
             )
             raise typer.Exit(code=1)
 
-        if "/" not in slug or slug.startswith("/") or slug.endswith("/"):
+        from halyard.slug import is_valid_timer_slug
+
+        if not is_valid_timer_slug(slug):
             console.print(
-                "[bold red]Error:[/] Slug must be [bold]client/project[/], "
-                "e.g. [bold]acme/auth-migration[/]."
+                "[bold red]Error:[/] Slug must be [bold]client/project[/] "
+                "(letters, digits, . _ - only), e.g. [bold]acme/auth-migration[/]."
             )
             raise typer.Exit(code=1)
 

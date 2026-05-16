@@ -201,7 +201,9 @@ def _handler_for(
 
             if self.path == "/api/start":
                 slug = params.get("project", "").strip()
-                if slug and "/" in slug and not slug.startswith("/") and not slug.endswith("/"):
+                from halyard.slug import is_valid_timer_slug
+
+                if is_valid_timer_slug(slug):
                     # v2.17 task 5.5: delegate to shared start_timer; ignores
                     # TimerAlreadyRunning (dashboard silently no-ops on duplicate start)
                     from halyard.orchestration import TimerAlreadyRunning, start_timer

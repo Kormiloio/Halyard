@@ -849,7 +849,11 @@ def _effective_session_lines(lines: list[str]) -> list[tuple[str, AiSession]]:
 
 def _amendment_line(raw_session_line: str, *, project: str, attr_method: str) -> str:
     h = session_hash(raw_session_line)
-    return f"a {h} project={project} attr_method={attr_method}"
+    # Defence in depth: even though callers validate the slug, the
+    # amendment record is space- and key=value-delimited, so a stray
+    # space/'=' in project would forge extra tokens. _safe_field
+    # neutralises whitespace and '='.
+    return f"a {h} project={_safe_field(project)} attr_method={_safe_field(attr_method)}"
 
 
 def _append_lines(f: IO[str], lines: list[str], existing_content: str) -> None:

@@ -1,5 +1,35 @@
 import { describe, it, expect } from "vitest";
-import { buildRecordArgs, numericPart } from "./extension.js";
+import { buildRecordArgs, numericPart, splitExecutable } from "./extension.js";
+
+describe("splitExecutable — wrapper command support", () => {
+  it("treats a bare binary as the command with no prefix args", () => {
+    expect(splitExecutable("halyard")).toEqual({
+      command: "halyard",
+      prefixArgs: [],
+    });
+  });
+
+  it("splits a wrapper command like `uv run halyard`", () => {
+    expect(splitExecutable("uv run halyard")).toEqual({
+      command: "uv",
+      prefixArgs: ["run", "halyard"],
+    });
+  });
+
+  it("collapses extra whitespace and trims", () => {
+    expect(splitExecutable("  uvx   halyard  ")).toEqual({
+      command: "uvx",
+      prefixArgs: ["halyard"],
+    });
+  });
+
+  it("falls back to halyard when empty", () => {
+    expect(splitExecutable("   ")).toEqual({
+      command: "halyard",
+      prefixArgs: [],
+    });
+  });
+});
 
 // ---------------------------------------------------------------------------
 // numericPart

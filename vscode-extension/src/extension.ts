@@ -179,9 +179,9 @@ async function recordAISession(context: vscode.ExtensionContext): Promise<void> 
 }
 
 function openDashboard(): void {
-  const executable = config().get<string>("executable", "halyard");
+  const { command, prefixArgs } = resolveExecutable();
   const cwd = workspaceRoot();
-  const child = spawn(executable, ["dashboard", "--open"], {
+  const child = spawn(command, [...prefixArgs, "dashboard", "--open"], {
     cwd,
     detached: true,
     stdio: "ignore",
@@ -288,9 +288,9 @@ function pushOptionalNumber(args: string[], flag: string, value?: number): void 
 }
 
 function runHalyard(args: string[]): Promise<void> {
-  const executable = config().get<string>("executable", "halyard");
+  const { command, prefixArgs } = resolveExecutable();
   return new Promise((resolve, reject) => {
-    execFile(executable, args, { cwd: workspaceRoot() }, (error, _stdout, stderr) => {
+    execFile(command, [...prefixArgs, ...args], { cwd: workspaceRoot() }, (error, _stdout, stderr) => {
       if (error) {
         reject(new Error(stderr.trim() || error.message));
         return;
@@ -345,6 +345,30 @@ function workspaceRoot(): string {
 
 function config(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration("halyard");
+}
+
+/**
+ * Resolve `halyard.executable` into a command + leading args.
+ *
+ * The setting is documented as an "executable or wrapper command", so
+ * values like `uv run halyard` or `uvx halyard` must work. spawn() and
+ * execFile() treat their first argument as a single binary, so a
+ * multi-token string has to be split: the first token is the binary,
+ * the rest are prepended to every invocation's args.
+ */
+export function splitExecutable(raw: string): {
+  command: string;
+  prefixArgs: string[];
+} {
+  const tokens = raw.trim().split(/\s+/).filter((t) => t.length > 0);
+  if (tokens.length === 0) {
+    return { command: "halyard", prefixArgs: [] };
+  }
+  return { command: tokens[0], prefixArgs: tokens.slice(1) };
+}
+
+function resolveExecutable(): { command: string; prefixArgs: string[] } {
+  return splitExecutable(config().get<string>("executable", "halyard"));
 }
 
 function messageOf(error: unknown): string {
