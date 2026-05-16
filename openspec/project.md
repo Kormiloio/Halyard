@@ -505,7 +505,22 @@ layers must read from this local source of truth; they do not replace it.
     Bug-class/internal (spec-exempt); commits 27b8690, 09752bb,
     c042089. **Status: complete (1142 Python tests + 19 vscode).**
 
-36. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+36. **v2.59 — Collector schema-drift canary:** collectors parse the
+    *internal* formats of Claude Code / Cursor / Gemini / Codex; an
+    upstream format change silently degrades capture to unreal-model
+    sessions (no crash — "unavailable is not zero"). `halyard doctor`
+    now flags, per tool, a *sustained* regression: the last
+    `_DRIFT_WINDOW` (5) sessions all have an unreal model while an
+    older session for that tool had a real one (healthy baseline →
+    this is a regression, not a never-worked tool). `warning` not
+    `error` (capture works, enrichment degraded — exit-code contract
+    preserved); detection only (never reads upstream formats); flows
+    through `DoctorReport` so dashboard/TUI inherit it. Per-tool
+    isolated. Spec in
+    `openspec/changes/v2.59-collector-drift-canary/`; 8 tests.
+    **Status: complete (1150 tests passing).**
+
+37. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

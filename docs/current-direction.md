@@ -119,12 +119,14 @@ ask about it. This closes that gap, OSS-scoped and read-only.
   installed but has neither hooks nor MCP, and Codex history not yet
   imported. On-demand, flows through the existing health report.
 
-Followed by a data-trust hardening run (v2.53–v2.56): a parse-time
+Followed by a data-trust hardening run (v2.53–v2.59): a parse-time
 synthetic-row guard, future-dated-session rejection + `seed-demo` fix,
 `DbError` instead of `SystemExit`, a `session_hash` collision guard,
-migration self-heal, active-timer integrity coverage, and shared slug
-validation. Specs: `openspec/changes/v2.50-…` through `v2.53-…` plus
-roadmap items in `openspec/project.md`.
+migration self-heal, active-timer integrity coverage, shared slug
+validation, and a collector schema-drift canary (`halyard doctor`
+warns when a tool's capture regresses to unreal models — detection of
+silent upstream-format breakage). Specs: `openspec/changes/v2.50-…`
+through `v2.59-…` plus roadmap items in `openspec/project.md`.
 
 ---
 
@@ -197,13 +199,14 @@ roadmap items in `openspec/project.md`.
     mirrored there (`org.py`, `org_store.py`, `org_rollups.py`,
     `org_reports.py`, `cost_centers.py`, `sync.py`, `cli_org.py`) are
     frozen in OSS — see CONTRIBUTING.md.
-17. **v2.50–v2.56** — Agent access + ledger-trust hardening —
+17. **v2.50–v2.59** — Agent access + ledger-trust hardening —
     **shipped**: read-only `halyard mcp` server, MCP auto-registration,
     `doctor` unwired-tool nudge, then a data-correctness run (synthetic
     /future-row read guards, seed-demo fix, DbError, hash-collision
     guard, migration self-heal, active-timer integrity, slug
-    validation). See the "Agent Access (MCP)" section above and
-    `openspec/project.md` items 29–35. 1142 tests + 19 vscode.
+    validation, collector schema-drift canary). See the "Agent Access
+    (MCP)" section above and `openspec/project.md` items 29–36.
+    1150 tests + 19 vscode.
 
 ---
 

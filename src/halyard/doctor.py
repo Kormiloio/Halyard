@@ -54,6 +54,7 @@ def build_doctor_report(
     checks.extend(_hub_checks(project_dir, hub_dir))
     checks.extend(_hook_checks(tool, current))
     checks.extend(_unwired_tool_checks(tool, current))
+    checks.extend(_collector_drift_checks(project_dir, hub_dir))
     checks.extend(_collector_state_checks())
     if first_capture:
         checks.append(_first_capture_check(project_dir, hub_dir, now=now or datetime.now()))
@@ -371,6 +372,73 @@ def _unwired_tool_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
                 )
             )
 
+    return checks
+
+
+# Recent-run length and minimum-history gate for the drift canary.
+_DRIFT_WINDOW = 5
+_UNREAL_MODELS = {"", "default"}
+
+
+def _model_unreal(model: str) -> bool:
+    """True if a session's model is a placeholder, not a real model.
+
+    Mirrors collectors._model_is_real (replicated so doctor stays
+    import-light, matching how it already inlines such predicates).
+    """
+    return (not model) or model in _UNREAL_MODELS or model.endswith("-unknown")
+
+
+def _collector_drift_checks(project_dir: Path | None, hub_dir: Path | None) -> list[DoctorCheck]:
+    """Warn when a tool's recent capture regressed to unreal models.
+
+    Detection only: an upstream tool format change makes a collector
+    record sessions without a real model. Per tool, if the most recent
+    _DRIFT_WINDOW sessions are *all* unreal-model while an older session
+    for the same tool had a real model (a healthy baseline → this is a
+    regression, not a never-worked tool), emit a warning. Never error —
+    capture still works, enrichment degraded.
+    """
+    sessions: list[AiSession] = []
+    seen: set[Path] = set()
+    for d in (project_dir, hub_dir):
+        if d is None:
+            continue
+        rd = d.resolve()
+        if rd in seen:
+            continue
+        seen.add(rd)
+        sessions.extend(parse_sessions(d))
+
+    by_tool: dict[str, list[AiSession]] = {}
+    for s in sessions:
+        by_tool.setdefault(s.tool, []).append(s)
+
+    checks: list[DoctorCheck] = []
+    for tool, tool_sessions in sorted(by_tool.items()):
+        if len(tool_sessions) < _DRIFT_WINDOW:
+            continue
+        ordered = sorted(tool_sessions, key=lambda s: s.start)
+        recent = ordered[-_DRIFT_WINDOW:]
+        older = ordered[:-_DRIFT_WINDOW]
+        recent_all_unreal = all(_model_unreal(s.model) for s in recent)
+        had_healthy_baseline = any(not _model_unreal(s.model) for s in older)
+        if recent_all_unreal and had_healthy_baseline:
+            checks.append(
+                DoctorCheck(
+                    id=f"drift.{tool}",
+                    label=f"{tool} (collector drift)",
+                    status="warning",
+                    detail=(
+                        f"last {_DRIFT_WINDOW} {tool} sessions have no real model "
+                        "(was capturing it before) — upstream format may have changed"
+                    ),
+                    fix=(
+                        f"check the {tool} hook/output and the tool's version; "
+                        "`halyard doctor --tool <claude|cursor|gemini>` for hook health"
+                    ),
+                )
+            )
     return checks
 
 
