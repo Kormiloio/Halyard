@@ -18,6 +18,33 @@ _MAX_SESSION_SECONDS = 12 * 3600
 _FUTURE_START_GRACE_SECONDS = 5 * 60
 
 
+def normalise_input(
+    raw_input: int,
+    cache_read: int,
+    cache_write: int,
+    *,
+    cache_inclusive: bool,
+) -> int:
+    """Return fresh (non-cached) input tokens.
+
+    Single token contract (v2.62): a session's ``input_tokens`` is
+    fresh input only; cached tokens live solely in
+    ``cache_read``/``cache_write``. No token is counted in both.
+
+    A collector whose source ``raw_input`` is *gross* (already includes
+    the cached subset — Gemini ``promptTokenCount``, Codex
+    ``input_tokens``) passes ``cache_inclusive=True`` and the cached
+    tokens are subtracted out, floored at 0. A collector whose source
+    is already *exclusive* (Anthropic schema — claude_code, cursor)
+    passes ``cache_inclusive=False`` and the value is returned
+    unchanged — a provable no-op, so a correct collector is byte
+    -identical to pre-v2.62.
+    """
+    if not cache_inclusive:
+        return raw_input
+    return max(0, raw_input - cache_read - cache_write)
+
+
 def session_starts_in_future(session: AiSession, *, now: datetime | None = None) -> bool:
     """True if the session's start has not happened yet.
 

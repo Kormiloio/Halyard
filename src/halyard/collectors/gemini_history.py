@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from halyard.collectors import normalise_input
 from halyard.pricing import calculate_cost
 
 _GEMINI_TMP = Path.home() / ".gemini" / "tmp"
@@ -147,8 +148,8 @@ def parse_session_file(path: Path) -> GeminiSessionSummary | None:
             inp = int(tokens.get("input") or 0)
             cached = int(tokens.get("cached") or 0)
             s.cache_tokens += cached
-            # net input = reported input minus cached (Gemini reports gross input)
-            s.input_tokens += max(0, inp - cached)
+            # Gemini reports gross input (cached subset included).
+            s.input_tokens += normalise_input(inp, cached, 0, cache_inclusive=True)
             s.output_tokens += int(tokens.get("output") or 0)
             s.thinking_tokens += int(tokens.get("thoughts") or 0)
             for tc in tool_calls_raw:

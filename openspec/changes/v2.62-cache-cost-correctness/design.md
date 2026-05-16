@@ -1,19 +1,42 @@
 # v2.62 — Cache-Aware Cost Correctness: Design
 
-## Phase 1 — Audit (no code change; findings recorded here)
+## Phase 1 — Audit (COMPLETE 2026-05-16; no code change)
 
-For each collector, determine from the actual payload/transcript
-schema whether `input_tokens` includes cached tokens:
+Authoritative per-collector token contract, derived from the actual
+capture code + each tool's documented usage schema:
 
-| Collector | Source field(s) | input incl. cache? | cache_write avail? |
-|---|---|---|---|
-| claude_code | `usage.input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` | Anthropic: input is **exclusive** of cache; cache_creation/read separate — verify on a real transcript | yes (already) |
-| cursor | hook usage payload | TBD by audit | yes (already) |
-| gemini_cli | `/quit`-style usage / transcript | TBD — the 1,022,341 vs 838,991 example is the test case | TBD |
-| codex_app | rollout JSONL token fields | TBD | TBD |
+| Collector | Source field(s) | input incl. cache at source? | normalised at capture? | cache_write avail? |
+|---|---|---|---|---|
+| claude_code | `usage.input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` (payload + transcript, same Anthropic schema) | **No — exclusive** (Anthropic Messages API contract: `input_tokens` excludes cache; read/creation are disjoint counts) | n/a (already exclusive) | **Yes** — `cache_creation_input_tokens` captured (`claude_code.py:127,508`) |
+| cursor | stop payload, "structurally identical to Claude Code's Stop payload" — same Anthropic-shaped `usage` block | **No — exclusive** (Anthropic pass-through schema) | n/a (already exclusive) | **Yes** — `cache_creation_input_tokens` captured (`cursor.py:103`). Note: cost is always `0.0` (`billing="credits"`) so $ is moot; invariant matters only for token rollups |
+| gemini_cli | hook: `usageMetadata.promptTokenCount` / `cachedContentTokenCount`; history: `tokens.input` / `tokens.cached` | **Yes — gross** (`promptTokenCount`/`tokens.input` is total prompt *including* cached subset) | **Yes, already** — hook path `net_input = max(0, prompt − cache)` (`gemini_cli.py:234`); history path `s.input_tokens += max(0, inp − cached)` (`gemini_history.py:151`). The 1,022,341 vs 838,991 example → net **183,350**, matching the spec scenario exactly | **No** — Gemini exposes `cachedContentTokenCount` (read) only; no cache-creation field anywhere in payload or history. Correctly stays `None` |
+| codex_app | rollout JSONL `info.total_token_usage`: `input_tokens` / `cached_input_tokens` / `output_tokens` / `total_tokens` | **Yes — gross** (`input_tokens` is total input incl. cached subset) | **Yes, already** — `net_input = max(0, total_input − cached_input)` (`codex_app.py:205`). o-series fallback (output==0) uses `total_tokens` proxy, cost 0 anyway | **No** — `total_token_usage` exposes `cached_input_tokens` (read) only; no cache-creation field. Correctly stays `None` |
 
-The audit result is written back into this design as the
-authoritative per-collector contract before any capture change.
+### Audit conclusion (material — rescopes the change)
+
+1. **The suspected double-count does not exist.** Every collector
+   already emits fresh-only `input_tokens`: claude/cursor because the
+   Anthropic schema is natively exclusive; gemini/codex because both
+   already subtract the cached subset before constructing `AiSession`.
+   No line is currently mispriced on this axis.
+
+2. **`cache_write` for Gemini/Codex is structurally unavailable, not
+   dropped.** Neither tool's payload/transcript exposes a
+   cache-creation token field — only Anthropic (claude/cursor) does,
+   and both already capture it. So "capture cache_write for
+   Gemini/Codex" resolves to "document why it is `None`" (the
+   "unavailable is not zero" rule is already correctly applied).
+
+3. **Therefore the value of v2.62 is regression-proofing + an
+   explicit contract, not a behavioural fix.** The risk was real
+   (an unverified double-count for a trust-first tool) but the
+   verification clears it. Phase 2's `normalise_input` becomes a
+   *codification* of an invariant already met (no observable change;
+   no-op for claude/cursor, equals current `max(0, …)` math for
+   gemini/codex). Phase 3 becomes a documentation task. The durable
+   deliverable is the per-collector regression test that locks the
+   invariant so a future collector/schema change cannot silently
+   reintroduce the double-count.
 
 ## Phase 2 — Normalise at capture
 

@@ -38,6 +38,7 @@ from halyard.ai_log import (
     write_unattributed_session,
 )
 from halyard.collectors import (
+    normalise_input,
     session_has_evidence,
     session_is_implausible,
     session_is_synthetic_telemetry,
@@ -231,7 +232,8 @@ def handle_agent_stop() -> int:
         prompt_tokens = int((state or {}).get("prompt_tokens") or 0)
         output_tokens = int((state or {}).get("output_tokens") or 0)
         cache_tokens = int((state or {}).get("cache_tokens") or 0)
-        net_input = max(0, prompt_tokens - cache_tokens)
+        # Gemini reports gross prompt tokens (cached subset included).
+        net_input = normalise_input(prompt_tokens, cache_tokens, 0, cache_inclusive=True)
         cost = calculate_cost(model, net_input, output_tokens, cache_read=cache_tokens)
         tokens_available = prompt_tokens > 0 or output_tokens > 0
         tags = base_tags + _gc_inferred_tag

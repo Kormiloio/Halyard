@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
+from halyard.collectors import normalise_input
 from halyard.git_context import commits_in_window, current_branch, infer_project
 from halyard.hub import find_hub
 
@@ -202,7 +203,8 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
     # o-series fallback: use total_tokens as net_input proxy, mark breakdown unavailable.
     tokens_available = output_tokens > 0
     if tokens_available:
-        net_input = max(0, total_input - cached_input)
+        # Codex reports gross input (cached subset included).
+        net_input = normalise_input(total_input, cached_input, 0, cache_inclusive=True)
     else:
         net_input = total_tokens
         output_tokens = 0
