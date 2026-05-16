@@ -415,7 +415,7 @@ def attribute_session(
     _write_amendment(project_dir, result)
 
     try:
-        from halyard.db import get_db
+        from halyard.db import DbError, get_db
 
         conn = get_db()
         try:
@@ -423,7 +423,7 @@ def attribute_session(
             conn.commit()
         finally:
             conn.close()
-    except SystemExit:
+    except DbError:
         pass  # db not available — plain-text amendment is sufficient
 
     return True, f"Attributed {result.session_hash[:12]} → {pr_ref} ({pr_state})"

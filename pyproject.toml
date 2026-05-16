@@ -45,7 +45,7 @@ mcp = ["mcp>=1.2"]
 all = ["openai>=1.0", "mcp>=1.2"]
 
 [project.scripts]
-halyard = "halyard.cli:app"
+halyard = "halyard.cli:main"
 
 [project.urls]
 Homepage = "https://kormilo.io/halyard"

@@ -145,6 +145,15 @@ def session_hash(line: str) -> str:
     The hash is computed on the raw ``s`` line *before* any amendments so
     ``a`` records always reference the original session, even if amendments
     later change its semantic meaning.
+
+    12 hex chars = 48 bits. The birthday bound puts a ~50% collision at
+    ~2^24 (≈16M) distinct session lines — orders of magnitude beyond any
+    realistic local/team ledger over its lifetime. The width is *not*
+    cheaply changeable: this value is the join key between ``s`` and
+    ``a`` records in every existing on-disk log, so widening it would
+    orphan all existing amendments. Instead, ``parse_sessions`` detects
+    a genuine collision (same prefix, different raw line) and quarantines
+    rather than silently mis-folding an amendment.
     """
     return hashlib.sha256(line.strip().encode()).hexdigest()[:12]
 
@@ -464,6 +473,7 @@ def parse_sessions(project_dir: Path) -> list[AiSession]:
 
     sessions: list[AiSession] = []
     sessions_by_hash: dict[str, AiSession] = {}  # first occurrence per hash for amendment lookup
+    raw_by_hash: dict[str, str] = {}  # stripped raw line per hash, to detect true collisions
     amendments_by_hash: dict[str, list[Amendment]] = defaultdict(list)
 
     for line in _iter_log_lines(log_path):
@@ -471,6 +481,21 @@ def parse_sessions(project_dir: Path) -> list[AiSession]:
             parsed, error = _parse_line_result(line)
             if parsed is not None:
                 h = session_hash(line)
+                stripped = line.strip()
+                prior = raw_by_hash.get(h)
+                if prior is not None and prior != stripped:
+                    # Two *different* `s` lines produced the same 48-bit
+                    # session_hash prefix. Folding `a` amendments by hash
+                    # would mis-apply one session's correction to the
+                    # other — silent cross-attribution. Astronomically
+                    # rare (~2^24 distinct sessions for 50%), but the
+                    # failure is silent corruption, so quarantine the
+                    # colliding line and drop it rather than fold blindly.
+                    _write_quarantine(
+                        line, f"session_hash collision with a different session ({h})"
+                    )
+                    continue
+                raw_by_hash.setdefault(h, stripped)
                 parsed._raw_hash = h
                 if h not in sessions_by_hash:
                     sessions_by_hash[h] = parsed

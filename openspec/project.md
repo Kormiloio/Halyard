@@ -465,7 +465,22 @@ layers must read from this local source of truth; they do not replace it.
     (spec-exempt); 5 tests in `tests/test_v254_future_session_guard.py`.
     **Status: complete (1112 tests passing).**
 
-34. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+34. **v2.55 — Review hardening (DbError + hash-collision guard):** two
+    code-review findings. (a) `db.py` raised `SystemExit` from
+    library-level code for a needs-reset cache — uncatchable by
+    programmatic/test consumers; now raises a catchable
+    `DbError(RuntimeError)`, mapped to a clean message + exit 1 at a
+    new `cli.main()` entry seam (`[project.scripts]` →
+    `halyard.cli:main`). (b) `session_hash` 48-bit truncation is the
+    `s`↔`a` join key (can't be widened without orphaning existing
+    amendments); documented the bound and added a `parse_sessions`
+    guard that quarantines a genuine prefix collision (same hash,
+    different raw line) instead of silently mis-folding an amendment.
+    Bug-class/internal (spec-exempt); 5 tests in
+    `tests/test_v255_dberror_and_hash_collision.py`.
+    **Status: complete (1117 tests passing).**
+
+35. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 

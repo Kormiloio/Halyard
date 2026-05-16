@@ -13,6 +13,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+
+class DbError(RuntimeError):
+    """The SQLite cache cannot be opened/migrated and needs a manual reset.
+
+    A catchable exception (not ``SystemExit``) so library/programmatic
+    consumers and tests can handle it; the CLI maps it to a clean
+    message + exit 1 at the entry point.
+    """
+
+
 _DB_PATH = Path.home() / ".halyard" / "cache.db"
 
 # Schema version this code expects. Bump whenever a migration is added.
@@ -129,7 +139,7 @@ def get_db() -> sqlite3.Connection:
 
     On a fresh database, creates the schema at _CURRENT_VERSION.
     On an existing database, runs any pending migrations in order.
-    Raises SystemExit if the database requires a manual reset.
+    Raises DbError if the database requires a manual reset.
     """
     _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(_DB_PATH))
@@ -153,7 +163,7 @@ def get_db() -> sqlite3.Connection:
 
     if version > _CURRENT_VERSION:
         conn.close()
-        raise SystemExit(
+        raise DbError(
             f"Cache database is version {version} but this Halyard installation "
             f"only understands up to version {_CURRENT_VERSION}. "
             "Upgrade Halyard or run `halyard db reset`."
@@ -164,7 +174,7 @@ def get_db() -> sqlite3.Connection:
         if version <= from_version:
             if sql == "REQUIRES_RESET":
                 conn.close()
-                raise SystemExit(
+                raise DbError(
                     "Cache schema changed in v2.18 (session IDs are now content-addressed). "
                     "Run `halyard db reset` then `halyard db sync` to rebuild the cache. "
                     "No plain-text data is lost."

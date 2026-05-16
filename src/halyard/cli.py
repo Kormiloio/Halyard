@@ -185,5 +185,25 @@ def signal(
         console.print(f"[green]Started[/] [bold]{timer.slug}[/] at {timer.started}.")
 
 
+def main() -> None:
+    """Console-script entry point.
+
+    Wraps the Typer app so a DbError (cache needs a manual reset)
+    surfaces as a clean message + exit 1 instead of a traceback,
+    no matter which command transitively opened the cache. Library
+    and test callers invoke ``app`` directly and can catch DbError
+    themselves.
+    """
+    import sys
+
+    from halyard.db import DbError
+
+    try:
+        app()
+    except DbError as exc:
+        console.print(f"[bold red]Error:[/] {exc}")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    app()
+    main()
