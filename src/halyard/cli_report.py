@@ -422,7 +422,7 @@ def register(app: typer.Typer) -> None:
         With no --project-dir, aggregates every registered project (+ hub)
         so the default view is your total real work, not a single log.
         """
-        from halyard.dashboard import run_dashboard
+        from halyard.dashboard import DashboardError, run_dashboard
         from halyard.reports import aggregate_session_dirs
 
         if project_dir_opt is None and not aggregate_session_dirs():
@@ -432,7 +432,11 @@ def register(app: typer.Typer) -> None:
             raise typer.Exit(code=1)
 
         # None ⇒ aggregate across all real project logs + hub.
-        run_dashboard(project_dir_opt, port=port, open_browser=open_)
+        try:
+            run_dashboard(project_dir_opt, port=port, open_browser=open_)
+        except DashboardError as exc:
+            console.print(f"[bold red]Error:[/] {exc}")
+            raise typer.Exit(code=1) from exc
 
     @app.command(name="tui")
     def tui_cmd(

@@ -763,3 +763,36 @@ def test_render_dashboard_title_is_the_bridge(tmp_path: Path) -> None:
     html = render_dashboard(tmp_path)
     assert "Halyard · The Bridge" in html
     assert "Halyard Glass Cockpit" not in html
+
+
+def test_run_dashboard_port_in_use_raises_clean_error(tmp_path: Path) -> None:
+    import socket
+
+    from halyard.dashboard import DashboardError, run_dashboard
+
+    _init_project(tmp_path)
+    with socket.socket() as held:
+        held.bind(("127.0.0.1", 0))
+        held.listen(1)
+        taken = held.getsockname()[1]
+        with pytest.raises(DashboardError) as ei:
+            run_dashboard(tmp_path, port=taken)
+    msg = str(ei.value)
+    assert str(taken) in msg
+    assert "already in use" in msg
+
+
+def test_dashboard_cli_port_in_use_exits_one_no_traceback(tmp_path: Path) -> None:
+    import socket
+
+    _init_project(tmp_path)
+    with socket.socket() as held:
+        held.bind(("127.0.0.1", 0))
+        held.listen(1)
+        taken = held.getsockname()[1]
+        result = runner.invoke(
+            app, ["dashboard", "--project-dir", str(tmp_path), "--port", str(taken)]
+        )
+    assert result.exit_code == 1
+    assert "already in use" in result.output
+    assert "Traceback" not in result.output
