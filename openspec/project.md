@@ -465,6 +465,13 @@ layers must read from this local source of truth; they do not replace it.
   foundation and the tools expose usable APIs/hooks. Manual VS Code/Copilot
   capture is allowed and shipped in v2.27.
 - Calendar scheduling is strategic candy; defer.
+- TUI widget/app coverage (`tui/app.py`, `tui/widgets/*`) is a
+  conscious deferral: the state layer `tui/store.py` is 100% covered
+  (it shapes what panes render and is the only correctness-bearing
+  TUI code), but exercising the Textual widgets needs the
+  `Pilot`/`run_test()` harness — high effort, low return while the
+  TUI is a secondary surface behind the CLI and web dashboard.
+  Revisit only if the TUI becomes first-class.
 - The public `ai-sessions.log` spec is published only after at least one
   external tool emits the format. Writing the spec before adoption exists is
   vanity work.

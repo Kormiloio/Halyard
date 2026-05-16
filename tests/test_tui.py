@@ -183,6 +183,118 @@ def test_session_store_branches_sorted_by_recent(tmp_path: Path) -> None:
     assert store.branches() == ["feature", "main"]
 
 
+def test_session_store_load_missing_file(tmp_path: Path) -> None:
+    from halyard.tui.store import SessionStore
+
+    store = SessionStore(tmp_path / "absent.log")
+    store.load()
+    assert store.sessions == []
+    assert store._offset == 0
+
+
+def test_session_store_read_new_lines_no_file(tmp_path: Path) -> None:
+    from halyard.tui.store import SessionStore
+
+    store = SessionStore(tmp_path / "absent.log")
+    assert store.read_new_lines() == []
+
+
+def test_session_store_read_new_lines_appends_and_sorts(tmp_path: Path) -> None:
+    from halyard.ai_log import AI_LOG_FILENAME
+    from halyard.tui.store import SessionStore
+
+    proj = tmp_path
+    (proj / AI_LOG_FILENAME).write_text(HEADER)
+    append_session(proj, _session(start=datetime(2026, 5, 7, 9)))
+
+    store = SessionStore(proj / AI_LOG_FILENAME)
+    store.load()
+    assert len(store.sessions) == 1
+
+    append_session(proj, _session(start=datetime(2026, 5, 7, 12)))
+    parsed = store.read_new_lines()
+
+    assert len(parsed) == 1
+    # Newest-first ordering across old + newly tailed sessions.
+    assert [s.start for s in store.sessions] == [
+        datetime(2026, 5, 7, 12),
+        datetime(2026, 5, 7, 9),
+    ]
+
+
+def test_session_store_read_new_lines_truncation_resets(tmp_path: Path) -> None:
+    from halyard.ai_log import AI_LOG_FILENAME
+    from halyard.tui.store import SessionStore
+
+    log = tmp_path / AI_LOG_FILENAME
+    proj = tmp_path
+    log.write_text(HEADER)
+    append_session(proj, _session())
+
+    store = SessionStore(log)
+    store.load()
+    assert store._offset > 0
+
+    log.write_text(HEADER)  # rotated/truncated smaller than offset
+    assert store.read_new_lines() == []
+    assert store._offset == log.stat().st_size
+    assert store.sessions == []
+
+
+def test_session_store_read_new_lines_amendment_reloads(tmp_path: Path) -> None:
+    from halyard.ai_log import AI_LOG_FILENAME
+    from halyard.tui.store import SessionStore
+
+    log = tmp_path / AI_LOG_FILENAME
+    log.write_text(HEADER)
+    store = SessionStore(log)
+    store.load()
+
+    with log.open("a") as fh:
+        fh.write("a 2026-05-07T10:00:00 deadbeef project acme:new\n")
+
+    # An 'a ' line forces a full reload and yields nothing incrementally.
+    assert store.read_new_lines() == []
+
+
+def test_session_store_filter_week_and_all(tmp_path: Path) -> None:
+    from halyard.tui.store import SessionStore
+
+    now = datetime(2026, 5, 15, 12)
+    store = SessionStore(tmp_path / "ai-sessions.log")
+    store.sessions = [
+        _session(start=now - timedelta(days=3)),  # within week
+        _session(start=now - timedelta(days=20)),  # outside week, same month
+        _session(start=datetime(2026, 1, 1, 9)),  # old
+    ]
+    assert len(store.filter(time_window="week", now=now)) == 1
+    assert len(store.filter(time_window="all", now=now)) == 3
+
+
+def test_session_store_branches_skips_non_branch_tags(tmp_path: Path) -> None:
+    from halyard.tui.store import SessionStore
+
+    store = SessionStore(tmp_path / "ai-sessions.log")
+    store.sessions = [
+        _session(tags=["pr:42", "branch:main", "client:acme"]),
+    ]
+    assert store.branches() == ["main"]
+
+
+def test_parse_session_line_skips_blank_and_comment() -> None:
+    from halyard.tui.store import _parse_session_line
+
+    assert _parse_session_line("") is None
+    assert _parse_session_line("; a comment") is None
+
+
+def test_in_window_all_returns_true() -> None:
+    from halyard.tui.store import _in_window
+
+    # "all" bypasses every date bound (the fall-through branch).
+    assert _in_window(datetime(2000, 1, 1), "all", datetime(2026, 5, 16)) is True
+
+
 def test_session_feed_shows_sessions(tmp_path: Path) -> None:
     pytest.importorskip("textual")
     from halyard.tui.app import HalyardApp
