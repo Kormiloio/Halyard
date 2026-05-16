@@ -146,6 +146,25 @@ cache-write data to recover. History is immutable and is **not**
 retro-corrected; only capture going forward is governed by this
 contract.
 
+### Session time capture (v2.67)
+
+`wall_seconds` and `agent_active_seconds` are captured as before
+(unchanged). Two additional **independent optional** fields,
+`api_seconds` and `tool_seconds`, hold true, *measured* api- and
+tool-call time for **Gemini CLI** only, sourced from the user's
+**opt-in** OpenTelemetry outfile (`telemetry.target:"local"` +
+`telemetry.outfile`). Capture is opt-in and explicit
+(`halyard install-gemini-telemetry` proposes the config; `halyard
+doctor` nudges, warn-only, when the Gemini hook is on but telemetry
+is off). Privacy is capture-only: solely `duration_ms`, the event
+name, and the resource `session.id` are read — never prompt,
+response, or tool-argument content, even when the user set
+`logPrompts:true`. Unavailable (telemetry off, no outfile, no
+matching session) is `None`, never `0` — never estimated. These
+fields are additive and backward compatible; `agent_active_seconds`
+is **not** converted or removed (the breaking change v2.63 specced
+is explicitly rejected).
+
 ### Plan and entitlement cost
 
 Costs that are not naturally per-token: Claude Max, ChatGPT Plus/Team, Cursor

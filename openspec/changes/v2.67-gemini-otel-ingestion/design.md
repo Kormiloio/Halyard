@@ -1,9 +1,37 @@
 # v2.67 — Gemini OpenTelemetry Ingestion: Design
 
-> Spec only — proposed, not started. Supersedes the schema portion of
-> the deferred v2.63 with a non-breaking shape.
+> Phase 0 PASSED 2026-05-16 (gate outcome: **proceed with corrected
+> schema**). Verified against the installed `gemini-cli 0.41.1` from
+> its own bundle source + bundled telemetry docs — no API quota spent.
+> Supersedes the schema portion of the deferred v2.63 with a
+> non-breaking shape.
 
-## Phase 0 — Verify-before-build gate (MANDATORY, blocks all code)
+## Phase 0 — VERIFIED CONTRACT (gemini-cli 0.41.1, 2026-05-16)
+
+Verification method: rather than a live `gemini` run (which would
+spend the user's API quota and need interactive auth), the contract
+was read from the ground-truth installed source — the bundled
+`docs/cli/telemetry.md` (authoritative event/attribute reference for
+this exact version) and the bundled `FileExporter`/telemetry-init
+code. This is stronger than one captured sample because it is the
+implementation itself, not an inferred shape.
+
+**Findings vs the original assumptions:**
+
+| Aspect | Assumed | **Verified (0.41.1)** |
+|---|---|---|
+| `outfile` support | hoped | **YES** — `telemetry.{enabled:true,target:"local",outfile:<path>}` or `GEMINI_TELEMETRY_OUTFILE`; overrides `otlpEndpoint`. Doc example uses `.gemini/telemetry.log` |
+| File framing | "one JSON object per line" | **WRONG** — `createWriteStream(path,{flags:"a"})`, each record `JSON.stringify(rec,null,2)+"\n"`. File = concatenated **pretty-printed multi-line** JSON objects. Line-by-line parsing is impossible; need a streaming JSON-object decoder |
+| Event names | `gemini_cli.api_response` / `gemini_cli.tool_call` | **CONFIRMED** (both present, both carry `duration_ms` int) |
+| `duration_ms` | int on the event | **CONFIRMED** — int attribute on each event log record |
+| `session.id` join level | "resource and/or record, TBD" | **RESOURCE attribute** — `resourceFromAttributes({...,"session.id":config.getSessionId()})` (chunk-NET4RIEQ.js:250642). Not a per-record attribute |
+| Privacy | content separate | **CONFIRMED** — text lives in distinct attrs (`request_text`/`response_text`/`gen_ai.*`); `logPrompts` **defaults `true`** in 0.41.1, so install MUST force `logPrompts:false` and the reader MUST ignore content regardless |
+
+**Gate outcome:** schema differs (framing + session.id level) but is
+fully session-joinable ⇒ per the gate, the reader section below is
+rewritten to the real schema and the change **proceeds**.
+
+## Phase 0 — original verify-before-build gate (kept for the record)
 
 **Lesson from v2.63:** that change was deferred because it assumed a
 Gemini data source's shape. The OTLP schema below
@@ -68,35 +96,55 @@ Serialization: emit `api_seconds=`/`tool_seconds=` only when not
 `None`. Round-trip + forward-compat (older parser ignores unknown
 tokens) covered by tests.
 
-## OTLP outfile reader (`collectors/gemini_otel.py`)
+## OTLP outfile reader (`collectors/gemini_otel.py`) — VERIFIED schema
 
-**ASSUMED schema — must be replaced with Phase 0's verified contract
-before implementation.** Working hypothesis: Gemini CLI with
-`telemetry.target="local"` + `telemetry.outfile=<path>` writes OTLP
-records to that file (assumed one JSON object per line, file exporter
-form), with signals:
+Gemini CLI 0.41.1 with `telemetry.target="local"` +
+`telemetry.outfile=<path>` writes OTLP **log records** to that file
+via `FileLogExporter`, each as `JSON.stringify(record, null, 2)`
+followed by `"\n"`, appended. The file is therefore a **stream of
+concatenated pretty-printed JSON objects** (multi-line, 2-space
+indent) — *not* line-delimited. Signals of interest:
 
-- `gemini_cli.api_response` event — attrs incl. `duration_ms`,
-  `model`, token counts; `session.id` (level TBD: resource vs record).
-- `gemini_cli.tool_call` event — attrs incl. `function_name`,
-  `duration_ms`, `success`; `session.id`.
+- `gemini_cli.api_response` log record — `attributes.duration_ms`
+  (int), `attributes.model`, token counts; the event name is the
+  record body/eventName.
+- `gemini_cli.tool_call` log record — `attributes.duration_ms` (int),
+  `attributes.function_name`, `attributes.success`.
+- `session.id` is a **resource** attribute
+  (`record.resource.attributes["session.id"]`), shared by every
+  record in that process — the join key.
 
-Reader contract (shape stable regardless of exact schema):
+OTel JS `ReadableLogRecord` serialized via `JSON.stringify` yields
+(observed shape): top-level `body`/`severityText`, `attributes`
+(object), and `resource` carrying `attributes` (or `_attributes` /
+`_rawAttributes` depending on SDK internals). The reader probes the
+known resource-attribute container variants and the event name under
+`body` / `eventName` / `attributes["event.name"]` defensively, since
+those are SDK-internal serialization details rather than a documented
+contract.
+
+Reader contract:
 
 - Input: the configured outfile path + the target `session_id`.
-- Bounded read (v2.39 pattern): resolve path, regular-file only, size
-  cap, streamed line parse; any malformed line skipped; any fatal
-  issue ⇒ return `(None, None)`.
-- Aggregate for the matching session only:
-  `api_seconds = round(Σ api duration_ms / 1000)`,
-  `tool_seconds = round(Σ tool duration_ms / 1000)`. `duration_ms` is
-  summed per record (multiple API calls / tool calls per session add
-  up; retries/streaming count as captured time — honest, not
-  estimated). The session-id match MUST handle whichever level Phase 0
-  finds it at (resource attribute and/or record attribute).
-- No matching records ⇒ `(None, None)` (unavailable is not zero).
-- Content fields (`function_args`, prompt/response text) are never
-  read, even if present.
+- Bounded read (v2.39 pattern): resolve real path, regular-file only,
+  enforce a size cap (`_MAX_OTEL_BYTES`), read capped bytes, decode
+  with a **streaming `json.JSONDecoder().raw_decode`** loop over the
+  buffer (skip inter-object whitespace; on a decode error advance to
+  the next `{` and continue; never raise). Any fatal issue ⇒
+  `(None, None)`.
+- Match only records whose resource `session.id` == target
+  `session_id`. For matched records sum by event name:
+  `api_seconds = round(Σ api_response.duration_ms / 1000)`,
+  `tool_seconds = round(Σ tool_call.duration_ms / 1000)`.
+  `duration_ms` is summed per record (multiple API/tool calls per
+  session add up; retries/streaming count as captured time — honest,
+  not estimated).
+- A kind with **zero** matching records stays `None` for that kind
+  (unavailable is not zero); both `None` if nothing matches.
+- Content fields (`function_args`, `request_text`, `response_text`,
+  `gen_ai.input.messages`, `gen_ai.output.messages`, …) are **never
+  read or returned**, even when `logPrompts:true` put them in the
+  file.
 
 ## Collector wiring (`gemini_cli.py`)
 
@@ -130,8 +178,10 @@ with `json`.
 
 ## Tests (`tests/test_v267_gemini_otel.py`)
 
-1. OTLP fixture with api + tool records for a session id → reader
-   returns the summed seconds; non-matching `session.id` excluded.
+1. OTLP fixture in the **real framing** (concatenated pretty-printed
+   multi-line JSON objects, resource-level `session.id`) with api +
+   tool records for a session id → reader returns the summed seconds;
+   records whose resource `session.id` differs are excluded.
 2. Collector end-to-end: gemini stop with a configured outfile →
    `AiSession.api_seconds`/`tool_seconds` set; `agent_active_seconds`
    untouched.

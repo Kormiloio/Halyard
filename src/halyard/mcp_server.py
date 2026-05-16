@@ -109,6 +109,8 @@ def _sessions(
                 "cost_usd": round_money(s.cost_usd),
                 "project": s.project,
                 "branch": s.branch,
+                "api_seconds": s.api_seconds,
+                "tool_seconds": s.tool_seconds,
             }
         )
         if len(out) >= max(1, min(limit, 200)):

@@ -615,8 +615,13 @@ layers must read from this local source of truth; they do not replace it.
     that field stays stored). Opt-in only (`install-gemini-telemetry`
     diff-and-approve; `doctor` nudge), capture-only privacy,
     bounded fail-closed read. Spec in
-    `openspec/changes/v2.67-gemini-otel-ingestion/`.
-    **Status: proposed (spec only).**
+    `openspec/changes/v2.67-gemini-otel-ingestion/`. Phase 0 verified
+    against the installed gemini-cli 0.41.1 (bundle source + bundled
+    docs, no API quota spent): `outfile` supported; file framing is
+    **concatenated pretty-printed JSON** (not line-delimited) and
+    `session.id` is a **resource** attribute — both corrected from the
+    original assumption and recorded in design.md; gate = proceed.
+    **Status: complete (1240 tests passing).**
 
 45. **v2.19 — Attestable AI work appendix:** **MOVED OUT OF OSS SCOPE
    2026-05-14 → [Kormiloio/Halyard-Enterprise](https://github.com/Kormiloio/Halyard-Enterprise).**

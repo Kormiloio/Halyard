@@ -259,6 +259,10 @@ class AiSession:
     tool_errors: int | None = None
     wall_seconds: int | None = None
     agent_active_seconds: int | None = None
+    # v2.67 — Gemini OTLP-measured api/tool time (independent optionals;
+    # agent_active_seconds is left untouched). None = unavailable, not 0.
+    api_seconds: int | None = None
+    tool_seconds: int | None = None
     code_added: int | None = None
     code_removed: int | None = None
     model_breakdown: str | None = None  # compact: "model-a:3|model-b:1"
@@ -381,6 +385,10 @@ class AiSession:
             kvs.append(f"wall_seconds={self.wall_seconds}")
         if self.agent_active_seconds is not None:
             kvs.append(f"agent_active_seconds={self.agent_active_seconds}")
+        if self.api_seconds is not None:
+            kvs.append(f"api_seconds={self.api_seconds}")
+        if self.tool_seconds is not None:
+            kvs.append(f"tool_seconds={self.tool_seconds}")
         if self.code_added is not None:
             kvs.append(f"code_added={self.code_added}")
         if self.code_removed is not None:
@@ -468,6 +476,16 @@ def _iter_log_lines(path: Path) -> Generator[str, None, None]:
             line = raw_line.strip()
             if line and not line.startswith(";"):
                 yield line
+
+
+def api_plus_tool_seconds(session: AiSession) -> int | None:
+    """Display-only sum of OTLP api + tool time, or None if either part
+    is unavailable. Deliberately a module function, not an AiSession
+    property, so it can never be mistaken for stored state.
+    """
+    if session.api_seconds is None or session.tool_seconds is None:
+        return None
+    return session.api_seconds + session.tool_seconds
 
 
 def parse_sessions(project_dir: Path) -> list[AiSession]:
@@ -695,6 +713,12 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
             case "agent_active_seconds":
                 with suppress(ValueError):
                     session.agent_active_seconds = int(v)
+            case "api_seconds":
+                with suppress(ValueError):
+                    session.api_seconds = int(v)
+            case "tool_seconds":
+                with suppress(ValueError):
+                    session.tool_seconds = int(v)
             case "code_added":
                 with suppress(ValueError):
                     session.code_added = int(v)

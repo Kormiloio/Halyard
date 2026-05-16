@@ -274,6 +274,27 @@ def handle_agent_stop() -> int:
         telemetry_trust="observed",
     )
 
+    # v2.67 — best-effort enrich with OTLP-measured api/tool time from
+    # the user's opt-in telemetry outfile. A hook must never crash, so
+    # any failure leaves both fields None (unavailable, not zero).
+    if rich_session_id:
+        try:
+            from halyard.collectors.gemini_otel import (
+                read_otel_durations,
+                resolve_telemetry_outfile,
+            )
+
+            outfile = resolve_telemetry_outfile(cwd)
+            if outfile:
+                out_path = Path(outfile)
+                if not out_path.is_absolute():
+                    out_path = cwd / out_path
+                api_s, tool_s = read_otel_durations(out_path, rich_session_id)
+                session.api_seconds = api_s
+                session.tool_seconds = tool_s
+        except Exception:
+            pass
+
     # A hook fire with no evidence of a real turn (aborted turn,
     # SessionStart-only state, or a spurious/shared invocation) must not
     # become a ledger row. Still reset state so the next turn is clean.

@@ -350,6 +350,47 @@ def _do_install_hook_gemini() -> None:
     console.print(f"[bold green]Gemini CLI hooks installed[/] in [bold]{settings_path}[/]")
 
 
+_GEMINI_OTEL_OUTFILE = str(Path.home() / ".halyard" / "gemini-otel.log")
+
+
+def _do_install_gemini_telemetry() -> None:
+    """Configure Gemini's opt-in local OTLP outfile (v2.67).
+
+    Touches only the four telemetry keys Halyard manages; foreign
+    telemetry keys (otlpEndpoint, useCollector, …) and every other
+    top-level setting are round-tripped intact. Byte-stable no-op when
+    already configured. logPrompts is forced false (capture-only
+    privacy — Gemini 0.41.1 defaults it true).
+    """
+    settings_path = Path.home() / ".gemini" / "settings.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: dict[str, Any] = _load_existing_settings(settings_path)
+    tel = existing.setdefault("telemetry", {})
+    if not isinstance(tel, dict):
+        raise HookWriteError(
+            settings_path,
+            OSError("telemetry is not a JSON object"),
+            message=(
+                f"{settings_path} has a non-object `telemetry` value; refusing to overwrite it."
+            ),
+        )
+    tel["enabled"] = True
+    tel["target"] = "local"
+    tel["outfile"] = _GEMINI_OTEL_OUTFILE
+    tel["logPrompts"] = False
+
+    new_text = json.dumps(existing, indent=2) + "\n"
+    if _settings_unchanged(settings_path, new_text):
+        console.print(f"[yellow]Gemini telemetry already configured[/] in [bold]{settings_path}[/]")
+        return
+    _write_settings(settings_path, new_text)
+    console.print(
+        f"[bold green]Gemini telemetry configured[/] "
+        f"(outfile [bold]{_GEMINI_OTEL_OUTFILE}[/]) in [bold]{settings_path}[/]"
+    )
+
+
 def _do_install_hook_cursor() -> None:
     settings_path = Path.home() / ".cursor" / "hooks.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -618,6 +659,11 @@ def register(app: typer.Typer) -> None:
     def install_gemini_hook() -> None:
         """Deprecated alias for install-hook-gemini."""
         _run_installer(_do_install_hook_gemini)
+
+    @app.command(name="install-gemini-telemetry")
+    def install_gemini_telemetry() -> None:
+        """Enable Gemini's opt-in local OTLP outfile for api/tool time."""
+        _run_installer(_do_install_gemini_telemetry)
 
     @app.command(name="install-hook-cursor")
     def install_hook_cursor() -> None:

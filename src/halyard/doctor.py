@@ -213,7 +213,12 @@ def _hook_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
         elif scope == "cursor":
             checks.append(_cursor_hook_check(required=required))
         elif scope == "gemini":
-            checks.append(_gemini_hook_check(required=required))
+            gem = _gemini_hook_check(required=required)
+            checks.append(gem)
+            if gem.status == "ok":
+                tel = _gemini_telemetry_check()
+                if tel is not None:
+                    checks.append(tel)
     return checks
 
 
@@ -286,6 +291,36 @@ def _gemini_hook_check(*, required: bool) -> DoctorCheck:
         status="error" if required else "warning",
         detail="hooks missing",
         fix="halyard install-gemini-hook",
+    )
+
+
+def _gemini_telemetry_check() -> DoctorCheck | None:
+    """Nudge (warn-only) when the Gemini hook is on but the opt-in OTLP
+    outfile is off, so api/tool time can't be captured (v2.67). Never
+    an error — the doctor exit code must not change.
+    """
+    path = Path.home() / ".gemini" / "settings.json"
+    try:
+        if not path.is_file():
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    tel = data.get("telemetry") if isinstance(data, dict) else None
+    outfile = tel.get("outfile") if isinstance(tel, dict) else None
+    if isinstance(tel, dict) and tel.get("enabled") is not False and outfile:
+        return DoctorCheck(
+            id="telemetry.gemini",
+            label="Gemini telemetry",
+            status="ok",
+            detail="OTLP outfile configured",
+        )
+    return DoctorCheck(
+        id="telemetry.gemini",
+        label="Gemini telemetry",
+        status="warning",
+        detail="off — api/tool time not captured",
+        fix="halyard install-gemini-telemetry",
     )
 
 

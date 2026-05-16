@@ -79,6 +79,11 @@ def _write_gemini_hooks(home: Path) -> None:
     settings.write_text(
         json.dumps(
             {
+                "telemetry": {
+                    "enabled": True,
+                    "target": "local",
+                    "outfile": str(home / ".halyard" / "gemini-otel.log"),
+                },
                 "hooks": {
                     "SessionStart": [
                         {"hooks": [{"type": "command", "command": "/bin/halyard gc-session"}]}
@@ -89,7 +94,7 @@ def _write_gemini_hooks(home: Path) -> None:
                     "AfterAgent": [
                         {"hooks": [{"type": "command", "command": "/bin/halyard gc-hook"}]}
                     ],
-                }
+                },
             }
         )
     )

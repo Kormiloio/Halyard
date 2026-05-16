@@ -8,7 +8,7 @@ from datetime import datetime
 from rich.markup import escape
 from textual.widgets import Static
 
-from halyard.ai_log import AiSession
+from halyard.ai_log import AiSession, api_plus_tool_seconds
 from halyard.budget import load_budgets
 from halyard.tui.formatters import budget_css_class, cost_str, duration_str, tool_icon, truncate
 
@@ -100,6 +100,15 @@ def _health_lines(sessions: list[AiSession]) -> list[str]:
         lines.append(f"  Interaction metadata unavailable: {unavailable} sessions")
     if avg_wall is not None:
         lines.append(f"  Avg wall time: {int(avg_wall)}s across {len(wall_list)} sessions")
+    otel = [s for s in sessions if api_plus_tool_seconds(s) is not None]
+    if otel:
+        api_total = sum(s.api_seconds or 0 for s in otel)
+        tool_total = sum(s.tool_seconds or 0 for s in otel)
+        active_min = round((api_total + tool_total) / 60)
+        lines.append(
+            f"  Active {active_min}m (API {api_total}s · tool {tool_total}s) "
+            f"across {len(otel)} sessions"
+        )
     # Code delta — aggregate across sessions that have it
     added = sum(s.code_added for s in sessions if s.code_added is not None)
     removed = sum(s.code_removed for s in sessions if s.code_removed is not None)

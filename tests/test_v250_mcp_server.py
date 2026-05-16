@@ -98,6 +98,8 @@ def test_sessions_filter(two_projects) -> None:
         "cost_usd",
         "project",
         "branch",
+        "api_seconds",
+        "tool_seconds",
     }
 
 
