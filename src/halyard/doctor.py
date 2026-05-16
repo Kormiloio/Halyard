@@ -396,6 +396,13 @@ _ATTR_WINDOW = 20
 _ATTR_ADRIFT_MARGIN = 0.20
 
 
+def _link_repo_command(remote: str) -> str:
+    """Single source of the adrift remediation command (shared w/ moat)."""
+    from halyard.moat import link_repo_command
+
+    return link_repo_command(remote)
+
+
 def _sessions_for(project_dir: Path | None, hub_dir: Path | None) -> list[AiSession]:
     sessions: list[AiSession] = []
     seen: set[Path] = set()
@@ -476,7 +483,7 @@ def _attribution_quality_checks(
                     f"{remote} attributed cleanly before but its recent sessions "
                     "are all unattributed"
                 ),
-                fix=f"halyard link-repo <client:project> --remote {remote}",
+                fix=_link_repo_command(remote),
             )
         )
     return checks
@@ -604,13 +611,10 @@ def _collector_state_checks() -> list[DoctorCheck]:
     unattributed_count = _count_session_lines(unattributed)
     if unattributed_count:
         groups = _group_unattributed_by_remote(unattributed)
-        from halyard.git_context import _extract_repo_name
-
         fix_lines = ["map each remote (edit the slug, then run):"]
         for remote, count in sorted(groups.items(), key=lambda x: -x[1]):
-            repo = _extract_repo_name(remote) or "project"
             n = f"{count} session{'s' if count != 1 else ''}"
-            fix_lines.append(f"          halyard link-repo client:{repo} --remote {remote}  # {n}")
+            fix_lines.append(f"          {_link_repo_command(remote)}  # {n}")
         checks.append(
             DoctorCheck(
                 id="state.unattributed",

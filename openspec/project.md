@@ -580,8 +580,8 @@ layers must read from this local source of truth; they do not replace it.
     the v2.64 commodity stats (executable ordering invariant). Ranks
     **above v2.64**. Spec in
     `openspec/changes/v2.66-moat-visualization/`.
-    **Status: proposed (spec only).** Best after v2.65 (shipped); $
-    accuracy inherits v2.62 when it lands.
+    **Status: complete (1192 tests passing).** $ accuracy inherits
+    v2.62 when it lands. TUI per-project column deferred (tracked).
 
 44. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include

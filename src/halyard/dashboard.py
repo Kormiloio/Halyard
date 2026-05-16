@@ -383,6 +383,90 @@ def _infer_voyage_stage(sessions: list[AiSession]) -> tuple[str, str, bool]:
     return "Anchors Aweigh", "⚓", True
 
 
+def _moat_panel(state: DashboardState) -> str:
+    """The moat surface — project/client + $ + confidence + outcome.
+
+    Views no single-tool dashboard can draw. Rendered ABOVE the
+    commodity Usage Analytics panel (moat is primary; parity is the
+    floor). Server-rendered, static, no JS.
+    """
+    from halyard.moat import cost_by_client, leakage, project_evidence
+
+    sessions = state.all_sessions
+    if not sessions:
+        return ""
+
+    evidence = project_evidence(sessions, state.project_dir)
+    cbc = cost_by_client(sessions)
+    by_proj_cost: dict[str, float] = {}
+    for pt in cbc:
+        by_proj_cost[pt.project] = by_proj_cost.get(pt.project, 0.0) + pt.cost_usd
+    max_cost = max(by_proj_cost.values(), default=0.0) or 1.0
+
+    cost_rows = "".join(
+        (
+            f'<tr><td class="model-name">{_e(proj)}</td>'
+            f'<td class="num">${cost:,.2f}</td>'
+            f'<td><div class="voyage-bar-outer">'
+            f'<div class="voyage-bar-fill" style="width:{int(100 * cost / max_cost)}%">'
+            f"</div></div></td></tr>"
+        )
+        for proj, cost in sorted(by_proj_cost.items(), key=lambda kv: -kv[1])
+    )
+
+    ev_rows = "".join(
+        (
+            f"<tr><td class='model-name'>{_e(e.project)}</td>"
+            f"<td class='num'>{'—' if e.human_minutes is None else f'{e.human_minutes // 60}h{e.human_minutes % 60:02d}m'}</td>"
+            f"<td class='num'>${e.ai_cost_usd:,.2f}</td>"
+            f"<td class='num'>{e.sessions}</td>"
+            f"<td class='num'>▲{e.shipped} ◐{e.in_flight} ✗{e.abandoned} ·{e.no_pr}</td>"
+            f"<td><span class='pill'>{_e(e.confidence)}</span></td></tr>"
+        )
+        for e in evidence
+    )
+
+    leaks = leakage(Path.home() / ".halyard" / "unattributed.log")
+    if leaks:
+        leak_rows = "".join(
+            (
+                f"<tr><td class='model-name'>{_e(r.remote)}</td>"
+                f"<td class='num'>{r.sessions}</td>"
+                f"<td class='num'>${r.cost_usd:,.2f}</td>"
+                f"<td><code>{_e(r.fix_command)}</code></td></tr>"
+            )
+            for r in leaks
+        )
+        leak_html = (
+            "<h3 class='mini-head'>Leakage — adrift value, one command from recovered</h3>"
+            "<table class='usage-models-rows'><thead><tr>"
+            "<th>Remote</th><th class='num'>Sessions</th><th class='num'>Cost</th>"
+            "<th>Fix (proposed — not run)</th></tr></thead>"
+            f"<tbody>{leak_rows}</tbody></table>"
+        )
+    else:
+        leak_html = "<p class='mini-empty'>No adrift sessions — full attribution.</p>"
+
+    return f"""
+      <article class="panel span-12" data-panel="moat">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Moat · what no single-tool dashboard can show</p>
+            <h2>Project Evidence</h2>
+          </div>
+        </div>
+        <h3 class="mini-head">Billable evidence · per client project</h3>
+        <table class="usage-models-rows"><thead><tr>
+          <th>Project</th><th class="num">Human</th><th class="num">AI&nbsp;cost</th>
+          <th class="num">Sessions</th><th class="num">▲ship ◐open ✗closed ·none</th>
+          <th>Attribution</th></tr></thead>
+          <tbody>{ev_rows}</tbody></table>
+        <h3 class="mini-head">Cost by client</h3>
+        <table class="usage-models-rows"><tbody>{cost_rows}</tbody></table>
+        {leak_html}
+      </article>"""
+
+
 def _voyage_panel(state: DashboardState) -> str:
     """Current Voyage panel — the live work state shown at the top of The Bridge."""
     from datetime import datetime as _dt
@@ -423,6 +507,17 @@ def _voyage_panel(state: DashboardState) -> str:
             if adrift > 0
             else ""
         )
+        from halyard.attribution import format_attribution_mix
+
+        attr_col = (
+            f'<div class="voyage-col">'
+            f'<span class="voyage-label">Attribution</span>'
+            f'<span class="voyage-value" style="font-size:0.8rem">'
+            f"{_e(format_attribution_mix(watch))}</span>"
+            f'<span class="voyage-sub">timer &gt; mapped &gt; toml &gt; auto</span></div>'
+            if total
+            else ""
+        )
         body = f"""
         <div class="voyage-bar-outer"><div class="voyage-bar-fill" style="width:{bar_pct}%"></div></div>
         <div class="voyage-grid">
@@ -444,6 +539,7 @@ def _voyage_panel(state: DashboardState) -> str:
             <span class="voyage-label">Cost · this watch</span>
             <span class="voyage-value">${watch_cost:.4f}</span>
           </div>
+          {attr_col}
           {adrift_col}
         </div>"""
     else:
@@ -703,6 +799,7 @@ def _render_state(
       {_voyage_panel(state)}
       {_captains_quarters_panel(state.project_dir, report.sessions)}
       {_friends_panel(state.project_dir, report.sessions)}
+      {_moat_panel(state)}
 
       <article class="panel span-12" data-panel="usage">
         <div class="panel-head">

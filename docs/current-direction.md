@@ -255,3 +255,10 @@ They should be built when user pull or design-partner evidence justifies them.
   `doctor` canary for attribution regression. Cost correctness and
   attribution confidence get equal investment — protecting only the
   copyable half is not protecting the moat.
+- **The moat has a dedicated visual surface above the parity floor
+  (v2.66).** Commodity stats (tokens/streaks/models, v2.64) match
+  single-tool dashboards. The moat surface — cost-by-client,
+  attribution-confidence trend, per-project billable-evidence cards,
+  leakage funnel — shows what no single-tool view can, and renders
+  *above* the commodity panels by an executable ordering invariant.
+  Moat graphs rank above parity graphs in build order.

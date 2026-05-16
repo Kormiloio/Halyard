@@ -191,3 +191,22 @@ MVP data sources:
 - Unattributed sessions are visible before invoice generation.
 - The dashboard uses the same report calculations as the CLI.
 - The dashboard never becomes required for the core local CLI workflow.
+
+## Moat surface (v2.66) — ranks above commodity parity
+
+The dashboard's commodity stats (tokens, streaks, models — the v2.64
+parity floor) match what any single-tool dashboard shows. The **moat
+surface** shows what none of them can, because none have a project,
+client, dollar, attribution provenance, or outcome:
+
+- **Billable evidence per client project** — human time + AI cost +
+  outcome split (shipped/in-flight/abandoned via `pr_state`) +
+  attribution confidence chip.
+- **Cost by client** — spend, not tokens, per client project.
+- **Leakage funnel** — adrift $ per remote, each with its exact
+  `halyard link-repo` fix (proposed, never run).
+
+These panels render **above** the commodity Usage panel by default and
+that ordering is enforced by an executable test: parity is the price
+of admission; the moat is the reason to stay, and is never demoted to
+make room for vanity stats.

@@ -25,6 +25,8 @@ _EXPECTED_PANELS = {
     "voyage",
     "captains-quarters",
     "friends",
+    # moat surface (v2.66) — ranks above commodity Usage
+    "moat",
     # inline grid panels
     "usage",
     "leverage",
