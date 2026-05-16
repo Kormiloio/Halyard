@@ -192,6 +192,35 @@ MVP data sources:
 - The dashboard uses the same report calculations as the CLI.
 - The dashboard never becomes required for the core local CLI workflow.
 
+## Stats parity surface (v2.64) — shipped
+
+The commodity "price of admission": the Usage panel matches the stat
+screen a developer already sees in their single tool, so Halyard never
+looks like *less*. Built almost entirely on existing `UsageAnalytics`
+(audit found the data already there) — only one new aggregate.
+
+- **Headline cards**: sessions, **messages** (new aggregate —
+  `total_messages` with `message_data_missing_sessions`, mirroring the
+  token-missing trust pattern; absent counts are not faked as 0),
+  total tokens, active days, current streak, longest streak, peak
+  hour, favorite model. Cost stays a card, labelled `· moat`.
+- **Contribution heatmap**: range-aware (respects 7d/30d/all), 5
+  intensity buckets, legend.
+- **Models series**: real per-day per-model stacked chart from
+  `DailyUsageBucket.model_io` (the prior chart used a window-wide
+  proportional approximation; v2.64 retains the true per-day-per-model
+  input/output split, multi-model aware), legend shows per-model
+  in/out + % share.
+- **Flavour line**: one optional, clearly non-authoritative comparison
+  ("not billable"), dashboard-only — never on report or invoice (the
+  trust-bearing surfaces).
+- **TUI parity**: the `UsagePane` carries the same headline figures
+  incl. messages (owner-approved carve-out from the TUI-deferral
+  policy for the strategic first-impression surface).
+- **Moat-protection invariant**: the parity surface is additive; cost
+  + project attribution panels remain present (executable regression
+  guard).
+
 ## Moat surface (v2.66) — ranks above commodity parity
 
 The dashboard's commodity stats (tokens, streaks, models — the v2.64

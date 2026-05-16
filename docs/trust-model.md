@@ -80,13 +80,22 @@ halyard invoice acme --include-ai-evidence
 
 The AI evidence appendix groups costs by type and includes a footnote explaining what `allocated` and `inferred` mean. Clients receive an honest picture of what is measured directly versus what is estimated.
 
-## In attestable appendices
+## In evidence artifacts and attestable appendices
 
-The planned attestable appendix uses the same trust labels. Signing the appendix
-proves the evidence packet matches the local ledger snapshot; it does not turn
-allocated or inferred values into captured facts. A verified appendix should
-still tell the reader which numbers were measured, calculated, allocated, or
-inferred.
+`halyard evidence` (v2.68, OSS) emits the same appendix as a standalone
+artifact plus a keyless `sha256:` digest. Mirroring the v2.40 hash-vs-hmac
+distinction: this digest is **tamper-evident** (the author can publish it; anyone
+can re-hash the file to detect post-hoc edits) but is **not** a signature and
+does **not** prove authorship. The artifact says so in plain text — no
+overclaiming. It does not turn allocated or inferred values into captured facts;
+the trust labels still tell the reader which numbers were measured, calculated,
+allocated, or inferred.
+
+Cryptographic attestation — a *signed*, cross-party-verifiable appendix whose
+value is a recipient trusting the signer — is a Halyard Enterprise feature
+(`Kormiloio/Halyard-Enterprise`, the moved v2.19), deliberately out of OSS
+scope. Signing proves the evidence packet matches the local ledger snapshot; it
+still does not reclassify allocated/inferred numbers as captured.
 
 ## Design principle
 

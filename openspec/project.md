@@ -534,17 +534,33 @@ layers must read from this local source of truth; they do not replace it.
     seam. Spec in `openspec/changes/v2.61-multimodel-attribution/`.
     **Status: complete (1168 tests passing).**
 
-39. **v2.62 — Cache-aware cost correctness:** audit per-collector
-    input/cache token semantics (possible double-count); enforce
-    fresh-input invariant; capture `cache_write` for Gemini/Codex.
-    Spec in `openspec/changes/v2.62-cache-cost-correctness/`.
-    **Status: proposed (spec only).**
+39. **v2.62 — Cache-aware cost correctness:** audited per-collector
+    input/cache token semantics. **Finding: no live double-count** —
+    claude_code/cursor get Anthropic-schema input (natively exclusive
+    of cache); gemini_cli/codex_app already subtract the cached subset
+    at capture. Rescoped from a bug fix to regression-proofing: shared
+    `normalise_input` seam codifies the fresh-input invariant (no-op
+    for the exclusive collectors, behaviour-identical for the gross
+    ones), 8 lock-in tests incl. double-count regression + no-op
+    proof, PRD "Token contract" subsection. `cache_write` is
+    structurally unavailable for Gemini/Codex (no cache-creation
+    field) → documented `None`, not dropped; history immutable, not
+    retro-corrected. Spec in
+    `openspec/changes/v2.62-cache-cost-correctness/`.
+    **Status: complete (1198 tests passing).**
 
-40. **v2.63 — Session time decomposition:** add `api_seconds` /
-    `tool_seconds` (+ derived `agent_active_seconds`); capture where
-    the tool exposes it (Gemini `/quit`, Codex). Spec in
-    `openspec/changes/v2.63-session-time-decomposition/`.
-    **Status: proposed (spec only).**
+40. **v2.63 — Session time decomposition:** **DEFERRED 2026-05-16**
+    after a Phase 0 audit. Unbuildable as specced: (1)
+    `agent_active_seconds` is already a stored/serialized field
+    (work_health + record-session CLI) — "derive it, never store"
+    would be a breaking change; (2) Gemini exposes no api/tool split
+    to any collector by default — the `/quit` summary is terminal
+    -only, on-disk session JSON has timestamps but no durations, and
+    structured api/tool latency exists solely via opt-in
+    OpenTelemetry. Deferred until a collector can see the split; the
+    OTEL path is split out as **v2.67**. Codex `tool_seconds` alone
+    isn't worth a schema bump. Audit in
+    `openspec/changes/v2.63-session-time-decomposition/design.md`.
 
 41. **v2.64 — Stats & graphs parity surface (commodity only):** match
     the table-stakes stats single-tool dashboards show (heatmap,
@@ -552,9 +568,15 @@ layers must read from this local source of truth; they do not replace it.
     `UsageAnalytics` data — the "parity floor" so the moat lands.
     Rescoped: this is the *commodity* half only; the moat-shaped
     graphs are **v2.66**, which **ranks above this**. Additive; moat
-    panels stay primary. Spec in
+    panels stay primary. Phase 0 audit found the data layer already
+    rich (`UsageAnalytics.daily` exists → `daily_activity` dropped;
+    only `total_messages` + per-day-per-model `model_io` added). The
+    prior Models chart used a window-wide *approximation*; v2.64
+    replaces it with the real per-day-per-model in/out split.
+    Owner-approved carve-out: full TUI widget parity (not just
+    information parity) despite the TUI-deferral policy. Spec in
     `openspec/changes/v2.64-stats-graphs-parity/`.
-    **Status: proposed (spec only).** Lower priority than v2.66.
+    **Status: complete (1206 tests passing).**
 
 42. **v2.65 — Attribution integrity & visibility:** the under-protected
     moat half. `attr_method` collapses the inference chain into `git`
@@ -583,9 +605,46 @@ layers must read from this local source of truth; they do not replace it.
     **Status: complete (1192 tests passing).** $ accuracy inherits
     v2.62 when it lands. TUI per-project column deferred (tracked).
 
-44. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
-   proof of AI-assisted work. Gated on v2.24 so the appendix can include
-   commit and PR evidence.
+44. **v2.67 — Gemini OpenTelemetry ingestion:** the split-out of
+    v2.63's deferred api/tool-time goal via its only real source —
+    Gemini CLI's opt-in OTLP outfile (`gemini_cli.api_response` /
+    `gemini_cli.tool_call` measured `duration_ms`, joined by
+    `session.id`). Lands v2.63's `api_seconds`/`tool_seconds` as
+    **independent optional fields** (NOT the breaking
+    `agent_active_seconds`-as-property conversion v2.63 specced —
+    that field stays stored). Opt-in only (`install-gemini-telemetry`
+    diff-and-approve; `doctor` nudge), capture-only privacy,
+    bounded fail-closed read. Spec in
+    `openspec/changes/v2.67-gemini-otel-ingestion/`.
+    **Status: proposed (spec only).**
+
+45. **v2.19 — Attestable AI work appendix:** **MOVED OUT OF OSS SCOPE
+   2026-05-14 → [Kormiloio/Halyard-Enterprise](https://github.com/Kormiloio/Halyard-Enterprise).**
+   A signed, verifiable, client-safe proof artifact is a *bottoms-up
+   enterprise* feature: its value rises with cross-party use (a
+   recipient verifying a signed appendix), so it does not fit
+   single-user OSS scope. The OSS repo already ships the solo-user
+   slice — local trust-labelled invoice evidence + v3.0 invoice
+   -appendix PR refs (unsigned). Signing/verification/cross-party
+   trust lives in the enterprise repo. See `docs/current-direction.md`
+   §15. **Not an OSS changeset — do not implement here.** The
+   OSS-safe solo-user slice is split out as **v2.68**.
+
+46. **v2.68 — Local AI-work evidence appendix (OSS slice of v2.19):**
+   the single-user half that legitimately stays in OSS. Audit found
+   `render_ai_evidence_appendix` already exists but is invoice
+   -embedded only with no integrity marker. Adds a standalone
+   `halyard evidence` command (reuses the renderer verbatim) + a
+   deterministic `sha256:` self-digest that is tamper-**evident**
+   (author can publish/re-hash) but explicitly **not** signing or
+   authorship proof — that stays enterprise (v2.19). Honest-boundary
+   statement in the artifact; no overclaim (v2.40 discipline).
+   `evidence.py` + `halyard evidence` (`--all/--project/--client/
+   --month`, stdout default, `--out`/`--force`, `--verify`); renderer
+   reused verbatim; digest excludes the footer + wall-clock so it is
+   reproducible. Spec in
+   `openspec/changes/v2.68-local-evidence-appendix/`.
+   **Status: complete (1217 tests passing).**
 
 ## Deferred or gated
 
@@ -604,7 +663,12 @@ layers must read from this local source of truth; they do not replace it.
   TUI code), but exercising the Textual widgets needs the
   `Pilot`/`run_test()` harness — high effort, low return while the
   TUI is a secondary surface behind the CLI and web dashboard.
-  Revisit only if the TUI becomes first-class.
+  Revisit only if the TUI becomes first-class. **Carve-out (v2.64,
+  owner-approved 2026-05-16):** the `UsagePane` stats parity content
+  is exercised directly (it renders to `last_rendered_text`, no Pilot
+  harness needed) because the parity surface is the strategic
+  first-impression; this is a deliberate, scoped exception, not a
+  reversal of the broader deferral.
 - The public `ai-sessions.log` spec is published only after at least one
   external tool emits the format. Writing the spec before adoption exists is
   vanity work.

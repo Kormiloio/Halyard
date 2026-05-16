@@ -256,8 +256,10 @@ They should be built when user pull or design-partner evidence justifies them.
   attribution confidence get equal investment — protecting only the
   copyable half is not protecting the moat.
 - **The moat has a dedicated visual surface above the parity floor
-  (v2.66).** Commodity stats (tokens/streaks/models, v2.64) match
-  single-tool dashboards. The moat surface — cost-by-client,
+  (v2.66).** Commodity stats (tokens/streaks/models, v2.64 —
+  **shipped**: headline cards incl. the new messages aggregate,
+  range-aware heatmap, real per-day-per-model chart, dashboard-only
+  flavour line, TUI parity) match single-tool dashboards. The moat surface — cost-by-client,
   attribution-confidence trend, per-project billable-evidence cards,
   leakage funnel — shows what no single-tool view can, and renders
   *above* the commodity panels by an executable ordering invariant.

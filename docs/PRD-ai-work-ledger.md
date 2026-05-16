@@ -116,6 +116,36 @@ A higher-level aggregation of one or more AI sessions that belong to a task,
 plan, deliverable, or job. This may be represented by `job_id`, `task_id`, or
 future record types.
 
+### Token contract (v2.62)
+
+Every collector emits `input_tokens` as **fresh, non-cached input
+only**. Cached tokens live solely in `cache_read` / `cache_write`; no
+token is ever counted in both. Cost is then `input × 1.0× +
+cache_read × read_mult + cache_write × write_mult`, so a cached token
+is never billed at both the full input rate and the cache rate.
+
+Per-collector semantics (audited v2.62):
+
+- **claude_code / cursor** — receive the Anthropic usage schema, where
+  `input_tokens` is natively *exclusive* of cache; `cache_read` and
+  `cache_write` are separate, disjoint counts. Both already capture
+  `cache_write` (Anthropic `cache_creation_input_tokens`).
+- **gemini_cli / codex_app** — the source reports *gross* prompt input
+  (the cached subset is included). Halyard subtracts the cached tokens
+  at capture so the stored `input_tokens` is fresh-only.
+- **`cache_write` is structurally unavailable for Gemini and Codex** —
+  neither tool's payload/transcript exposes a cache-*creation* token
+  field, so `cache_write` is correctly `None` (unavailable is not
+  zero), and their cost simply omits the cache-write term.
+
+**Documented pre-v2.62 history caveat:** Halyard never billed cached
+Gemini/Codex tokens twice (the subtraction predates v2.62), but
+because those tools expose no cache-creation signal, any pre-v2.62
+Gemini/Codex line still under-counts cache *writes* — there is no
+cache-write data to recover. History is immutable and is **not**
+retro-corrected; only capture going forward is governed by this
+contract.
+
 ### Plan and entitlement cost
 
 Costs that are not naturally per-token: Claude Max, ChatGPT Plus/Team, Cursor
@@ -144,6 +174,13 @@ Required capabilities:
   health, and cost attribution as work happens.
 - Show margin inputs: human billable amount, AI cost, and AI cost percentage.
 - Export invoice evidence as markdown.
+- Emit a standalone AI-work evidence artifact (`halyard evidence`, v2.68)
+  for any deliverable — not just invoices — reusing the same appendix
+  renderer, with a deterministic keyless `sha256:` integrity digest.
+  The digest is tamper-evident (re-hashable by anyone via
+  `halyard evidence --verify`) but is explicitly not a signature and
+  not authorship proof; cryptographic attestation is a Halyard
+  Enterprise feature (the moved v2.19), out of OSS scope.
 
 ## Later Scope
 
