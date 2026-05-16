@@ -949,6 +949,7 @@ def _render_state(
     }
     </footer>
   </main>
+  {_scroll_preserve_script()}
   {_layout_script()}
   {_health_popup_script()}
   {_celebration_script()}
@@ -2022,6 +2023,42 @@ def _e(value: object) -> str:
 
 def _panel_status_pill(text: str, state: str) -> str:
     return f"<span class='pill pill-{_e(state)}'>{_e(text)}</span>"
+
+
+def _scroll_preserve_script() -> str:
+    """Keep the scroll position across reloads.
+
+    The dashboard is server-rendered: the 7d/30d/All and Overview/Models
+    controls are plain links, and a `<meta http-equiv="refresh">` hard-
+    reloads every 10s. Both reset scroll to the top, which feels broken
+    when you're reading a panel mid-page. Persist scrollY to
+    sessionStorage and restore it on load (manual restoration so the
+    browser's own guess doesn't fight it). Wrapped so any failure just
+    leaves native behaviour intact.
+    """
+    return """<script>
+(function(){
+  try {
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    var KEY = 'halyard-scroll-v1';
+    var restore = function(){
+      var y = parseInt(sessionStorage.getItem(KEY) || '', 10);
+      if (!isNaN(y)) window.scrollTo(0, y);
+    };
+    if (document.readyState !== 'loading') restore();
+    else document.addEventListener('DOMContentLoaded', restore);
+    window.addEventListener('load', restore);
+    var save = function(){
+      try { sessionStorage.setItem(KEY, String(window.scrollY)); } catch(e){}
+    };
+    window.addEventListener('scroll', save, { passive: true });
+    window.addEventListener('beforeunload', save);
+    document.addEventListener('visibilitychange', function(){
+      if (document.visibilityState === 'hidden') save();
+    });
+  } catch(e){}
+})();
+</script>"""
 
 
 def _layout_script() -> str:
