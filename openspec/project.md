@@ -480,7 +480,32 @@ layers must read from this local source of truth; they do not replace it.
     `tests/test_v255_dberror_and_hash_collision.py`.
     **Status: complete (1117 tests passing).**
 
-35. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+35. **v2.56 — External-review hardening batch (6 findings):**
+    - **P1-a** tz-aware ISO log rows crashed `parse_sessions` (v2.54
+      regression: aware `start` vs naive `now`). Normalised at the
+      parse boundary + guard coerces aware input.
+    - **P1-b** a partially-applied multi-statement migration could be
+      marked complete (`executescript` aborts at the first re-hit
+      ALTER, remaining ALTERs skipped, `user_version` still bumped).
+      New `_apply_migration` applies each statement idempotently so a
+      partial migration self-heals.
+    - **P1-c** active-timer state bypassed `read_trusted_state` — v2.40
+      tamper detection never applied to `~/.halyard/active`; writes
+      passed no mode so no sidecar was written. Now writes resolve the
+      owning project's mode and reads verify + fail closed; a present
+      sidecar (`detect_sidecar_mode`) blocks the downgrade-via-tampered
+      -path hole.
+    - **P2** shared `halyard.slug` validator (was: only checked for a
+      `/`) enforced in `halyard start` + dashboard `/api/start`;
+      `_amendment_line` runs values through `_safe_field`.
+    - **P2** vscode `halyard.executable` wrapper commands
+      (`uv run halyard`) now work via `splitExecutable`.
+    - **P2** vscode vitest scoped to `src/**/*.test.ts` (compiled
+      `out/` no longer breaks `npm test`).
+    Bug-class/internal (spec-exempt); commits 27b8690, 09752bb,
+    c042089. **Status: complete (1142 Python tests + 19 vscode).**
+
+36. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 
