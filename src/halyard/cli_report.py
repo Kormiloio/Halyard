@@ -226,6 +226,11 @@ def register(app: typer.Typer) -> None:
                     f"  {tbucket.sessions} sessions  {tok_label}"
                 )
 
+        if ai_report.sessions:
+            from halyard.attribution import format_attribution_mix
+
+            console.print(f"\n[bold]Attribution[/]  {format_attribution_mix(ai_report.sessions)}")
+
         branch_sessions = [(s.branch, s) for s in ai_report.sessions if s.branch]
         if branch_sessions:
             from collections import Counter

@@ -248,3 +248,10 @@ They should be built when user pull or design-partner evidence justifies them.
   outcome/PR linkage, local plaintext ownership. Parity is the price
   of admission; the moat is the reason to stay. Parity work is
   additive — it never removes or demotes a moat surface to make room.
+- **Attribution carries a confidence label, like cost trust (v2.65).**
+  Project attribution is the irreplaceable half of the moat, so its
+  provenance is never collapsed to one value: `timer` > `mapped` >
+  `toml` > `auto` > adrift, surfaced in CLI/dashboard/MCP, with a
+  `doctor` canary for attribution regression. Cost correctness and
+  attribution confidence get equal investment — protecting only the
+  copyable half is not protecting the moat.

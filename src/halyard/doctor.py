@@ -55,6 +55,7 @@ def build_doctor_report(
     checks.extend(_hook_checks(tool, current))
     checks.extend(_unwired_tool_checks(tool, current))
     checks.extend(_collector_drift_checks(project_dir, hub_dir))
+    checks.extend(_attribution_quality_checks(project_dir, hub_dir))
     checks.extend(_collector_state_checks())
     if first_capture:
         checks.append(_first_capture_check(project_dir, hub_dir, now=now or datetime.now()))
@@ -389,6 +390,98 @@ def _model_unreal(model: str) -> bool:
     return (not model) or model in _UNREAL_MODELS or model.endswith("-unknown")
 
 
+# Recent/prior window for the attribution-quality canary, and the
+# adrift-share rise (percentage points) that trips it.
+_ATTR_WINDOW = 20
+_ATTR_ADRIFT_MARGIN = 0.20
+
+
+def _sessions_for(project_dir: Path | None, hub_dir: Path | None) -> list[AiSession]:
+    sessions: list[AiSession] = []
+    seen: set[Path] = set()
+    for d in (project_dir, hub_dir):
+        if d is None:
+            continue
+        rd = d.resolve()
+        if rd in seen:
+            continue
+        seen.add(rd)
+        sessions.extend(parse_sessions(d))
+    return sessions
+
+
+def _attribution_quality_checks(
+    project_dir: Path | None, hub_dir: Path | None
+) -> list[DoctorCheck]:
+    """Warn when project attribution *regresses* (detection only).
+
+    Two signals, both `warning` (never `error` — attribution gaps
+    don't break Halyard, they erode the moat):
+
+    - adrift-rate regression: the recent window is markedly more
+      unattributed than the prior window (a config/mapping broke);
+    - per-remote regression: a remote that had attributed sessions in
+      the prior window now produces only unattributed ones (moved
+      project / repos.toml drift / deleted halyard.toml).
+    """
+    sessions = _sessions_for(project_dir, hub_dir)
+    if len(sessions) < 2 * _ATTR_WINDOW:
+        return []
+    ordered = sorted(sessions, key=lambda s: s.start)
+    prior = ordered[-2 * _ATTR_WINDOW : -_ATTR_WINDOW]
+    recent = ordered[-_ATTR_WINDOW:]
+
+    checks: list[DoctorCheck] = []
+
+    def adrift_share(rows: list[AiSession]) -> float:
+        return sum(1 for s in rows if not s.project) / len(rows) if rows else 0.0
+
+    prior_share = adrift_share(prior)
+    recent_share = adrift_share(recent)
+    if recent_share - prior_share > _ATTR_ADRIFT_MARGIN:
+        checks.append(
+            DoctorCheck(
+                id="attr.adrift_regression",
+                label="Attribution (adrift rising)",
+                status="warning",
+                detail=(
+                    f"unattributed share rose {prior_share:.0%} → {recent_share:.0%} "
+                    f"over the last {_ATTR_WINDOW} sessions"
+                ),
+                fix=(
+                    "a project mapping likely broke — `halyard doctor` lists "
+                    "unattributed remotes; re-run `halyard link-repo`/`halyard adopt`"
+                ),
+            )
+        )
+
+    def attributed_remotes(rows: list[AiSession]) -> set[str]:
+        return {s.remote for s in rows if s.remote and s.project}
+
+    def remotes_now_all_adrift(rows: list[AiSession]) -> set[str]:
+        by_remote: dict[str, list[AiSession]] = {}
+        for s in rows:
+            if s.remote:
+                by_remote.setdefault(s.remote, []).append(s)
+        return {r for r, rs in by_remote.items() if all(not s.project for s in rs)}
+
+    regressed = attributed_remotes(prior) & remotes_now_all_adrift(recent)
+    for remote in sorted(regressed):
+        checks.append(
+            DoctorCheck(
+                id=f"attr.remote.{remote}",
+                label="Attribution (remote regressed)",
+                status="warning",
+                detail=(
+                    f"{remote} attributed cleanly before but its recent sessions "
+                    "are all unattributed"
+                ),
+                fix=f"halyard link-repo <client:project> --remote {remote}",
+            )
+        )
+    return checks
+
+
 def _collector_drift_checks(project_dir: Path | None, hub_dir: Path | None) -> list[DoctorCheck]:
     """Warn when a tool's recent capture regressed to unreal models.
 
@@ -511,9 +604,13 @@ def _collector_state_checks() -> list[DoctorCheck]:
     unattributed_count = _count_session_lines(unattributed)
     if unattributed_count:
         groups = _group_unattributed_by_remote(unattributed)
-        fix_lines = ["run 'halyard adopt' in each repo:"]
+        from halyard.git_context import _extract_repo_name
+
+        fix_lines = ["map each remote (edit the slug, then run):"]
         for remote, count in sorted(groups.items(), key=lambda x: -x[1]):
-            fix_lines.append(f"          {remote} ({count} session{'s' if count != 1 else ''})")
+            repo = _extract_repo_name(remote) or "project"
+            n = f"{count} session{'s' if count != 1 else ''}"
+            fix_lines.append(f"          halyard link-repo client:{repo} --remote {remote}  # {n}")
         checks.append(
             DoctorCheck(
                 id="state.unattributed",

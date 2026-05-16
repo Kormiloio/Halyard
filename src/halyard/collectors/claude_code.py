@@ -38,6 +38,7 @@ from halyard.git_context import (
     current_remote,
     head_sha,
     infer_project,
+    infer_project_with_source,
     numstat_delta,
 )
 from halyard.hub import find_hub
@@ -205,8 +206,8 @@ def handle_stop_hook() -> int:
         _attr_method = "timer"
         _extra_tags = []
     else:
-        _project = infer_project(cwd)
-        _attr_method = "git" if _project else None
+        _project, _rung = infer_project_with_source(cwd)
+        _attr_method = _rung  # repo-map | toml | git-auto | None
         _extra_tags = ["attribution:inferred"] if _project else []
 
     _remote = current_remote(cwd)

@@ -45,6 +45,13 @@ def _in_window(s: AiSession, start: datetime, end: datetime) -> bool:
     return start <= s.end <= end
 
 
+def _attribution_mix_block(sessions: list[AiSession]) -> dict[str, int]:
+    """Per-confidence session counts (timer/mapped/toml/auto/unknown/none)."""
+    from halyard.attribution import attribution_mix
+
+    return {str(k): v for k, v in attribution_mix(sessions).items()}
+
+
 def _work_summary(period: Period = "30d") -> dict[str, Any]:
     start, end, label = _window(period)
     sessions = [s for s in _aggregate_sessions() if _in_window(s, start, end)]
@@ -65,6 +72,7 @@ def _work_summary(period: Period = "30d") -> dict[str, Any]:
         "top_projects": [{"project": p, "cost_usd": round_money(c)} for p, c in top],
         "adrift_sessions": adrift,
         "adrift_pct": round(100 * adrift / n, 1) if n else 0.0,
+        "attribution_mix": _attribution_mix_block(sessions),
         "outcomes": _outcomes_status(period),
         "generated_at": datetime.now().isoformat(timespec="seconds"),
     }

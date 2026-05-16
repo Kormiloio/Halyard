@@ -40,22 +40,37 @@ def _slug_from_halyard_toml(cwd: Path) -> str | None:
     return None
 
 
-def infer_project(cwd: Path) -> str | None:
-    """Return a project slug inferred from cwd, or None."""
+def infer_project_with_source(cwd: Path) -> tuple[str | None, str | None]:
+    """Return (slug, rung) inferred from cwd.
+
+    rung records *which* chain step produced the slug so attribution
+    confidence is not collapsed to a single "git":
+      - "toml"     — halyard.toml [project].slug walk-up (high)
+      - "repo-map" — explicit ~/.halyard/repos.toml mapping (high)
+      - "git-auto" — derived git/<repo-name> slug (low)
+    Both are None when nothing could be inferred.
+    """
     slug = _slug_from_halyard_toml(cwd)
     if slug:
-        return slug
+        return slug, "toml"
 
     remote = _git_remote_url(cwd)
     if remote is None:
-        return None
+        return None, None
 
-    for pattern, slug in _load_repos_config().items():
+    for pattern, mapped in _load_repos_config().items():
         if _remote_matches(remote, pattern):
-            return slug
+            return mapped, "repo-map"
 
     repo_name = _extract_repo_name(remote)
-    return f"git/{repo_name}" if repo_name else None
+    if repo_name:
+        return f"git/{repo_name}", "git-auto"
+    return None, None
+
+
+def infer_project(cwd: Path) -> str | None:
+    """Return a project slug inferred from cwd, or None (back-compat)."""
+    return infer_project_with_source(cwd)[0]
 
 
 def head_sha(cwd: Path) -> str | None:

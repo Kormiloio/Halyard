@@ -251,6 +251,16 @@ Every cost figure carries a trust level: **captured** (real token data),
 a plan), or **inferred** (estimated). Reports and dashboards show trust labels
 so users understand what they're looking at.
 
+Since v2.65, **project attribution carries an equivalent confidence
+label** — `timer` (the user declared it) > `mapped` (explicit
+repos.toml / workspace root) > `toml` (`halyard.toml` walk-up) >
+`auto` (guessed `git/<repo>` slug) > `none` (adrift). Attribution is
+the irreplaceable half of the moat (a competitor can add cost
+tracking; "this session provably maps to *this client*" is the
+defensible asset), so its provenance is now first-class and surfaced
+in CLI / dashboard / MCP exactly the way cost trust is — never
+collapsed to a single undifferentiated value.
+
 ### MCP server (agent access)
 A **read-only** MCP server, `halyard mcp` (stdio), lets the AI agent that
 generates the work query the ledger in-context. It exposes six tools over the

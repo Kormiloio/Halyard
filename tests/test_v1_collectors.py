@@ -273,7 +273,8 @@ def test_stop_hook_timer_attribution_sets_attr_method_timer(tmp_path: Path) -> N
 
 
 def test_stop_hook_git_inference_sets_attr_method_git(tmp_path: Path) -> None:
-    """When no active timer, git inference sets attr_method=git and attribution:inferred tag."""
+    """No active timer → git inference records the specific rung
+    (v2.65: git-auto, not the old catch-all "git") + inferred tag."""
     import io
 
     _init_project(tmp_path)
@@ -284,14 +285,17 @@ def test_stop_hook_git_inference_sets_attr_method_git(tmp_path: Path) -> None:
 
     with (
         patch("halyard.collectors.claude_code.find_project_dir", return_value=tmp_path),
-        patch("halyard.collectors.claude_code.infer_project", return_value=inferred_project),
+        patch(
+            "halyard.collectors.claude_code.infer_project_with_source",
+            return_value=(inferred_project, "git-auto"),
+        ),
         patch("sys.stdin", io.StringIO(payload)),
     ):
         handle_stop_hook()
 
     s = parse_sessions(tmp_path)[0]
     assert s.project == inferred_project
-    assert s.attr_method == "git"
+    assert s.attr_method == "git-auto"
     assert "attribution:inferred" in s.tags
 
 
@@ -304,7 +308,10 @@ def test_stop_hook_no_project_sets_attr_method_none(tmp_path: Path) -> None:
 
     with (
         patch("halyard.collectors.claude_code.find_project_dir", return_value=tmp_path),
-        patch("halyard.collectors.claude_code.infer_project", return_value=None),
+        patch(
+            "halyard.collectors.claude_code.infer_project_with_source",
+            return_value=(None, None),
+        ),
         patch("sys.stdin", io.StringIO(payload)),
     ):
         handle_stop_hook()

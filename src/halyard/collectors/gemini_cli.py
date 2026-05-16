@@ -47,7 +47,12 @@ from halyard.collectors.gemini_history import (
     find_session_file,
     parse_session_file,
 )
-from halyard.git_context import commits_in_window, current_branch, current_remote, infer_project
+from halyard.git_context import (
+    commits_in_window,
+    current_branch,
+    current_remote,
+    infer_project_with_source,
+)
 from halyard.hub import find_hub
 from halyard.model_breakdown import ModelSeg
 from halyard.model_breakdown import cost_of as _breakdown_cost
@@ -159,8 +164,8 @@ def handle_agent_stop() -> int:
         _gc_attr_method: str | None = "timer"
         _gc_inferred_tag: list[str] = []
     else:
-        _gc_project = infer_project(cwd)
-        _gc_attr_method = "git" if _gc_project else None
+        _gc_project, _gc_rung = infer_project_with_source(cwd)
+        _gc_attr_method = _gc_rung  # repo-map | toml | git-auto | None
         _gc_inferred_tag = ["attribution:inferred"] if _gc_project else []
 
     _remote = current_remote(cwd)

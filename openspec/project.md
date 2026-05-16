@@ -564,7 +564,7 @@ layers must read from this local source of truth; they do not replace it.
     exact per-remote `link-repo`/`adopt` remediation (propose, never
     write). Back-compat (legacy `git`→`auto`); no cost-path change.
     Spec in `openspec/changes/v2.65-attribution-integrity-visibility/`.
-    **Status: proposed (spec only).**
+    **Status: complete (1185 tests passing).**
 
 43. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
