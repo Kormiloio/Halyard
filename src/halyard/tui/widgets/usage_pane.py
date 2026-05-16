@@ -33,9 +33,10 @@ class UsagePane(Static):
             "",
             f"Sessions {summary.sessions:>5}   Tokens {compact_number(summary.total_tokens):>7}",
             (
-                f"Active   {summary.active_days:>5}d  "
-                f"Streak {summary.current_streak_days}d / {summary.longest_streak_days}d"
+                f"Messages {compact_number(summary.total_messages):>5}   "
+                f"Active {summary.active_days:>3}d"
             ),
+            f"Streak   {summary.current_streak_days:>3}d / {summary.longest_streak_days}d",
             f"Peak     {peak:>5}   Cost {cost_str(summary.total_cost_usd):>9}",
             f"Favorite {truncate(favorite, 24)}",
         ]
@@ -51,6 +52,8 @@ class UsagePane(Static):
                 lines.append(f"  {truncate(remote, 36)} ({count})")
         if summary.token_data_missing_sessions:
             lines.append(f"Missing token data: {summary.token_data_missing_sessions}")
+        if summary.message_data_missing_sessions:
+            lines.append(f"Missing message data: {summary.message_data_missing_sessions}")
         lines.extend(["", "Swells  (30d)"])
         lines.append(_activity_line(usage.daily[-30:]))
         lines.extend(["", "Top Models"])

@@ -1,5 +1,57 @@
 # v2.64 — Stats & Graphs Parity Surface: Design
 
+## Phase 0 — Grounding audit (COMPLETE 2026-05-16)
+
+Audited `usage.py` / `dashboard.py` / `tui/` before code. Three
+findings refine the scope:
+
+1. **`daily_activity` is redundant — drop it.** `UsageAnalytics.daily:
+   list[DailyUsageBucket]` already exists and is zero-filled across the
+   full selected range with per-day `sessions`, token split, `cost`,
+   `has_missing_token_data`, and `model_tokens: dict[str,int]`. The
+   contribution heatmap renders directly from `usage.daily`; no new
+   `DayCell` type.
+
+2. **`daily_by_model` is partially redundant but the in/out split is
+   real.** `DailyUsageBucket.model_tokens` already gives per-day
+   per-model *total* tokens — but the existing `_daily_model_chart`
+   (`dashboard.py:1427`) **does not use it**; it spreads each model's
+   window-wide total proportionally across days (a documented
+   approximation, accurate only when one model ran per day). v2.64
+   should (a) make the stacked chart use the *real* `day.model_tokens`,
+   and (b) add per-day-per-model **input/output** to `DailyUsageBucket`
+   (extend `_daily_bucket` to also accumulate `model_io: dict[str,
+   tuple[int,int]]`) for the in/out split the spec requires. This is
+   the only substantive data-layer change beyond `total_messages`.
+
+3. **Reusable render scaffolding exists.** Headline cards → the
+   `metric metric-{tone}` article idiom (`:1226`). Heatmap → structural
+   template in `_trail_heatmap_html` (`:2305`), but that one is
+   month-scoped + attribution-coloured (wake panel); v2.64 needs a
+   *new* range-aware activity-intensity heatmap (5 buckets) — template,
+   not reuse. Models tab already has chart+legend+table to upgrade in
+   place; `ModelUsageBucket` already carries `token_share`/`cost_share`
+   /`session_share` so "% share" needs no new math.
+
+### Scope conflict to resolve before building — TUI parity vs. the
+TUI-deferral policy
+
+`openspec/project.md` "Deferred or gated" states TUI widget/app
+coverage is a *conscious deferral* (only `tui/store.py` state is
+covered; widgets need the Pilot harness — high effort, low return
+while the TUI is secondary). `tui/store.py` currently has **zero**
+usage/analytics wiring. The spec's "TUI information parity" requirement
++ test case 7 directly tension with that policy. **Resolution (user
+decision 2026-05-16): build a full Textual stats widget** — an
+explicit, owner-approved deviation from the TUI-deferral policy
+(project.md permits deviations with explicit justification; the
+justification here is that the parity surface is the strategic
+first-impression and the owner wants full TUI parity, not just
+information parity). Scope: a `stats` summary on the covered
+`tui/store.py` layer (unit-tested) **and** a Textual stats widget
+wired into the app. The project.md deferral note is updated to record
+this carve-out.
+
 ## Data layer (one new aggregate)
 
 `usage.py` `UsageAnalytics` already carries: `sessions`,

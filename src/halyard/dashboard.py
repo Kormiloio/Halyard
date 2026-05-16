@@ -31,6 +31,7 @@ from halyard.reports import (
 )
 from halyard.trust import aggregate_trust, session_trust
 from halyard.usage import (
+    DailyUsageBucket,
     ModelUsageBucket,
     ToolUsageBucket,
     UsageAnalytics,
@@ -1425,23 +1426,23 @@ def _usage_models_panel(usage: UsageAnalytics) -> str:
 
 
 def _daily_model_chart(usage: UsageAnalytics, model_index: dict[str, int]) -> str:
-    """Render an SVG stacked bar chart: x = day, y = tokens, stack = model.
+    """Render an SVG stacked bar chart: x = day, y = in+out tokens, stack = model.
 
-    Per-day per-model token totals are not pre-computed in UsageAnalytics
-    (the existing summary tracks per-model AND per-day independently). We
-    approximate the daily-by-model distribution by spreading each model's
-    total proportionally across the days in which it had sessions.
-    Imperfect — the underlying signal is missing per-session-per-model
-    tokens are not retained in DailyUsageBucket — but it's directionally
-    correct and accurate when only one model ran per day, which covers
-    the common case for solo developers.
+    v2.64: uses the *real* per-day per-model input/output split now
+    retained in ``DailyUsageBucket.model_io`` (multi-model aware) — no
+    longer the window-wide proportional approximation. Each segment is
+    that model's actual in+out for that day and the tooltip states the
+    true number.
     """
     days = usage.daily
-    max_tokens = max((d.tokens for d in days), default=0)
+
+    def _day_io(d: DailyUsageBucket) -> int:
+        return sum(i + o for i, o in d.model_io.values())
+
+    max_tokens = max((_day_io(d) for d in days), default=0)
     if max_tokens <= 0:
         return "<p class='mini-empty'>No token data.</p>"
 
-    # Total tokens across all days, per model, for the proportional split.
     bars = []
     width = 720
     height = 160
@@ -1468,26 +1469,29 @@ def _daily_model_chart(usage: UsageAnalytics, model_index: dict[str, int]) -> st
 
     for i, day in enumerate(days):
         x = pad_left + i * bar_w
-        if day.tokens <= 0:
+        day_io = _day_io(day)
+        if day_io <= 0:
             continue
-        # Stack segments per model in rank order. Segment heights are an
-        # approximation (each model's window-wide share of the day's total);
-        # the tooltip therefore states only the day total + model name, never
-        # a fabricated per-day-per-model number that wouldn't reconcile with
-        # the model table.
+        # Stack segments per model using REAL per-day per-model in+out.
+        # Rank order follows by_model so colours are stable across days.
         running_top = 0.0
-        bar_total_h = (day.tokens / max_tokens) * chart_h
-        total_modelled = sum(m.tokens for m in usage.by_model) or 1
-        for m in usage.by_model:
-            model_share = m.tokens / total_modelled
-            seg_h = bar_total_h * model_share
-            color = _color_for_model(m.model, model_index.get(m.model))
+        bar_total_h = (day_io / max_tokens) * chart_h
+        ranked = [m.model for m in usage.by_model if m.model in day.model_io]
+        ranked += [m for m in day.model_io if m not in ranked]
+        for model in ranked:
+            m_in, m_out = day.model_io[model]
+            seg_val = m_in + m_out
+            if seg_val <= 0:
+                continue
+            seg_h = (seg_val / day_io) * bar_total_h
+            color = _color_for_model(model, model_index.get(model))
             y = chart_h - bar_total_h + running_top + 8
             bars.append(
                 f"<rect x='{x}' y='{y}' width='{max(1, bar_w - 1)}' height='{seg_h:.2f}' "
                 f"fill='{color}' opacity='0.9'>"
-                f"<title>{_e(day.day.isoformat())} · {_e(m.model)} · "
-                f"day total {compact_number(day.tokens)} tok</title>"
+                f"<title>{_e(day.day.isoformat())} · {_e(model)} · "
+                f"{compact_number(seg_val)} tok "
+                f"(in {compact_number(m_in)} · out {compact_number(m_out)})</title>"
                 f"</rect>"
             )
             running_top += seg_h
@@ -1520,9 +1524,12 @@ def _model_legend(by_model: list[ModelUsageBucket], model_index: dict[str, int])
     items = []
     for m in by_model[: len(_PALETTE_BUCKETS)]:
         color = _color_for_model(m.model, model_index.get(m.model))
+        share = round(m.token_share * 100)
         items.append(
             f"<span class='legend-item'><span class='legend-swatch' "
-            f"style='background:{color}'></span>{_e(m.model)}</span>"
+            f"style='background:{color}'></span>{_e(m.model)} "
+            f"<small>in {_e(compact_number(m.input_tokens))} · "
+            f"out {_e(compact_number(m.output_tokens))} · {share}%</small></span>"
         )
     if len(by_model) > len(_PALETTE_BUCKETS):
         items.append(
@@ -1644,17 +1651,21 @@ def _usage_panel(usage: UsageAnalytics) -> str:
         else ""
     )
 
+    msg_detail = (
+        f"{summary.message_data_missing_sessions} missing"
+        if summary.message_data_missing_sessions
+        else "user + assistant"
+    )
     stats = [
         ("Sessions", f"{summary.sessions:,}", "captured"),
+        ("Messages", compact_number(summary.total_messages), msg_detail),
         ("Tokens", compact_number(summary.total_tokens), "in + out + cache"),
-        (
-            "Current streak",
-            f"{summary.current_streak_days}d",
-            f"longest {summary.longest_streak_days}d",
-        ),
+        ("Active days", f"{summary.active_days}", "in range"),
+        ("Current streak", f"{summary.current_streak_days}d", "consecutive"),
+        ("Longest streak", f"{summary.longest_streak_days}d", "in range"),
         ("Peak hour", peak, "session starts"),
         ("Favorite model", favorite, "by token volume"),
-        ("Cost", f"${summary.total_cost_usd:.2f}", "captured"),
+        ("Cost", f"${summary.total_cost_usd:.2f}", "captured · moat"),
     ]
     stat_html = "".join(
         "<div class='usage-stat'>"
@@ -1669,12 +1680,39 @@ def _usage_panel(usage: UsageAnalytics) -> str:
         f"<div class='usage-models'><strong>Models</strong>{_usage_model_rows(usage)}</div>"
         f"<div class='usage-tools'><strong>Tools</strong>{_usage_tool_rows(usage)}</div>"
         f"{warning_html}"
+        f"{_usage_flavour_line(usage)}"
         "</div>"
     )
 
 
+def _usage_flavour_line(usage: UsageAnalytics) -> str:
+    """A single, deliberately non-authoritative fun comparison.
+
+    Dashboard-only (this function is never called from report/invoice
+    renderers — those are the trust-bearing surfaces). Clearly labelled
+    so it can never be mistaken for a billable figure.
+    """
+    total = usage.summary.total_tokens
+    if total <= 0:
+        return ""
+    # ~750 words/page, ~1.3 tokens/word ≈ 1,000 tokens/page; a novel ≈ 100k tokens.
+    novels = total / 100_000
+    if novels >= 0.1:
+        approx = f"≈ {novels:.1f} novels' worth of text"
+    else:
+        approx = f"≈ {int(total / 1000):,} pages' worth of text"
+    return (
+        "<p class='usage-flavour'><small>"
+        f"for fun · not billable — {_e(approx)} flowed through your tools"
+        "</small></p>"
+    )
+
+
 def _activity_heatmap(usage: UsageAnalytics) -> str:
-    days = usage.daily[-30:]
+    # Range-aware: usage.daily is already bounded to the selected
+    # 7d/30d/all window by build_usage_analytics — render all of it
+    # (contribution-graph style) rather than a hardcoded 30.
+    days = usage.daily
     max_tokens = max((day.tokens for day in days), default=0)
     cells = []
     for day in days:
@@ -1688,7 +1726,12 @@ def _activity_heatmap(usage: UsageAnalytics) -> str:
             f"<span class='usage-cell usage-l{level}{missing}' title='{_e(title)}' "
             f"aria-label='{_e(title)}'></span>"
         )
-    return "<div class='usage-heatmap'>" + "".join(cells) + "</div>"
+    legend = (
+        "<div class='usage-heatmap-legend'><small>less</small>"
+        + "".join(f"<span class='usage-cell usage-l{lvl}'></span>" for lvl in range(5))
+        + "<small>more</small></div>"
+    )
+    return "<div class='usage-heatmap'>" + "".join(cells) + "</div>" + legend
 
 
 def _activity_level(tokens: int, sessions: int, max_tokens: int) -> int:

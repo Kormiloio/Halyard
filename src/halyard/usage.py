@@ -63,6 +63,8 @@ class UsageSummary:
     total_cache_read_tokens: int
     total_cache_write_tokens: int
     token_data_missing_sessions: int
+    total_messages: int
+    message_data_missing_sessions: int
     total_cost_usd: float
     active_days: int
     current_streak_days: int
@@ -124,6 +126,9 @@ class DailyUsageBucket:
     cost_usd: float
     has_missing_token_data: bool
     model_tokens: dict[str, int]
+    # Per-day per-model fresh input/output split (v2.64). Real data — not
+    # the window-wide proportional approximation the old chart used.
+    model_io: dict[str, tuple[int, int]]
 
     @property
     def tokens(self) -> int:
@@ -163,6 +168,8 @@ def build_usage_analytics(
         total_cache_read_tokens=sum(s.cache_read or 0 for s in selected if s.tokens_available),
         total_cache_write_tokens=sum(s.cache_write or 0 for s in selected if s.tokens_available),
         token_data_missing_sessions=sum(1 for s in selected if not s.tokens_available),
+        total_messages=sum(_known_messages(s) for s in selected),
+        message_data_missing_sessions=sum(1 for s in selected if not _has_message_data(s)),
         total_cost_usd=sum(s.cost_usd for s in selected),
         active_days=len(days),
         current_streak_days=_current_streak(days, usage_range.end),
@@ -219,6 +226,22 @@ def _known_input(session: AiSession) -> int:
 
 def _known_output(session: AiSession) -> int:
     return session.output_tokens if session.tokens_available else 0
+
+
+def _has_message_data(session: AiSession) -> bool:
+    """True if the session carries any user/assistant message count.
+
+    Mirrors the token-missing pattern: an absent count is *missing*, not
+    a fabricated 0, so it is excluded from the total and counted in
+    `message_data_missing_sessions` instead.
+    """
+    return session.user_message_count is not None or session.assistant_message_count is not None
+
+
+def _known_messages(session: AiSession) -> int:
+    if not _has_message_data(session):
+        return 0
+    return (session.user_message_count or 0) + (session.assistant_message_count or 0)
 
 
 def _tokens(session: AiSession) -> int:
@@ -295,10 +318,25 @@ def _daily_buckets(
 
 
 def _daily_bucket(day: date, by_day: dict[date, list[AiSession]]) -> DailyUsageBucket:
+    from halyard.model_breakdown import iter_model_usage
+    from halyard.model_breakdown import parse as _parse_breakdown
+
     sessions = by_day.get(day, [])
     model_tokens: dict[str, int] = defaultdict(int)
+    model_io: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     for session in sessions:
         model_tokens[session.model] += _tokens(session)
+        # Per-model in/out split — multi-model aware (mirrors _model_buckets)
+        # so a router/main/subagent session attributes to each real model.
+        if _parse_breakdown(session.model_breakdown) is not None:
+            for model, m_in, m_out, _cr, _cw, _cost in iter_model_usage(session):
+                io = model_io[model]
+                io[0] += m_in
+                io[1] += m_out
+        else:
+            io = model_io[session.model]
+            io[0] += _known_input(session)
+            io[1] += _known_output(session)
     return DailyUsageBucket(
         day=day,
         sessions=len(sessions),
@@ -309,6 +347,7 @@ def _daily_bucket(day: date, by_day: dict[date, list[AiSession]]) -> DailyUsageB
         cost_usd=sum(s.cost_usd for s in sessions),
         has_missing_token_data=any(not s.tokens_available for s in sessions),
         model_tokens=dict(model_tokens),
+        model_io={m: (io[0], io[1]) for m, io in model_io.items()},
     )
 
 
