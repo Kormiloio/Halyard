@@ -239,3 +239,15 @@ These panels render **above** the commodity Usage panel by default and
 that ordering is enforced by an executable test: parity is the price
 of admission; the moat is the reason to stay, and is never demoted to
 make room for vanity stats.
+
+### TUI information parity (v2.70)
+
+The Textual TUI now mirrors the moat + leverage story at **information
+parity** (not pixels): a `MoatPane` (cost-by-client, attribution
+-confidence mix, per-project billable evidence, leakage rows with the
+exact `link-repo` fix) and a `LeveragePane` (shipped % + merged/open/
+closed/no-PR/unsynced buckets). Both reuse the same `moat.py` builders
+and the shared `leverage.summarize`, so the TUI and web can never
+disagree on the moat math. Terminal-appropriate tables/bars stand in
+for the web SVGs; this is a presentation lift only — no new captured
+data.

@@ -669,7 +669,7 @@ layers must read from this local source of truth; they do not replace it.
    by both web + TUI (single source of truth). Testable-text layer
    only (v2.64 `UsagePane` pattern; no Pilot harness). Spec in
    `openspec/changes/v2.70-tui-dashboard-parity/`.
-   **Status: proposed (spec only).**
+   **Status: complete (1230 tests passing).**
 
 ## Deferred or gated
 

@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Literal
 
+from halyard import leverage
 from halyard.ai_log import AiSession
 from halyard.ai_plans import read_ai_plans
 from halyard.budget import BudgetStatus, budget_status
@@ -1573,9 +1574,8 @@ def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
     in solo-developer terms: of your AI sessions in the last 30 days,
     how many landed in merged PRs?
     """
-    cutoff = now - timedelta(days=30)
-    recent = [s for s in sessions if s.start >= cutoff]
-    total = len(recent)
+    summary = leverage.summarize(sessions, now)
+    total = summary.total
     if total == 0:
         return (
             "<div class='leverage-empty'>"
@@ -1583,13 +1583,13 @@ def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
             "</div>"
         )
 
-    merged = sum(1 for s in recent if s.pr_state == "merged")
-    open_ = sum(1 for s in recent if s.pr_state == "open")
-    closed = sum(1 for s in recent if s.pr_state == "closed")
-    no_pr = sum(1 for s in recent if s.pr_state == "none")
-    unsynced = sum(1 for s in recent if not s.pr_state)
+    merged = summary.merged
+    open_ = summary.open_
+    closed = summary.closed
+    no_pr = summary.none
+    unsynced = summary.unsynced
 
-    leverage_pct = int((merged / total) * 100) if total else 0
+    leverage_pct = summary.pct
     fill_class = (
         "leverage-high"
         if leverage_pct >= 50

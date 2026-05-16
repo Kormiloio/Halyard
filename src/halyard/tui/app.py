@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 
@@ -19,6 +20,8 @@ from halyard.ai_log import AI_LOG_FILENAME, AiSession
 from halyard.tui.store import SessionStore, TimeWindow
 from halyard.tui.widgets.budget_pane import BudgetPane
 from halyard.tui.widgets.captain_pane import CaptainPane
+from halyard.tui.widgets.leverage_pane import LeveragePane
+from halyard.tui.widgets.moat_pane import MoatPane
 from halyard.tui.widgets.model_pane import ModelPane
 from halyard.tui.widgets.project_pane import ProjectPane
 from halyard.tui.widgets.session_feed import SessionFeed
@@ -48,6 +51,7 @@ class HalyardApp(App[None]):
         ("?", "open_help_modal", "help"),
         ("up", "move_selection(-1)", "up"),
         ("down", "move_selection(1)", "down"),
+        ("o", "scroll_moat", "moat"),
         ("enter", "open_project_detail", "detail"),
         ("escape", "escape", "back"),
         ("q", "quit", "quit"),
@@ -89,6 +93,8 @@ class HalyardApp(App[None]):
                 yield CaptainPane(id="captain-pane")
                 yield VoyagePane(id="voyage-pane")
                 yield UsagePane(id="usage-pane")
+                yield MoatPane(id="moat-pane")
+                yield LeveragePane(id="leverage-pane")
                 yield BudgetPane(id="budget-pane")
                 yield ModelPane(id="model-pane")
         yield Footer()
@@ -149,6 +155,9 @@ class HalyardApp(App[None]):
         self.detail_project = selected.project
         self.refresh_views()
 
+    def action_scroll_moat(self) -> None:
+        self.query_one(MoatPane).scroll_visible()
+
     def action_escape(self) -> None:
         if self.detail_project is not None:
             self.detail_project = None
@@ -178,6 +187,7 @@ class HalyardApp(App[None]):
         sessions = self.active_sessions()
         all_sessions = self.store.sessions
         project_dir = self.store.log_path.parent
+        generated_at = datetime.now()
         self._clamp_selection(sessions)
         feed = self.query_one(SessionFeed)
         detail = self.query_one(ProjectPane)
@@ -197,6 +207,8 @@ class HalyardApp(App[None]):
         self.query_one(VoyagePane).render_voyages(project_dir, all_sessions)
         self.query_one(ModelPane).render_sessions(pane_sessions)
         self.query_one(UsagePane).render_sessions(pane_sessions)
+        self.query_one(MoatPane).render_sessions(pane_sessions, project_dir, generated_at)
+        self.query_one(LeveragePane).render_sessions(pane_sessions, generated_at)
         self.query_one(BudgetPane).render_budgets()
 
     def active_sessions(self) -> list[AiSession]:
