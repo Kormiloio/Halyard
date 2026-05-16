@@ -546,12 +546,15 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v2.63-session-time-decomposition/`.
     **Status: proposed (spec only).**
 
-41. **v2.64 — Stats & graphs parity surface:** match the table-stakes
-    stats single-tool dashboards show (heatmap, per-model time series,
-    streaks, messages, peak hour) on existing `UsageAnalytics` data —
-    the "parity floor" so the moat lands. Additive; moat panels stay
-    primary. Spec in `openspec/changes/v2.64-stats-graphs-parity/`.
-    **Status: proposed (spec only).** Best after v2.60–v2.61.
+41. **v2.64 — Stats & graphs parity surface (commodity only):** match
+    the table-stakes stats single-tool dashboards show (heatmap,
+    per-model time series, streaks, messages, peak hour) on existing
+    `UsageAnalytics` data — the "parity floor" so the moat lands.
+    Rescoped: this is the *commodity* half only; the moat-shaped
+    graphs are **v2.66**, which **ranks above this**. Additive; moat
+    panels stay primary. Spec in
+    `openspec/changes/v2.64-stats-graphs-parity/`.
+    **Status: proposed (spec only).** Lower priority than v2.66.
 
 42. **v2.65 — Attribution integrity & visibility:** the under-protected
     moat half. `attr_method` collapses the inference chain into `git`
@@ -566,7 +569,21 @@ layers must read from this local source of truth; they do not replace it.
     Spec in `openspec/changes/v2.65-attribution-integrity-visibility/`.
     **Status: complete (1185 tests passing).**
 
-43. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
+43. **v2.66 — Moat visualization surface:** the *moat* counterpart to
+    v2.64's commodity parity — graphs no single-tool dashboard can
+    draw because none have a project/client/$/outcome:
+    **cost-by-client over time**, **attribution-confidence trend**
+    (v2.65 data visualized), **per-project billable-evidence cards**
+    (human time + AI cost + outcomes + confidence), and a **leakage
+    funnel** (adrift $ per remote + its one-command fix). Existing
+    data only; server-rendered SVG, no JS; moat panels render *above*
+    the v2.64 commodity stats (executable ordering invariant). Ranks
+    **above v2.64**. Spec in
+    `openspec/changes/v2.66-moat-visualization/`.
+    **Status: proposed (spec only).** Best after v2.65 (shipped); $
+    accuracy inherits v2.62 when it lands.
+
+44. **v2.19 — Attestable AI work appendix:** signed, verifiable, client-safe
    proof of AI-assisted work. Gated on v2.24 so the appendix can include
    commit and PR evidence.
 
