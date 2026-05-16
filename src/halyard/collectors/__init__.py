@@ -28,7 +28,16 @@ def session_starts_in_future(session: AiSession, *, now: datetime | None = None)
     long-but-real historical sessions.
     """
     clock = now or datetime.now()
-    return (session.start - clock).total_seconds() > _FUTURE_START_GRACE_SECONDS
+    start = session.start
+    # Defensive: a directly-constructed session may carry tzinfo while
+    # `clock` is naive. parse_sessions already normalises, but coerce
+    # here too so no caller can trip "can't subtract offset-naive and
+    # offset-aware datetimes".
+    if start.tzinfo is not None:
+        start = start.astimezone().replace(tzinfo=None)
+    if clock.tzinfo is not None:
+        clock = clock.astimezone().replace(tzinfo=None)
+    return (start - clock).total_seconds() > _FUTURE_START_GRACE_SECONDS
 
 
 def session_is_implausible(session: AiSession, *, now: datetime | None = None) -> bool:

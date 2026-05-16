@@ -569,18 +569,33 @@ def _parse_line(line: str) -> AiSession | None:
     return parsed
 
 
+def _to_naive_local(dt: datetime) -> datetime:
+    """Normalise a parsed timestamp to naive local time.
+
+    Logs are normally written with naive local timestamps, but a row
+    may carry a tz offset (e.g. ``2026-…+00:00``) — from another tool
+    or an older writer. The rest of Halyard compares against naive
+    ``datetime.now()``; mixing aware/naive raises TypeError and would
+    crash ``parse_sessions`` (every read path). Convert aware values to
+    local wall-clock and drop tzinfo so all downstream math is uniform.
+    """
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone().replace(tzinfo=None)
+
+
 def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
     parts = line.split()
     if len(parts) < 8 or parts[0] != "s":
         return None, "expected session line: s <start> <end> <tool> <model> <input> <output> <cost>"
 
     try:
-        start = datetime.fromisoformat(parts[1])
+        start = _to_naive_local(datetime.fromisoformat(parts[1]))
     except ValueError:
         return None, f"invalid start timestamp: {parts[1]}"
 
     try:
-        end = datetime.fromisoformat(parts[2])
+        end = _to_naive_local(datetime.fromisoformat(parts[2]))
     except ValueError:
         return None, f"invalid end timestamp: {parts[2]}"
 
