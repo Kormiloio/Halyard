@@ -13,6 +13,7 @@ import os
 import sys
 import tempfile
 from contextlib import suppress
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -129,24 +130,37 @@ def handle_stop_hook() -> int:
     branch = current_branch(cwd)
     assistant_message_count: int | None = None
     interaction_count: int | None = None
+    session_id: str | None = payload.get("session_id") or payload.get("sessionId")
+    user_message_count: int | None = None
+    tool_calls: int | None = None
+    tool_errors: int | None = None
+    wall_seconds: int | None = None
+    model_breakdown: str | None = None
 
-    # Fallback: read model + tokens from transcript (Claude Code ≥2.x format)
-    if not (input_tokens or output_tokens):
-        transcript_path = payload.get("transcript_path", "")
-        if transcript_path:
-            t_model, t_in, t_out, t_cr, t_cw, t_branch, t_assistant_count = _read_from_transcript(
-                transcript_path, since=start
-            )
-            if t_in or t_out:
-                input_tokens, output_tokens = t_in, t_out
-                cache_read, cache_write = t_cr, t_cw
-            if t_assistant_count:
-                assistant_message_count = t_assistant_count
-                interaction_count = t_assistant_count
-            if not model and t_model:
-                model = t_model
-            if not branch and t_branch:
-                branch = t_branch
+    # Read the transcript (Claude Code ≥2.x). It is the fallback for
+    # tokens/model/branch AND the source of interaction metadata, so
+    # parse it whenever present — not only when the payload lacked
+    # usage.
+    transcript_path = payload.get("transcript_path", "")
+    if transcript_path:
+        ts = _read_from_transcript(transcript_path, since=start)
+        if not (input_tokens or output_tokens) and (ts.input_tokens or ts.output_tokens):
+            input_tokens, output_tokens = ts.input_tokens, ts.output_tokens
+            cache_read, cache_write = ts.cache_read, ts.cache_write
+        if ts.assistant_count:
+            assistant_message_count = ts.assistant_count
+            interaction_count = ts.assistant_count
+        if not model and ts.model:
+            model = ts.model
+        if not branch and ts.branch:
+            branch = ts.branch
+        if session_id is None and ts.session_id:
+            session_id = ts.session_id
+        user_message_count = ts.user_count
+        tool_calls = ts.tool_calls
+        tool_errors = ts.tool_errors
+        wall_seconds = ts.wall_seconds
+        model_breakdown = ts.model_breakdown
 
     if not model:
         model = "claude-unknown"
@@ -199,6 +213,12 @@ def handle_stop_hook() -> int:
         commit_count=commit_count,
         code_added=code_added,
         code_removed=code_removed,
+        session_id=str(session_id) if session_id else None,
+        user_message_count=user_message_count,
+        tool_calls=tool_calls,
+        tool_errors=tool_errors,
+        wall_seconds=wall_seconds,
+        model_breakdown=model_breakdown,
         interaction_count=interaction_count,
         assistant_message_count=assistant_message_count,
         interaction_data_available=assistant_message_count is not None,
@@ -336,31 +356,80 @@ def _safe_transcript_path(raw: str) -> Path | None:
     return path
 
 
+@dataclass
+class _TranscriptStats:
+    """Everything we can mine from a Claude Code transcript JSONL.
+
+    "Unavailable is not zero": counts that the transcript can't yield
+    stay ``None`` (e.g. no transcript) rather than a fabricated 0. A
+    real 0 (transcript present, genuinely no tool calls) is truthful
+    and kept as 0.
+    """
+
+    model: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read: int = 0
+    cache_write: int = 0
+    branch: str | None = None
+    assistant_count: int = 0
+    user_count: int | None = None
+    tool_calls: int | None = None
+    tool_errors: int | None = None
+    session_id: str | None = None
+    wall_seconds: int | None = None
+    # model -> assistant-turn count, for model_breakdown (count form;
+    # v2.61 generalises to per-model usage).
+    model_tally: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def model_breakdown(self) -> str | None:
+        real = {m: n for m, n in self.model_tally.items() if m}
+        if len(real) < 2:
+            return None
+        return "|".join(f"{m}:{n}" for m, n in sorted(real.items()))
+
+
+def _transcript_ts(obj: dict[str, object], since: datetime | None) -> datetime | None:
+    """Parse a transcript event's UTC timestamp to local-naive, or None."""
+    ts_str = obj.get("timestamp", "")
+    if not isinstance(ts_str, str) or not ts_str.endswith("Z"):
+        return None
+    try:
+        return (
+            datetime.fromisoformat(ts_str[:-1])
+            .replace(tzinfo=UTC)
+            .astimezone(tz=None)
+            .replace(tzinfo=None)
+        )
+    except ValueError:
+        return None
+
+
 def _read_from_transcript(
     transcript_path: str,
     since: datetime | None = None,
-) -> tuple[str | None, int, int, int, int, str | None, int]:
-    """Aggregate model, token totals, and branch from a Claude Code transcript JSONL.
+) -> _TranscriptStats:
+    """Aggregate model, tokens, branch, and interaction metadata from a
+    Claude Code transcript JSONL.
 
-    Claude Code ≥2.x passes transcript_path in the Stop payload instead of
-    embedding usage directly. Each assistant event looks like:
-      {"type":"assistant","timestamp":"...Z","message":{"model":"...","usage":{...}},"gitBranch":"..."}
-
-    `since` is a local-naive datetime; messages timestamped before it are skipped so
-    that accumulated turns from earlier sessions in the same conversation file are
-    excluded from the current session's totals.
-
-    Returns (model, input_tokens, output_tokens, cache_read, cache_write, branch,
-    assistant_message_count).
+    Claude Code ≥2.x passes transcript_path in the Stop payload instead
+    of embedding usage. Assistant events carry model/usage; tool calls
+    are ``tool_use`` content blocks on assistant messages; tool results
+    come back as ``user`` events whose content blocks are
+    ``tool_result`` (``is_error`` flags failures). ``since`` (local
+    -naive) excludes turns from earlier sessions in the same file.
     """
+    stats = _TranscriptStats()
     path = _safe_transcript_path(transcript_path)
     if path is None:
-        return None, 0, 0, 0, 0, None, 0
+        return stats
     try:
-        model: str | None = None
-        branch: str | None = None
-        total_in = total_out = total_cr = total_cw = 0
-        assistant_count = 0
+        user_count = 0
+        tool_calls = 0
+        tool_errors = 0
+        first_ts: datetime | None = None
+        last_ts: datetime | None = None
 
         with path.open(encoding="utf-8", errors="replace") as fh:
             for line in fh:
@@ -372,40 +441,67 @@ def _read_from_transcript(
                 except json.JSONDecodeError:
                     continue
 
-                if obj.get("type") != "assistant":
+                etype = obj.get("type")
+                if etype not in ("assistant", "user"):
                     continue
 
-                # Skip turns from before this session started
-                if since is not None:
-                    ts_str = obj.get("timestamp", "")
-                    if ts_str.endswith("Z"):
-                        with suppress(ValueError):
-                            # Transcript timestamps are UTC — convert to local naive
-                            ts = (
-                                datetime.fromisoformat(ts_str[:-1])
-                                .replace(tzinfo=UTC)
-                                .astimezone(tz=None)
-                                .replace(tzinfo=None)
-                            )
-                            if ts < since:
-                                continue
+                ts = _transcript_ts(obj, since)
+                if since is not None and ts is not None and ts < since:
+                    continue
 
-                assistant_count += 1
+                if stats.session_id is None:
+                    sid = obj.get("sessionId") or obj.get("session_id")
+                    if sid:
+                        stats.session_id = str(sid)
+
+                if ts is not None:
+                    if first_ts is None or ts < first_ts:
+                        first_ts = ts
+                    if last_ts is None or ts > last_ts:
+                        last_ts = ts
+
                 msg = obj.get("message") or {}
-                if msg.get("model"):
-                    model = str(msg["model"])
-                if obj.get("gitBranch") and branch is None:
-                    branch = str(obj["gitBranch"])
+                content = msg.get("content") if isinstance(msg, dict) else None
 
-                usage = msg.get("usage") or {}
-                total_in += int(usage.get("input_tokens", 0))
-                total_out += int(usage.get("output_tokens", 0))
-                total_cr += int(usage.get("cache_read_input_tokens", 0))
-                total_cw += int(usage.get("cache_creation_input_tokens", 0))
+                if etype == "assistant":
+                    stats.assistant_count += 1
+                    if isinstance(msg, dict) and msg.get("model"):
+                        m = str(msg["model"])
+                        stats.model = m
+                        stats.model_tally[m] = stats.model_tally.get(m, 0) + 1
+                    if obj.get("gitBranch") and stats.branch is None:
+                        stats.branch = str(obj["gitBranch"])
+                    usage = msg.get("usage") or {} if isinstance(msg, dict) else {}
+                    stats.input_tokens += int(usage.get("input_tokens", 0))
+                    stats.output_tokens += int(usage.get("output_tokens", 0))
+                    stats.cache_read += int(usage.get("cache_read_input_tokens", 0))
+                    stats.cache_write += int(usage.get("cache_creation_input_tokens", 0))
+                    if isinstance(content, list):
+                        tool_calls += sum(
+                            1
+                            for b in content
+                            if isinstance(b, dict) and b.get("type") == "tool_use"
+                        )
+                else:  # user
+                    blocks = content if isinstance(content, list) else []
+                    results = [
+                        b for b in blocks if isinstance(b, dict) and b.get("type") == "tool_result"
+                    ]
+                    if results:
+                        tool_errors += sum(1 for b in results if bool(b.get("is_error")))
+                    else:
+                        user_count += 1
 
-        return model, total_in, total_out, total_cr, total_cw, branch, assistant_count
+        had_transcript = stats.assistant_count > 0 or user_count > 0
+        if had_transcript:
+            stats.user_count = user_count
+            stats.tool_calls = tool_calls
+            stats.tool_errors = tool_errors
+            if first_ts is not None and last_ts is not None and last_ts >= first_ts:
+                stats.wall_seconds = int((last_ts - first_ts).total_seconds())
+        return stats
     except (OSError, json.JSONDecodeError, ValueError):
-        return None, 0, 0, 0, 0, None, 0
+        return _TranscriptStats()
 
 
 def _read_model_from_settings(project_dir: Path) -> str | None:

@@ -352,12 +352,12 @@ def test_read_from_transcript_no_since(tmp_path: Path) -> None:
             _turn("2026-05-09T11:00:00.000Z", 200, 80),
         ],
     )
-    model, t_in, t_out, _cr, _cw, branch, assistant_count = _read_from_transcript(transcript)
-    assert model == "claude-sonnet-4-6"
-    assert t_in == 300
-    assert t_out == 130
-    assert branch == "main"
-    assert assistant_count == 2
+    st = _read_from_transcript(transcript)
+    assert st.model == "claude-sonnet-4-6"
+    assert st.input_tokens == 300
+    assert st.output_tokens == 130
+    assert st.branch == "main"
+    assert st.assistant_count == 2
 
 
 def test_read_from_transcript_since_filters_earlier_turns(tmp_path: Path) -> None:
@@ -375,10 +375,10 @@ def test_read_from_transcript_since_filters_earlier_turns(tmp_path: Path) -> Non
     since = (
         datetime.fromisoformat("2026-05-09T11:00:00+00:00").astimezone(tz=None).replace(tzinfo=None)
     )
-    _m, t_in, t_out, _cr, _cw, _br, assistant_count = _read_from_transcript(transcript, since=since)
-    assert t_in == 200
-    assert t_out == 80
-    assert assistant_count == 1
+    st = _read_from_transcript(transcript, since=since)
+    assert st.input_tokens == 200
+    assert st.output_tokens == 80
+    assert st.assistant_count == 1
 
 
 def test_read_from_transcript_since_includes_boundary_turn(tmp_path: Path) -> None:
@@ -392,10 +392,10 @@ def test_read_from_transcript_since_includes_boundary_turn(tmp_path: Path) -> No
     since = (
         datetime.fromisoformat("2026-05-09T11:00:00+00:00").astimezone(tz=None).replace(tzinfo=None)
     )
-    _m, t_in, t_out, _cr, _cw, _br, assistant_count = _read_from_transcript(transcript, since=since)
-    assert t_in == 42
-    assert t_out == 7
-    assert assistant_count == 1
+    st = _read_from_transcript(transcript, since=since)
+    assert st.input_tokens == 42
+    assert st.output_tokens == 7
+    assert st.assistant_count == 1
 
 
 def test_read_from_transcript_since_excludes_all(tmp_path: Path) -> None:
@@ -407,10 +407,10 @@ def test_read_from_transcript_since_excludes_all(tmp_path: Path) -> None:
         [_turn("2026-05-09T10:00:00.000Z", 999, 500)],
     )
     since = datetime(2026, 5, 9, 23, 0, 0)
-    _m, t_in, t_out, _cr, _cw, _br, assistant_count = _read_from_transcript(transcript, since=since)
-    assert t_in == 0
-    assert t_out == 0
-    assert assistant_count == 0
+    st = _read_from_transcript(transcript, since=since)
+    assert st.input_tokens == 0
+    assert st.output_tokens == 0
+    assert st.assistant_count == 0
 
 
 # ---------------------------------------------------------------------------

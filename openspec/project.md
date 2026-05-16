@@ -525,7 +525,7 @@ layers must read from this local source of truth; they do not replace it.
     `wall_seconds`, `user_message_count`, `model_breakdown` from the
     Stop payload/transcript (unavailable-is-`None`, no schema change).
     Spec in `openspec/changes/v2.60-claude-code-enrichment/`.
-    **Status: proposed (spec only).**
+    **Status: complete (1156 tests passing).**
 
 38. **v2.61 — Multi-model session attribution:** one session uses many
     models (router/main/subagent); cost + per-model rollups currently

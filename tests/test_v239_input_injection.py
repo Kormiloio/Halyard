@@ -78,7 +78,11 @@ def test_safe_transcript_path_accepts_normal_tmp_file(tmp_path: Path) -> None:
 def test_read_from_transcript_skips_bad_path() -> None:
     from halyard.collectors.claude_code import _read_from_transcript
 
-    assert _read_from_transcript("/etc/passwd") == (None, 0, 0, 0, 0, None, 0)
+    st = _read_from_transcript("/etc/passwd")
+    assert st.model is None
+    assert st.input_tokens == 0 and st.output_tokens == 0
+    assert st.assistant_count == 0
+    assert st.session_id is None and st.tool_calls is None
 
 
 # --- #3 Gemini history size cap --------------------------------------------
