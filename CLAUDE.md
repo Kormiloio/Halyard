@@ -31,3 +31,9 @@ proposal.md, design.md, and tasks.md before writing code.
 - `strategy/` is proprietary — never stage or commit anything from it.
 - Enterprise modules live in `Kormiloio/Halyard-Enterprise`, not here.
 - All new code must pass ruff, mypy, and the full test suite before commit.
+- Never assert a bare wall-clock bound (`assert elapsed < <literal>`).
+  The suite runs under `--cov` in CI; `sys.settrace` line tracing
+  inflates wall-clock 20-50%+. Take the `perf_ceiling` fixture
+  (`tests/conftest.py`) and assert `elapsed < perf_ceiling(<budget>)`
+  so timing tests catch algorithmic regressions without flaking on
+  instrumentation.

@@ -8,9 +8,9 @@ accidental quadratic or unbounded allocation.
 
 from __future__ import annotations
 
-import sys
 import time
 import tracemalloc
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -44,8 +44,10 @@ def _build_large_log(project_dir: Path, n: int = _SESSION_COUNT) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_large_limit_completes_in_time(tmp_path: Path) -> None:
-    """read_sessions with limit >> session_count completes within 2 seconds."""
+def test_large_limit_completes_in_time(
+    tmp_path: Path, perf_ceiling: Callable[[float], float]
+) -> None:
+    """read_sessions with limit >> session_count completes within budget."""
     _build_large_log(tmp_path)
 
     t0 = time.monotonic()
@@ -61,12 +63,10 @@ def test_large_limit_completes_in_time(tmp_path: Path) -> None:
     assert isinstance(result, list), f"Expected list, got {type(result)}: {result}"
     # All sessions should be returned since limit > session count
     assert len(result) == _SESSION_COUNT
-    # A trace function (coverage/profiler/debugger) instruments every line
-    # via sys.settrace and inflates wall-clock by 20-50%+, which makes a
-    # hard real-time bound meaningless. Widen the ceiling generously when
-    # tracing is active — a true O(n^2) regression on 10k lines is ~100x,
-    # so this still catches the thing the test guards against.
-    ceiling = _TIME_LIMIT_SECONDS * (5.0 if sys.gettrace() is not None else 1.0)
+    # Tracing-aware ceiling (coverage/profiler inflate wall-clock);
+    # see conftest._perf_ceiling. Still catches an O(n^2) regression
+    # (orders of magnitude on 10k lines), never flakes on instrumentation.
+    ceiling = perf_ceiling(_TIME_LIMIT_SECONDS)
     assert elapsed < ceiling, f"read_sessions took {elapsed:.2f}s — exceeds {ceiling:.1f}s ceiling"
 
 
