@@ -181,8 +181,10 @@ halyard stop
 # Terminal UI
 halyard tui
 
-# Ask in natural language via your agent (read-only MCP server):
-#   "how much did I spend this month?" — see the MCP section below
+# Ask in natural language — two ways, both read-only:
+halyard log "what did I spend this month?"   # from the CLI (local by
+                                             # default; --agent claude|openai optional)
+#   …or via your coding agent through the MCP server (see below)
 
 # Generate an invoice with an AI usage evidence appendix
 halyard invoice acme --period 2026-05 --include-ai-evidence
@@ -407,7 +409,9 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 | Change | Description |
 |--------|-------------|
 | [`v0-time-and-invoice`](./openspec/changes/v0-time-and-invoice/) | Project skeleton, `halyard init`, human time tracking, invoice generation |
-| [`v0.1-log-and-invoice`](./openspec/changes/archive/2026-05-08-v0.1-log-and-invoice/) | `halyard invoice` generation |
+| [`v0.1-log-and-invoice`](./openspec/changes/archive/2026-05-08-v0.1-log-and-invoice/) | `halyard log` natural-language query + `halyard invoice` |
+| [`v0.2-ai-agent-loop`](./openspec/changes/archive/2026-05-08-v0.2-ai-agent-loop/) | Structured-output AI agent loop for `halyard log` |
+| [`v0.3-provider-neutral-log`](./openspec/changes/archive/2026-05-07-v0.3-provider-neutral-log/) | OpenAI + local model support for `halyard log --agent openai` |
 | [`v1-ai-intelligence`](./openspec/changes/archive/2026-05-07-v1-ai-intelligence/) | AI session schema + Claude Code collector + local reports |
 | [`v1.5-multi-tool-collectors`](./openspec/changes/archive/2026-05-07-v1.5-multi-tool-collectors/) | Cursor, Gemini CLI, and Codex collectors |
 | [`v2-ai-work-ledger`](./openspec/changes/archive/2026-05-07-v2-ai-work-ledger/) | Cost allocation for seat/credit plans, trust-labeled reports, `confirm-attribution`, invoice evidence appendix |
