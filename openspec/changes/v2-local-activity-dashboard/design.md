@@ -37,7 +37,7 @@ Behavior:
 
 ## Views
 
-### Glass Cockpit
+### The Bridge
 
 The default route should be a modern operational overview. It should feel like
 an instrument panel for AI work: dense, crisp, and live.

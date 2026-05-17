@@ -762,7 +762,7 @@ def test_render_dashboard_title_is_the_bridge(tmp_path: Path) -> None:
     _init_project(tmp_path)
     html = render_dashboard(tmp_path)
     assert "Halyard · The Bridge" in html
-    assert "Halyard Glass Cockpit" not in html
+    assert "Glass Cockpit" not in html  # the old name must be fully gone
 
 
 def test_run_dashboard_port_in_use_raises_clean_error(tmp_path: Path) -> None:

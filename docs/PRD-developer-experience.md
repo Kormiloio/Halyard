@@ -235,7 +235,7 @@ First vertical slice implemented.
   instruction when Textual is missing.
 - The first layout renders a session feed, nautical side rail, budget status
   panel, model breakdown panel, header/status line, and footer key hints.
-- The side rail now mirrors the Glass Cockpit's nautical UX: Current Watch
+- The side rail now mirrors The Bridge's nautical UX: Current Watch
   proof state, Captain's Quarters service record, and Voyage Roster project
   progress.
 - `SessionStore` loads `ai-sessions.log`, tails appended lines with

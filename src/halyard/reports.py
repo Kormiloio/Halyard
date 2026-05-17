@@ -375,7 +375,7 @@ def _compute_presence_today(sessions: list[AiSession], now: datetime) -> tuple[i
 
 
 def build_dashboard_state(project_dir: Path) -> DashboardState:
-    """Build all data needed for the local Glass Cockpit."""
+    """Build all data needed for The Bridge (the local dashboard)."""
     from contextlib import suppress
 
     with suppress(Exception):

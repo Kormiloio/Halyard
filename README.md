@@ -8,7 +8,7 @@ Every AI session — time, tokens, model, cost, project — captured where the w
 stored as plain text on your machine, owned by you. No account. No cloud service. No
 prompt or code capture. Ever. MIT licensed.
 
-**Status:** alpha, open source — capture loop, reports, invoices, Glass Cockpit, and TUI
+**Status:** alpha, open source — capture loop, reports, invoices, The Bridge, and TUI
 in daily use.
 
 ---
@@ -73,9 +73,9 @@ auditable. Nothing is lost silently.
 appendix next. The goal is a client-safe artifact that proves AI-assisted work
 without showing prompts, transcripts, source code, or file contents.
 
-**Glass Cockpit** — A local dashboard for watching capture happen in real time. Run `halyard dashboard` inside any Halyard project.
+**The Bridge** — A local dashboard for watching capture happen in real time. Run `halyard dashboard` inside any Halyard project.
 
-**Rich Session Telemetry** — Where tools expose it, Halyard captures operational metadata beyond cost: tool call counts, error rates, wall time vs. active agent time, code delta, and per-model breakdowns. Gemini CLI sessions include full multi-model breakdowns from the history file. These signals surface in the TUI and Glass Cockpit as work-health indicators — not productivity scores, but honest signals of session shape.
+**Rich Session Telemetry** — Where tools expose it, Halyard captures operational metadata beyond cost: tool call counts, error rates, wall time vs. active agent time, code delta, and per-model breakdowns. Gemini CLI sessions include full multi-model breakdowns from the history file. These signals surface in the TUI and The Bridge as work-health indicators — not productivity scores, but honest signals of session shape.
 
 **Honors** — A service record that rewards clean proof, not raw hours. Ranks advance on attributed sessions (Deckhand → Commodore), stripes track your watch streak, and eight medals recognize behaviors that matter: completing your first watch, keeping a clean manifest, rescuing adrift sessions, and more. Run `halyard honors` to see your record.
 
@@ -87,7 +87,7 @@ without showing prompts, transcripts, source code, or file contents.
 
 Halyard is a Python 3.11+ local-first CLI and dashboard, not a hosted billing
 service. The `halyard` command is a Typer app, reports use Rich, the terminal
-dashboard uses Textual, and the Glass Cockpit is a small `127.0.0.1` HTTP
+dashboard uses Textual, and The Bridge is a small `127.0.0.1` HTTP
 server. The durable data model is plain text in the project folder; SQLite is
 only a rebuildable read-model cache for faster queries.
 
@@ -112,8 +112,10 @@ signal each tool exposes:
   actual editor workspace, not necessarily the shell CWD.
 - **Gemini CLI**: installs `SessionStart`, `AfterModel`, and `AfterAgent` hooks.
   `AfterModel` accumulates token usage from `usageMetadata`; `AfterAgent`
-  finalizes the session and can enrich from Gemini's local history file for
-  multi-model breakdowns, tool-call counts, errors, and cost.
+  finalizes the session. It integrates deeply with OpenTelemetry (OTLP) to measure
+  exact API and tool-execution durations (`api_seconds`, `tool_seconds`) and enriches
+  from Gemini's local history file for accurate multi-model token breakdowns, tool-call counts,
+  and deterministic cost.
 - **Codex Desktop**: imports local `~/.codex/sessions/.../rollout-*.jsonl`
   files, extracts timing/model/token metadata, and records imported session IDs
   so repeated imports do not duplicate entries.
@@ -148,25 +150,46 @@ estimate is a measurement.
 ## Quickstart
 
 > **Platform:** macOS, Linux, and Windows. The `halyard install-service`
-> command is macOS-only (uses `launchctl`); other platforms can run
-> `halyard dashboard` in a long-lived terminal instead.
+> command is macOS-only; other platforms can run `halyard dashboard`
+> in a long-lived terminal instead.
+
+### The 3-Minute Start
 
 ```bash
 pipx install halyard
 cd ~/businesses/my-freelance
 halyard init
 
-# Human time
+# Guided setup installs supported hooks and checks readiness:
+halyard setup
+
+# Verify your hooks and first capture:
+halyard doctor --first-capture
+
+# Open the dashboard
+halyard dashboard
+```
+
+### Daily Workflow
+
+```bash
+# Start your human timer (AI sessions are auto-captured in the background)
 halyard start acme/auth-migration
 # ... do work ...
 halyard stop
 
-# Check what's been captured
+# Terminal UI and natural-language REPL
+halyard tui
 halyard log "what did I spend this month?"
-halyard log "what did Cursor cost this week?"
-halyard report
-halyard dashboard
 
+# Generate an invoice with an AI usage evidence appendix
+halyard invoice acme --period 2026-05 --include-ai-evidence
+```
+
+<details>
+<summary><b>View Full Command Reference</b></summary>
+
+```bash
 # Stats-forward analytics — sessions, streaks, peak hour, model mix
 halyard usage --range 30d
 halyard usage --range 7d --json   # machine-readable
@@ -175,44 +198,27 @@ halyard usage --range 7d --json   # machine-readable
 halyard report --all --json | jq '.totals.cost_usd'
 halyard budget --json | jq '.[] | select(.month.state=="over")'   # spend gate
 
-# Or run the dashboard as a background launchd service (macOS):
+# Install the background launchd service (macOS):
 halyard install-service
-# Dashboard then listens on http://localhost:7432 — bookmark it.
-
-# Interactive REPL — natural-language queries over your work data
-halyard
-
-# Terminal dashboard
-halyard tui
-
-# AI sessions are captured automatically by hooks
-# Guided setup installs supported hooks and checks readiness:
-halyard setup
 
 # Ask your agent about your own AI work (read-only MCP server):
 pip install 'halyard[mcp]'
 halyard mcp            # stdio MCP server for Claude Code / Cursor
 
-# Or install hooks manually:
+# Install hooks manually:
 halyard install-hook          # Claude Code
 halyard install-cursor-hook   # Cursor
 halyard install-gemini-hook   # Gemini CLI
 halyard install-vscode-tasks  # VS Code manual capture task
 
-# Record VS Code/Copilot work from the terminal or VS Code task
+# Record VS Code/Copilot work manually
 halyard record-session --tool vscode --model github-copilot --minutes 15 --note "Copilot chat"
-
-# Diagnose setup and verify first capture
-# (also warns about AI tools installed but not wired into Halyard)
-halyard doctor
-halyard doctor --first-capture
 
 # Retroactive Gemini import
 halyard import-gemini
 
 # Budget limits
 halyard set-budget acme --daily 10.00 --monthly 200.00
-halyard budget
 
 # AI Work Ledger — allocate seat/credit plan costs by project
 halyard report --ledger
@@ -220,23 +226,14 @@ halyard report --ledger
 # Confirm inferred project attribution from timeclock overlap
 halyard confirm-attribution
 
-# Invoice with AI usage evidence appendix
-halyard invoice acme --period 2026-05 --include-ai-evidence
-
-# Coming next: signed, verifiable AI work appendix
-# halyard appendix create --client acme --period 2026-05
-
 # Keep pricing table fresh
 halyard update-pricing
 
-# Service record — rank, stripes, medals, passport
+# Service record & Project voyage roster
 halyard honors
-
-# Project voyage roster — stages and sea creatures
 halyard voyage
-halyard voyage set acme --sessions 30    # set session budget
-halyard voyage complete acme             # manually moor a project
 ```
+</details>
 
 See [`docs/demo.md`](docs/demo.md) for a full walkthrough — self-guided and
 live presentation script in one document. If capture does not show up, start
@@ -407,7 +404,7 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 | [`v1-ai-intelligence`](./openspec/changes/archive/2026-05-07-v1-ai-intelligence/) | AI session schema + Claude Code collector + local reports |
 | [`v1.5-multi-tool-collectors`](./openspec/changes/archive/2026-05-07-v1.5-multi-tool-collectors/) | Cursor, Gemini CLI, and Codex collectors |
 | [`v2-ai-work-ledger`](./openspec/changes/archive/2026-05-07-v2-ai-work-ledger/) | Cost allocation for seat/credit plans, trust-labeled reports, `confirm-attribution`, invoice evidence appendix |
-| [`v2-local-activity-dashboard`](./openspec/changes/v2-local-activity-dashboard/) | Glass Cockpit local browser dashboard (`halyard dashboard`) |
+| [`v2-local-activity-dashboard`](./openspec/changes/v2-local-activity-dashboard/) | The Bridge local browser dashboard (`halyard dashboard`) |
 | [`v2.1-dynamic-pricing`](./openspec/changes/archive/2026-05-07-v2.1-dynamic-pricing/) | `halyard update-pricing` — live pricing table sync |
 | [`v2.2-budget-limits`](./openspec/changes/archive/2026-05-07-v2.2-budget-limits/) | Per-project daily/monthly budget alerts |
 | [`v2.3-gemini-history`](./openspec/changes/archive/2026-05-07-v2.3-gemini-history/) | Gemini history file enrichment + `halyard import-gemini` |
@@ -488,6 +485,17 @@ what is actively being built.
 - Bug reports and docs improvements need no prior discussion.
 - The test suite is `pytest`; coverage requirements are enforced. Run
   `python -m pytest` before submitting.
+
+If something is confusing, a docs issue is as valuable as a code PR.
+
+## License
+
+MIT.
+
+---
+
+A [Kormilo LLC](https://kormilo.io) project.
+e submitting.
 
 If something is confusing, a docs issue is as valuable as a code PR.
 

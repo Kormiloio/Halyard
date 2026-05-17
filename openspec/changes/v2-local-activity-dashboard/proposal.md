@@ -22,7 +22,7 @@ halyard dashboard
 The dashboard runs on localhost and reads the same plain-text project files as
 the CLI. It shows:
 
-- a modern Glass Cockpit overview for live AI work;
+- a modern Bridge overview for live AI work;
 - active timer and current project;
 - recent AI sessions;
 - human hours and AI cost by project;
@@ -51,7 +51,7 @@ the CLI. It shows:
 
 - `halyard dashboard` starts a local server and prints a localhost URL.
 - The Today view shows the active timer, recent sessions, and AI cost summary.
-- The Glass Cockpit view feels modern, dense, and operational rather than like
+- The Bridge view feels modern, dense, and operational rather than like
   a generic SaaS landing page.
 - The Health view shows whether Halyard can capture Claude Code sessions.
 - The dashboard clearly surfaces unattributed AI sessions.

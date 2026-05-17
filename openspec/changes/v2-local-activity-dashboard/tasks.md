@@ -5,7 +5,7 @@ Implementation checklist for v2 — Local Activity Dashboard.
 ## 1. Product and architecture
 
 - [x] 1.1 Write local dashboard PRD.
-- [x] 1.2 Add Glass Cockpit UI direction and user stories.
+- [x] 1.2 Add The Bridge UI direction and user stories.
 - [x] 1.3 Choose initial server approach: FastAPI/Starlette or standard-library
       HTTP server.
 - [x] 1.4 Define dashboard route map and shared view models.
@@ -27,7 +27,7 @@ Implementation checklist for v2 — Local Activity Dashboard.
 
 ## 4. Dashboard views
 
-- [x] 4.1 Build Glass Cockpit overview.
+- [x] 4.1 Build The Bridge overview.
 - [x] 4.2 Build Today view.
 - [x] 4.3 Build Projects view.
 - [x] 4.4 Build Sessions view with filters.

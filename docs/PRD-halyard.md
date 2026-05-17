@@ -495,8 +495,7 @@ Detailed per-feature context lives in:
   direction and build sequence
 - [`PRD-ai-work-ledger.md`](PRD-ai-work-ledger.md) — the AI session ledger,
   plan costs, and attribution model (implemented baseline)
-- [`PRD-local-activity-dashboard.md`](PRD-local-activity-dashboard.md) — the
-  Glass Cockpit local dashboard (implemented local surface)
+- [`PRD-local-activity-dashboard.md`](PRD-local-activity-dashboard.md) — The Bridge local dashboard (implemented local surface)
 - [`PRD-org-admin-dashboard.md`](PRD-org-admin-dashboard.md) — org rollup,
   governance, and enterprise reporting (deferred / design-partner gated)
 

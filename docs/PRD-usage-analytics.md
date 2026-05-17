@@ -13,7 +13,7 @@ shipped in [v2.23-usage-analytics](../openspec/changes/v2.23-usage-analytics/).
 README quickstart and troubleshooting both reference the new surface.
 
 This PRD is now historical reference for the design intent rather than
-forward-looking work. The Glass Cockpit remains the operational view for
+forward-looking work. The Bridge remains the operational view for
 capture, attribution, health, and billing readiness; Usage Analytics
 makes the same ledger feel legible, memorable, and useful at a glance.
 
@@ -55,7 +55,7 @@ daily use, precise enough to support billing, audit, and decision-making.
 
 ## Product Thesis
 
-If the Glass Cockpit answers "is my work being captured correctly?", Usage
+If The Bridge answers "is my work being captured correctly?", Usage
 Analytics answers "what does my AI work pattern look like?"
 
 The view should be local-first, calm, compact, and visually rewarding. It
@@ -79,7 +79,7 @@ privacy-preserving usage record.
 
 ## Non-Goals
 
-- Replace the Glass Cockpit's operational health and attribution workflow.
+- Replace The Bridge's operational health and attribution workflow.
 - Replace invoices, cost allocation, or audit appendices.
 - Require a hosted service or cloud account.
 - Capture prompts, transcripts, or source code.
@@ -186,7 +186,7 @@ large for MVP, but the data model should support all three.
 
 ## UX Direction
 
-Usage Analytics should be more visually expressive than the Glass Cockpit, but
+Usage Analytics should be more visually expressive than The Bridge, but
 still work-focused and compact.
 
 Design principles:

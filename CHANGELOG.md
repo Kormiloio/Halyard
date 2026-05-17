@@ -144,7 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `projects.toml`, `time.timeclock`, `invoices/`, and `.gitignore`.
   Auto-detects business name from `git config user.name`.
   Auto-installs hooks for any AI tool found on PATH.
-- `halyard dashboard` — local Glass Cockpit showing sessions, cost, token
+- `halyard dashboard` — local The Bridge showing sessions, cost, token
   totals, project attribution, active timer, and collector health.
 - `halyard tui` — terminal dashboard (Textual).
 - `halyard doctor` — diagnoses hooks, log, hub, and first-capture readiness.

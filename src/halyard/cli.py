@@ -23,7 +23,7 @@ app = typer.Typer(
         "Getting started:\n"
         "  halyard init                    # scaffold a project in the current directory\n"
         "  halyard setup                   # guided hook install + readiness check\n"
-        "  halyard dashboard               # local Glass Cockpit at http://127.0.0.1:7432\n"
+        "  halyard dashboard               # local The Bridge at http://127.0.0.1:7432\n"
         "\n"
         "Docs: https://github.com/Kormiloio/Halyard"
     ),

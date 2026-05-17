@@ -7,14 +7,16 @@ from rich.console import Console
 
 console = Console()
 
-app = typer.Typer(name="service", help="Manage the Halyard Glass Cockpit background service.")
+app = typer.Typer(
+    name="service", help="Manage the Halyard background dashboard service (The Bridge)."
+)
 
 
 @app.command(name="install")
 def service_install(
     port: int = typer.Option(7432, "--port", help="Port for the background dashboard."),
 ) -> None:
-    """Install Halyard as a macOS login service (auto-starts the Glass Cockpit)."""
+    """Install Halyard as a macOS login service (auto-starts The Bridge)."""
     import platform
 
     if platform.system() != "Darwin":
@@ -39,7 +41,7 @@ def service_install(
         console.print(f"[bold red]Error:[/] {exc}")
         raise typer.Exit(code=1) from exc
 
-    console.print("[bold green]Service installed.[/] Glass Cockpit will start at login.")
+    console.print("[bold green]Service installed.[/] The Bridge will start at login.")
     console.print(f"  Dashboard: [bold cyan]{url}[/]")
     console.print("  Logs:      ~/Library/Logs/halyard-dashboard.log")
     console.print("\nTo uninstall: [bold]halyard service uninstall[/]")

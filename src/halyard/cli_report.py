@@ -586,7 +586,7 @@ def register(app: typer.Typer) -> None:
             None, "--project-dir", help="Halyard project directory (default: auto-detect)."
         ),
     ) -> None:
-        """Start the local Halyard Glass Cockpit dashboard.
+        """Start the local Halyard dashboard (The Bridge).
 
         With no --project-dir, aggregates every registered project (+ hub)
         so the default view is your total real work, not a single log.

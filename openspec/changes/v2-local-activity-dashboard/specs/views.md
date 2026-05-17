@@ -2,7 +2,7 @@
 
 ## Requirement: modern operational UI
 
-The dashboard MUST feel like a modern Glass Cockpit for AI work.
+The dashboard MUST feel like a modern operational bridge for AI work.
 
 ### Scenario: dense working interface
 

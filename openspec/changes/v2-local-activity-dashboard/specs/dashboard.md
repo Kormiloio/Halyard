@@ -42,7 +42,7 @@ The dashboard MUST show current work status.
 - THEN the Today view says no AI usage has been captured today
 - AND links to collector health guidance
 
-## Requirement: Glass Cockpit overview
+## Requirement: The Bridge overview
 
 The dashboard MUST provide a modern cockpit-style overview as the default
 working view.

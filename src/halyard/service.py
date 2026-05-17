@@ -1,4 +1,4 @@
-"""macOS LaunchAgent management for the Halyard Glass Cockpit background service."""
+"""macOS LaunchAgent management for the Halyard background dashboard service (The Bridge)."""
 
 from __future__ import annotations
 
