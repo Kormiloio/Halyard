@@ -149,7 +149,7 @@ estimate is a measurement.
 
 ## Quickstart
 
-> **Platform:** macOS, Linux, and Windows. The `halyard install-service`
+> **Platform:** macOS, Linux, and Windows. The `halyard service install`
 > command is macOS-only; other platforms can run `halyard dashboard`
 > in a long-lived terminal instead.
 
@@ -178,9 +178,11 @@ halyard start acme/auth-migration
 # ... do work ...
 halyard stop
 
-# Terminal UI and natural-language REPL
+# Terminal UI
 halyard tui
-halyard log "what did I spend this month?"
+
+# Ask in natural language via your agent (read-only MCP server):
+#   "how much did I spend this month?" — see the MCP section below
 
 # Generate an invoice with an AI usage evidence appendix
 halyard invoice acme --period 2026-05 --include-ai-evidence
@@ -199,7 +201,7 @@ halyard report --all --json | jq '.totals.cost_usd'
 halyard budget --json | jq '.[] | select(.month.state=="over")'   # spend gate
 
 # Install the background launchd service (macOS):
-halyard install-service
+halyard service install
 
 # Ask your agent about your own AI work (read-only MCP server):
 pip install 'halyard[mcp]'
@@ -324,7 +326,7 @@ my-business/
 ├── projects.toml         # array of projects
 ├── time.timeclock        # hledger-compatible human time log
 ├── ai-sessions.log       # AI usage events (plain text, append-focused)
-├── ledger.beancount      # Beancount double-entry ledger
+├── ai-plans.toml         # seat/credit plan definitions for cost allocation
 └── invoices/             # generated invoice markdown + PDF
 ```
 
@@ -371,7 +373,8 @@ Halyard records two cost classes:
   you're looking through.
 
 If `cost_usd` is consistently $0.00 *and* you have no `ai-plans.toml`,
-configure one with `halyard ai-plans add` so the ledger can allocate.
+create one in the project folder (define your seat/credit plans) so
+`halyard report --ledger` can allocate subscription cost.
 
 ### Dashboard shows "344 missing tokens" warning
 
@@ -398,9 +401,7 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 | Change | Description |
 |--------|-------------|
 | [`v0-time-and-invoice`](./openspec/changes/v0-time-and-invoice/) | Project skeleton, `halyard init`, human time tracking, invoice generation |
-| [`v0.1-log-and-invoice`](./openspec/changes/archive/2026-05-08-v0.1-log-and-invoice/) | `halyard log` natural-language query + `halyard invoice` |
-| [`v0.2-ai-agent-loop`](./openspec/changes/archive/2026-05-08-v0.2-ai-agent-loop/) | Structured-output AI agent loop for `halyard log` |
-| [`v0.3-provider-neutral-log`](./openspec/changes/archive/2026-05-07-v0.3-provider-neutral-log/) | OpenAI + local model support for `halyard log --agent openai` |
+| [`v0.1-log-and-invoice`](./openspec/changes/archive/2026-05-08-v0.1-log-and-invoice/) | `halyard invoice` generation |
 | [`v1-ai-intelligence`](./openspec/changes/archive/2026-05-07-v1-ai-intelligence/) | AI session schema + Claude Code collector + local reports |
 | [`v1.5-multi-tool-collectors`](./openspec/changes/archive/2026-05-07-v1.5-multi-tool-collectors/) | Cursor, Gemini CLI, and Codex collectors |
 | [`v2-ai-work-ledger`](./openspec/changes/archive/2026-05-07-v2-ai-work-ledger/) | Cost allocation for seat/credit plans, trust-labeled reports, `confirm-attribution`, invoice evidence appendix |
@@ -485,17 +486,6 @@ what is actively being built.
 - Bug reports and docs improvements need no prior discussion.
 - The test suite is `pytest`; coverage requirements are enforced. Run
   `python -m pytest` before submitting.
-
-If something is confusing, a docs issue is as valuable as a code PR.
-
-## License
-
-MIT.
-
----
-
-A [Kormilo LLC](https://kormilo.io) project.
-e submitting.
 
 If something is confusing, a docs issue is as valuable as a code PR.
 
