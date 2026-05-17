@@ -8,6 +8,7 @@ accidental quadratic or unbounded allocation.
 
 from __future__ import annotations
 
+import sys
 import time
 import tracemalloc
 from datetime import datetime
@@ -60,9 +61,13 @@ def test_large_limit_completes_in_time(tmp_path: Path) -> None:
     assert isinstance(result, list), f"Expected list, got {type(result)}: {result}"
     # All sessions should be returned since limit > session count
     assert len(result) == _SESSION_COUNT
-    assert elapsed < _TIME_LIMIT_SECONDS, (
-        f"read_sessions took {elapsed:.2f}s — exceeds {_TIME_LIMIT_SECONDS}s ceiling"
-    )
+    # A trace function (coverage/profiler/debugger) instruments every line
+    # via sys.settrace and inflates wall-clock by 20-50%+, which makes a
+    # hard real-time bound meaningless. Widen the ceiling generously when
+    # tracing is active — a true O(n^2) regression on 10k lines is ~100x,
+    # so this still catches the thing the test guards against.
+    ceiling = _TIME_LIMIT_SECONDS * (5.0 if sys.gettrace() is not None else 1.0)
+    assert elapsed < ceiling, f"read_sessions took {elapsed:.2f}s — exceeds {ceiling:.1f}s ceiling"
 
 
 # ---------------------------------------------------------------------------
