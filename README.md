@@ -204,7 +204,7 @@ halyard budget --json | jq '.[] | select(.month.state=="over")'   # spend gate
 halyard service install
 
 # Ask your agent about your own AI work (read-only MCP server):
-pip install 'halyard[mcp]'
+pipx inject halyard mcp   # add the MCP extra to the pipx install
 halyard mcp            # stdio MCP server for Claude Code / Cursor
 
 # Install hooks manually:
@@ -250,7 +250,8 @@ adrift rate?". It exposes `work_summary`, `sessions`, `spend_in_range`,
 `project_breakdown`, `cost_by_model`, and `outcomes_status`. No tool
 writes anything; only metadata already in the ledger is returned (never
 prompts, code, or transcripts). It needs the optional extra
-(`pip install 'halyard[mcp]'`).
+(`pipx inject halyard mcp`, or `pipx install 'halyard[mcp]'` from a
+fresh install).
 
 `halyard init` (and `halyard setup`) **auto-registers** it with every
 MCP client detected on your PATH — Claude Code, Cursor, Gemini CLI — so
@@ -389,6 +390,11 @@ that recent sessions on the API plan aren't being dropped.
 ## How it's being built
 
 This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-driven development. Every feature lives as a change folder under `openspec/changes/` with a proposal, specs, design, and task checklist.
+
+> **Versioning note:** the published PyPI package is `0.x` (currently
+> `0.2.0`). The `vN.x` identifiers below (e.g. `v2.24`) are internal
+> OpenSpec changeset IDs, **not** release versions — they track
+> design history, not what you `pipx install`.
 
 ### Current Focus
 
