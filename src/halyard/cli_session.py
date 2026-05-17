@@ -304,8 +304,43 @@ def register(app: typer.Typer) -> None:
     @app.command()
     def status(
         json_: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+        snapshot: bool = typer.Option(
+            False, "--snapshot", help="Show the ambient capture/spend/budget snapshot."
+        ),
+        watch: bool = typer.Option(
+            False, "--watch", help="Continuously redraw the ambient snapshot."
+        ),
+        interval: int = typer.Option(
+            30, "--interval", help="Seconds between redraws with --watch."
+        ),
     ) -> None:
-        """Show the active timer, or report that none is running."""
+        """Show the active timer, or (with --snapshot/--watch) the
+        ambient capture/spend/budget snapshot."""
+        if watch or snapshot:
+            from halyard.status_render import render_status_text
+            from halyard.status_snapshot import build_status_snapshot
+
+            if not watch:
+                snap = build_status_snapshot()
+                if json_:
+                    from halyard.jsonio import emit
+
+                    emit(snap)
+                else:
+                    console.print(render_status_text(snap))
+                return
+            import time
+
+            try:
+                while True:
+                    snap = build_status_snapshot()
+                    console.clear()
+                    console.print(render_status_text(snap))
+                    console.print("\n[dim]Ctrl-C to stop · ~ = estimate[/]")
+                    time.sleep(max(1, interval))
+            except KeyboardInterrupt:
+                return
+
         from halyard.reports import read_active_timer
 
         active = read_active_timer()

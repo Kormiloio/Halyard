@@ -751,7 +751,13 @@ layers must read from this local source of truth; they do not replace it.
    single-source parity with `report`/`budget`/`doctor`. PRD/ARD in
    `docs/PRD-ambient-status.md` / `docs/ARD-ambient-status.md`; spec
    in `openspec/changes/v2.74-ambient-status/`.
-   **Status: proposed (spec only).**
+   **Status: complete (1286 tests passing).** `status_snapshot.py`
+   composed only from existing builders (zero new captured data);
+   `status --snapshot`/`--watch` shipped, v2.69 `status --json`
+   timer contract preserved; projection is a labeled estimate
+   (no divide-by-zero); privacy test pins no provider-credential
+   access. macOS menu-bar shim deferred (Phase-0 gate — needs a real
+   launchd/PyObjC environment; contract + terminal watch ship now).
 
 53. **v2.75 — Extensible log contract (unknown-token preservation):**
    dual-justified — closes the v2.71 documented silent-drop gap AND

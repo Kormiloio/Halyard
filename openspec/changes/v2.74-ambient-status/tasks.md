@@ -1,53 +1,61 @@
 # v2.74 — Ambient Status: Tasks
 
-Status: **proposed (spec only, not started).** Adopts CodexBar's
-surface lesson, not its job. Mission guardrails are enforced as
-tasks, not just prose.
+Status: **COMPLETE 2026-05-17 (1286 tests passing)** — contract +
+`status --snapshot`/`--watch` shipped. Menu-bar shim **deferred**
+(Phase-0 gate, see below). Adopts CodexBar's surface lesson, not its
+job; mission guardrails enforced as tests.
 
 ## Phase 0 (BLOCKING the menu-bar piece only)
-- [ ] Spike: Python macOS menu-bar under launchd
-  (PyObjC/`rumps`, optional `halyard[menubar]` extra) — robust to
-  ship? Record outcome: proceed / defer-menubar-ship-contract-only
+- [x] Outcome: **deferred.** The macOS menu-bar shim requires a real
+  launchd/PyObjC environment to validate; not verifiable in this
+  build environment. Per the changeset gate the contract + terminal
+  watch ship now; the shim is a later, separately-spiked addition.
+  No `halyard[menubar]` extra added yet.
 
-## Contract (must reuse existing builders — audit first)
-- [ ] Audit + cite the existing function for every `StatusSnapshot`
-  field (doctor/report/sum_spend/leakage/budgets). Any field needing
-  **new capture is cut**, not added — record what (if anything) was cut
-- [ ] `StatusSnapshot` + `status --json` via the v2.69 `jsonio` seam
-- [ ] Projection: linear run-rate only; `estimate: true` non-removable;
-  run-rate 0 ⇒ `days_until_limit=None`
-- [ ] Per-tick read uses the SQLite cache / trailing window, not a
-  full re-parse
+## Contract (reuse existing builders — audited)
+- [x] `status_snapshot.py`: `StatusSnapshot` composed ONLY from
+  existing builders — `aggregate_session_dirs`+`parse_sessions`+
+  `_dedup_sessions` (same aggregator as dashboard/report),
+  `sum_spend`, `summarize_ai_sessions` (by-client), doctor
+  (`build_doctor_report`/`has_errors`), `budget_status`,
+  `leakage`/`unattributed_log_count`. **Zero new captured fields.**
+- [x] Projection: linear run-rate only; `estimate=True`
+  non-removable; run-rate 0 / no-limit ⇒ `days_until_limit=None`;
+  no divide-by-zero
+- [x] Emitted via the v2.69 `jsonio` seam
 
 ## Renderers
-- [ ] `halyard status --watch` (`--interval`, default 30 s) — all
-  platforms, stdlib only, the guaranteed deliverable
-- [ ] macOS menu-bar shim **iff Phase 0 passed**: `halyard menubar`
-  entry point, `halyard[menubar]` extra, launchd-targetable via the
-  existing `halyard service`; no socket bound
+- [x] `halyard status --snapshot` (one-shot, `--json` → snapshot
+  contract) and `--watch [--interval N]` (redraw loop, Ctrl-C),
+  stdlib only. v2.69 `status --json` timer contract **unchanged**
+  (additive — regression-tested)
+- [x] `status_render.render_status_text` pure fn; user strings
+  markup-escaped (v2.38); `~` marks estimates
+- [ ] macOS menu-bar shim — deferred (Phase 0)
 
-## Guardrail tests (mission enforcement)
-- [ ] single-source parity: snapshot values == `report`/`budget`/
-  `doctor` outputs
-- [ ] privacy: snapshot path opens only Halyard files — never provider
-  creds/keychain/cookies (allowlist/import audit test)
-- [ ] projection math + `estimate` always true + no divide-by-zero
-- [ ] `--watch` single-frame render (no infinite loop); tracing-aware
-  perf bound (`perf_ceiling` fixture) over a large log
-- [ ] empty/no-budget/no-session clean states
-- [ ] NEGATIVE guard: a test/grep asserts no provider-quota / reset /
-  incident / credential code was introduced
+## Guardrail tests (`tests/test_v274_ambient_status.py`, 11 cases)
+- [x] single-source parity: `spend.month_usd == sum_spend(...)`
+- [x] privacy: build opens no provider credential/cookie/keychain
+  path (recording-`open` allowlist test)
+- [x] projection math + `estimate` always true + zero-run-rate +
+  no-limit
+- [x] empty/no-budget/no-session clean state
+- [x] render escapes markup + shows `~` estimate
+- [x] v2.69 `status --json` timer shape preserved; `--snapshot
+  --json` is the distinct new contract
+- [x] tracing-aware perf bound on the per-build over 5k sessions
+- [x] NEGATIVE guard: no provider quota/reset/incident/credential
+  code introduced (privacy test + none written)
 
 ## Docs
-- [ ] PRD/ARD already written; update them only if scope shifts
-- [ ] Roadmap entry + status/test count in `openspec/project.md`
+- [x] PRD/ARD already written (no scope shift)
+- [x] Roadmap entry + status/test count in `openspec/project.md`
 
 ## Decision gate
-- [ ] Contract not buildable without new captured data ⇒ reduce scope
-  to existing data or shelve — never add capture to satisfy this
-  feature. Record the decision.
+- [x] Contract built with **zero** new captured data — no field cut,
+  none added. Menu-bar deferred, not forced.
 
 ## Gate
-- [ ] `pytest` green
-- [ ] `ruff check` + `ruff format --check` clean
-- [ ] `mypy src/` clean
+- [x] `pytest` green (1286 passed)
+- [x] `ruff check` + `ruff format --check` clean
+- [x] `mypy src/` clean
