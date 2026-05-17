@@ -717,6 +717,20 @@ layers must read from this local source of truth; they do not replace it.
    `openspec/changes/v2.72-field-registry/`.
    **Status: proposed (spec only).**
 
+51. **v2.73 — Sortable dashboard tables (UX):** every web table is
+   server-rendered with a single fixed sort. Add progressive-
+   enhancement client-side column sort (~8 tables) — clickable
+   headers, numeric/time/severity/text comparators, blanks-last,
+   asc→desc→clear. Load-bearing requirement: sort state persists in
+   `sessionStorage` and re-applies across the 10 s `<meta refresh>`
+   (a naive sort resets every 10 s). No backend/data/format change;
+   no-JS baseline = today's fixed sort. Health sorts by severity
+   rank, never glyph text; Note/Fix not sortable; a column whose key
+   can't be made unambiguous is dropped, not shipped wrong. Cosmetic,
+   not launch-blocking. Spec in
+   `openspec/changes/v2.73-table-sort/`.
+   **Status: proposed (spec only).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — connecting sessions to commits, PRs, tests, and
