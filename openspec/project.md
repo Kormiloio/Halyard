@@ -753,6 +753,21 @@ layers must read from this local source of truth; they do not replace it.
    in `openspec/changes/v2.74-ambient-status/`.
    **Status: proposed (spec only).**
 
+53. **v2.75 — Extensible log contract (unknown-token preservation):**
+   dual-justified — closes the v2.71 documented silent-drop gap AND
+   is the concrete forward-compat enabler so consumers (incl. the
+   additive Halyard-Enterprise layer) extend the line format without
+   forking the OSS parser. Adds `AiSession.extra` passthrough: parser
+   `case _:` preserves unknown `key=value` verbatim, `to_log_line`
+   re-emits it sorted/injection-safe; byte-stable for the empty case;
+   identity (`_session_id`/`session_hash`) and quarantine/amendment
+   paths unaffected; OSS never *interprets* `extra`. Ships with a
+   docs pass: `docs/integration-contract.md` (stable, additively
+   versioned log + `--json` surface) and neutral `payer:work-unit`
+   attribution wording. Spec in
+   `openspec/changes/v2.75-extensible-log-contract/`.
+   **Status: proposed (spec only); docs pass shipped.**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — connecting sessions to commits, PRs, tests, and

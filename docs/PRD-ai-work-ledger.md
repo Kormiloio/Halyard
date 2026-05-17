@@ -175,6 +175,18 @@ credits, Copilot seats, Devin/Factory credits, or enterprise contracts.
 Mapping human time and AI usage to `client:project`, plus optional task,
 deliverable, user, tool, model, and billing metadata.
 
+The slug is semantically `payer:work-unit` — the left side is *whoever
+bears the cost of the work*, not specifically an external customer.
+For a freelancer that is a client they bill; for an internal team it
+is a cost center / initiative whose AI cost and ROI they measure. The
+captured primitive is identical; only the consumer of the
+attribution differs (external invoice vs. internal cost/ROI). Halyard
+OSS keeps the slug a simple opaque `namespace:unit` label and does
+not interpret organizational hierarchy — cost-center rollups,
+chargeback/showback, and ROI reporting are an additive
+**Halyard-Enterprise** layer over the same ledger, gated on
+design-partner pull, never a fork of the OSS capture model.
+
 ## MVP Scope
 
 The MVP should answer:
@@ -235,6 +247,18 @@ only; the JSON form is unsigned data.
   readiness).
 - Compliance/audit exports.
 - Outcome-based billing support (gated on outcome-graph demand).
+- **Outcome graph as the ROI through-line (v3.0, gated).** Linking
+  sessions to commits/PRs/tests is the same primitive at every scale:
+  for a freelancer it answers "did this AI work ship?"; rolled up over
+  cost centers it answers the enterprise question "is our AI spend
+  producing delivery, and where?". Same captured data, additive
+  Halyard-Enterprise consumer — not an OSS scope expansion.
+- **Extensible log contract (v2.75, proposed).** The `ai-sessions.log`
+  line grammar + `--json` schema are the stable, versioned
+  integration surface third-party and Halyard-Enterprise consumers
+  build on; unknown tokens are preserved (not dropped) so the format
+  can be extended without forking the OSS parser. See
+  `docs/integration-contract.md`.
 
 ## Key User Stories
 
