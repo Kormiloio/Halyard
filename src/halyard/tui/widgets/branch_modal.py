@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from rich.markup import escape
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.message import Message
@@ -54,4 +55,4 @@ class BranchModal(ModalScreen[str | None]):
 
 def _branch_label(branch: str, active_branch: str | None) -> str:
     marker = "*" if branch == active_branch else " "
-    return f"{marker} {branch}"
+    return f"{marker} {escape(branch)}"

@@ -228,6 +228,20 @@ def _decode_free_text(value: str) -> str:
     return value.replace("_", " ")
 
 
+def _decode_tag(token: str) -> str:
+    """Decode one tag element.
+
+    New form is percent-encoded (``_encode_free_text``); legacy form is
+    the raw ``_safe_field`` output (whitespace/`=`→`_`, no percent
+    escapes). A token with a ``%`` is unquoted; otherwise it is the
+    legacy raw value verbatim — crucially NOT underscore→space (legacy
+    tags never used that substitution, unlike other free-text fields).
+    """
+    if "%" in token:
+        return urllib.parse.unquote(token)
+    return token
+
+
 @dataclass
 class AiSession:
     start: datetime
@@ -372,7 +386,7 @@ class AiSession:
         if self.attr_method:
             kvs.append(f"attr_method={_safe_field(self.attr_method)}")
         if self.tags:
-            kvs.append(f"tags={_safe_field(','.join(self.tags))}")
+            kvs.append(f"tags={','.join(_encode_free_text(t) for t in self.tags)}")
         if self.note:
             kvs.append(f"note={_encode_free_text(self.note)}")
         if self.session_id:
@@ -445,14 +459,24 @@ class AiSession:
 
 
 def append_session(project_dir: Path, session: AiSession) -> None:
-    import sys
-
-    # v2.17 task 4.1: use locked_file so concurrent appenders never interleave
+    # v2.17 task 4.1: use locked_file so concurrent appenders never interleave.
+    # NOTE: milestone easter eggs are intentionally NOT evaluated here — that
+    # required a full parse_sessions() on every append (O(n²) over a bulk
+    # import). Interactive collectors call maybe_emit_milestones() once after
+    # the append; bulk importers skip it entirely.
     log_path = project_dir / AI_LOG_FILENAME
     with locked_file(log_path, "a") as f:
         f.write(session.to_log_line() + "\n")
 
-    # Milestone easter eggs — check after every append, print to stderr
+
+def maybe_emit_milestones(project_dir: Path) -> None:
+    """Emit milestone easter-egg lines to stderr (best-effort).
+
+    Called once by interactive stop-hook collectors after appending —
+    NOT in the per-append path, so bulk imports stay O(n).
+    """
+    import sys
+
     try:
         from halyard.easter_eggs import check_milestones
 
@@ -696,7 +720,7 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
             case "attr_method":
                 session.attr_method = v
             case "tags":
-                session.tags = v.split(",")
+                session.tags = [_decode_tag(t) for t in v.split(",") if t]
             case "note":
                 session.note = _decode_free_text(v)
             case "session_id":

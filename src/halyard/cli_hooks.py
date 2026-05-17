@@ -6,6 +6,7 @@ import json
 import shutil
 import sys
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,26 @@ import typer
 from rich.console import Console
 
 console = Console()
+_hook_err_console = Console(stderr=True)
+
+
+def _run_hook(fn: Callable[[], int]) -> int:
+    """Run a collector hook entry point with an absolute crash backstop.
+
+    Hooks run as subprocesses of the host AI tool (Claude Code, Gemini,
+    Cursor). An uncaught exception here becomes a traceback + nonzero
+    exit *inside the host tool*. The per-collector code is defensive,
+    but this is the guarantee of last resort: any failure is logged to
+    stderr and the hook exits 0 so the host is never disrupted.
+    """
+    try:
+        return fn()
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException as exc:
+        with suppress(Exception):
+            _hook_err_console.print(f"[dim]halyard hook suppressed: {exc!r}[/dim]")
+        return 0
 
 
 def _is_trusted_exe_path(path: Path) -> bool:
@@ -306,7 +327,13 @@ def _do_install_hook_claude(global_: bool = False) -> None:
             current.extend(resolved)
             added.append(event)
 
-    _write_settings(settings_path, json.dumps(existing, indent=2) + "\n")
+    new_text = json.dumps(existing, indent=2) + "\n"
+    if _settings_unchanged(settings_path, new_text):
+        # Byte-stable no-op (matches the Gemini/Cursor/MCP installers):
+        # never rewrite the file or churn its mtime when nothing changed.
+        console.print(f"[yellow]Claude Code hooks already present[/] in [bold]{settings_path}[/]")
+        return
+    _write_settings(settings_path, new_text)
 
     if added:
         console.print(f"[bold green]Claude Code hooks installed[/] in [bold]{settings_path}[/]")
@@ -584,49 +611,49 @@ def register(app: typer.Typer) -> None:
         """Record Claude Code session start (called by UserPromptSubmit hook)."""
         from halyard.collectors.claude_code import record_session_start
 
-        raise typer.Exit(code=record_session_start())
+        raise typer.Exit(code=_run_hook(record_session_start))
 
     @app.command(name="cc-hook", hidden=True)
     def cc_hook() -> None:
         """Process Claude Code Stop hook payload (called by Stop hook)."""
         from halyard.collectors.claude_code import handle_stop_hook
 
-        raise typer.Exit(code=handle_stop_hook())
+        raise typer.Exit(code=_run_hook(handle_stop_hook))
 
     @app.command(name="gc-session", hidden=True)
     def gc_session() -> None:
         """Record Gemini CLI session start (called by SessionStart hook)."""
         from halyard.collectors.gemini_cli import record_session_start
 
-        raise typer.Exit(code=record_session_start())
+        raise typer.Exit(code=_run_hook(record_session_start))
 
     @app.command(name="gc-model", hidden=True)
     def gc_model() -> None:
         """Accumulate Gemini CLI token counts (called by AfterModel hook)."""
         from halyard.collectors.gemini_cli import record_model_usage
 
-        raise typer.Exit(code=record_model_usage())
+        raise typer.Exit(code=_run_hook(record_model_usage))
 
     @app.command(name="gc-hook", hidden=True)
     def gc_hook() -> None:
         """Finalise Gemini CLI session record (called by AfterAgent hook)."""
         from halyard.collectors.gemini_cli import handle_agent_stop
 
-        raise typer.Exit(code=handle_agent_stop())
+        raise typer.Exit(code=_run_hook(handle_agent_stop))
 
     @app.command(name="cursor-session", hidden=True)
     def cursor_session() -> None:
         """Record Cursor session start (called by beforeSubmitPrompt hook)."""
         from halyard.collectors.cursor import record_session_start
 
-        raise typer.Exit(code=record_session_start())
+        raise typer.Exit(code=_run_hook(record_session_start))
 
     @app.command(name="cursor-hook", hidden=True)
     def cursor_hook() -> None:
         """Process Cursor stop hook payload (called by stop hook)."""
         from halyard.collectors.cursor import handle_stop_hook
 
-        raise typer.Exit(code=handle_stop_hook())
+        raise typer.Exit(code=_run_hook(handle_stop_hook))
 
     @app.command(name="install-hook-claude")
     def install_hook_claude(

@@ -21,15 +21,15 @@ classifiers = [
     "Topic :: Office/Business :: Financial :: Accounting",
 ]
 dependencies = [
-    "typer>=0.12",
-    "rich>=13.7",
-    "pydantic>=2.6",
-    "tomli-w>=1.0",
-    "jinja2>=3.1",
-    "dateparser>=1.2",
-    "anthropic>=0.40",
-    "textual>=0.60",
-    "watchfiles>=0.21",
+    "typer>=0.12,<1.0",
+    "rich>=13.7,<15",
+    "pydantic>=2.6,<3",
+    "tomli-w>=1.0,<2",
+    "jinja2>=3.1,<4",
+    "dateparser>=1.2,<2",
+    "anthropic>=0.40,<1.0",
+    "textual>=0.60,<2.0",
+    "watchfiles>=0.21,<2",
 ]
 
 [project.optional-dependencies]

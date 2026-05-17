@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import sys
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,7 @@ from halyard.ai_log import (
     AiSession,
     append_session,
     find_project_dir,
+    maybe_emit_milestones,
     maybe_show_dashboard_hint,
     read_active_project,
     write_unattributed_session,
@@ -62,6 +64,17 @@ from halyard.model_breakdown import primary_model as _primary_model
 from halyard.pricing import calculate_cost
 
 _GC_SESSION_FILE = Path.home() / ".halyard" / "gc-session"
+
+
+def _coerce_int(value: object, default: int = 0) -> int:
+    """Tolerant int coercion for attacker-influenceable payload fields
+    (defense-in-depth behind the cli_hooks crash backstop)."""
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float, str)):
+        with suppress(TypeError, ValueError):
+            return int(value)
+    return default
 
 
 def record_session_start() -> int:
@@ -108,9 +121,9 @@ def record_model_usage() -> int:
     usage = llm_res.get("usageMetadata") or {}
 
     model = llm_req.get("model") or state.get("model") or ""
-    prompt_tokens = int(usage.get("promptTokenCount") or 0)
-    candidates_tokens = int(usage.get("candidatesTokenCount") or 0)
-    cached_tokens = int(usage.get("cachedContentTokenCount") or 0)
+    prompt_tokens = _coerce_int(usage.get("promptTokenCount") or 0)
+    candidates_tokens = _coerce_int(usage.get("candidatesTokenCount") or 0)
+    cached_tokens = _coerce_int(usage.get("cachedContentTokenCount") or 0)
 
     state["model"] = model or state.get("model", "")
     # Keep the latest (largest) cumulative prompt token count
@@ -308,6 +321,7 @@ def handle_agent_stop() -> int:
 
     if can_append_project_log and project_dir is not None:
         append_session(project_dir, session)
+        maybe_emit_milestones(project_dir)
     else:
         path = write_unattributed_session(session)
         # stderr: hooks communicate back to the tool via stderr, not stdout

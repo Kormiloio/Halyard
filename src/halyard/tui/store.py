@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
-from halyard.ai_log import AiSession, parse_sessions
+from halyard.ai_log import AiSession, parse_amendment, parse_sessions, session_hash
 
 TimeWindow = Literal["today", "week", "month", "all"]
 
@@ -42,11 +42,23 @@ class SessionStore:
             handle.seek(self._offset)
             lines = handle.read().splitlines()
             self._offset = handle.tell()
-        if any(line.startswith("a ") for line in lines):
-            self.load()
-            return []
-        new_sessions = [_parse_session_line(line) for line in lines]
-        parsed = [session for session in new_sessions if session is not None]
+
+        parsed: list[AiSession] = []
+        for line in lines:
+            if line.startswith("a "):
+                # `a ` (amendment) records are written routinely by
+                # `outcome sync`/evidence. Apply incrementally instead
+                # of forcing a full re-parse, which would defeat the
+                # tail on every sync. Fall back to a full reload only
+                # if the amendment targets a session not in memory
+                # (rare — sync amends recent sessions).
+                if not self._apply_amendment_line(line, parsed):
+                    self.load()
+                    return []
+                continue
+            session = _parse_session_line(line)
+            if session is not None:
+                parsed.append(session)
         if parsed:
             self.sessions = sorted(
                 [*parsed, *self.sessions],
@@ -54,6 +66,22 @@ class SessionStore:
                 reverse=True,
             )[:_MAX_RETAINED_SESSIONS]
         return parsed
+
+    def _apply_amendment_line(self, line: str, pending: list[AiSession]) -> bool:
+        """Apply one `a ` record to an in-memory session.
+
+        Returns True if applied (or the amendment was unparseable and
+        can be safely ignored), False if it targets a session not in
+        memory (caller should fall back to a full reload).
+        """
+        amendment = parse_amendment(line)
+        if amendment is None:
+            return True
+        for session in (*pending, *self.sessions):
+            if session._raw_hash == amendment.session_hash:
+                session.apply_amendment(amendment)
+                return True
+        return False
 
     def filter(
         self,
@@ -98,7 +126,13 @@ def _read_sessions_file(log_path: Path) -> list[AiSession]:
 def _parse_session_line(line: str) -> AiSession | None:
     if not line or line.startswith(";"):
         return None
-    return AiSession.from_log_line(line)
+    session = AiSession.from_log_line(line)
+    if session is not None and line.startswith("s "):
+        # Tag the in-memory object with its content hash so a later
+        # `a ` amendment in the same tail can be matched incrementally
+        # (mirrors what parse_sessions does at the read chokepoint).
+        session._raw_hash = session_hash(line)
+    return session
 
 
 def _in_window(start: datetime, window: TimeWindow, now: datetime) -> bool:

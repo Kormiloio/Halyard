@@ -11,6 +11,7 @@ so repeated runs don't duplicate entries.
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections.abc import Iterator
 from datetime import datetime
@@ -104,13 +105,21 @@ def import_codex_sessions(
 # ---------------------------------------------------------------------------
 
 
+_MAX_ROLLOUT_BYTES = 25 * 1024 * 1024  # 25 MB — bounded untrusted read
+
+
 def _iter_jsonl_lines(path: Path) -> Iterator[str]:
     """Yield lines from a rollout file without loading it all into memory.
 
-    An unreadable file yields nothing; the caller then sees no events and
-    skips the session (session_start stays None).
+    Bounded untrusted read (matches the other collectors): reject
+    symlinks, cap size at 25 MB. An unreadable/oversized/symlinked file
+    yields nothing; the caller then skips the session.
     """
     try:
+        if os.path.islink(path):
+            return
+        if path.stat().st_size > _MAX_ROLLOUT_BYTES:
+            return
         with path.open(encoding="utf-8") as fh:
             yield from fh
     except OSError:

@@ -44,6 +44,25 @@ def test_session_feed_escapes_markup_in_model() -> None:
     assert r"\[bold]" in feed.last_rendered_text
 
 
+def test_usage_pane_escapes_markup_in_favorite_model() -> None:
+    # v2.71: usage_pane rendered favorite_model unescaped (v2.38 gap).
+    from halyard.tui.widgets.usage_pane import UsagePane
+
+    pane = UsagePane()
+    pane.render_sessions([_session(model="[bold]evil"), _session(model="[bold]evil")])
+    assert r"\[bold]" in pane.last_rendered_text
+    assert "[bold]" not in pane.last_rendered_text.replace(r"\[bold]", "")
+
+
+def test_branch_modal_label_escapes_markup_in_branch() -> None:
+    # v2.71: branch_modal rendered branch unescaped (v2.38 gap).
+    from halyard.tui.widgets.branch_modal import _branch_label
+
+    label = _branch_label("feat/[red]boom[/red]", None)
+    assert r"\[red]" in label
+    assert "[red]" not in label.replace(r"\[red]", "")
+
+
 def test_adopt_rejects_slug_with_toml_injection(tmp_path: Path) -> None:
     target = tmp_path / "proj"
     target.mkdir()

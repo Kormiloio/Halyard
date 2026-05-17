@@ -676,6 +676,26 @@ layers must read from this local source of truth; they do not replace it.
    `openspec/changes/v2.70-tui-dashboard-parity/`.
    **Status: complete (1230 tests passing).**
 
+49. **v2.71 — Pre-OSS review hardening:** a full multi-pass review
+   (collectors/hooks, core data model, TUI/dashboard, DB/CLI) ahead
+   of the OSS release. Fixes verified defects: an absolute hook crash
+   backstop (`_run_hook` — a collector exception can no longer
+   traceback into the host tool) + tolerant payload int coercion;
+   two v2.38 markup-escaping regressions (`usage_pane`,
+   `branch_modal`); `tags` round-trip corruption on a comma (now
+   percent-encoded, legacy comma form still reads); `append_session`
+   no longer full-re-parses the log per append (O(n²)→O(n) bulk
+   import; milestone easter eggs moved to `maybe_emit_milestones`);
+   SQLite `busy_timeout`+WAL; uniform `--json` `{"error":…}` contract
+   with diagnostics to stderr; incremental `a `-record tailing in the
+   TUI store; consistent bounded-read hardening (codex/gemini_history
+   symlink+size); `install-hook-claude` byte-stable no-op; Decimal
+   ledger accumulation; `last_sync()` read-only-safe; dependency
+   upper bounds. Documented (not built): amendment-record trust gap;
+   unknown-kv preservation. Spec in
+   `openspec/changes/v2.71-review-hardening/`.
+   **Status: complete (1255 tests passing).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — connecting sessions to commits, PRs, tests, and

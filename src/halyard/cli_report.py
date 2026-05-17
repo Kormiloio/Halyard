@@ -4,11 +4,30 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 import typer
 from rich.console import Console
 
 console = Console()
+err_console = Console(stderr=True)
+
+
+def _fail(json_: bool, message: str, code: int = 1) -> NoReturn:
+    """Uniform command failure.
+
+    With ``--json`` emit ``{"error": message}`` (to stdout, the JSON
+    channel) so a programmatic consumer always gets a parseable
+    object; otherwise print a human error to **stderr**, never stdout.
+    Always raises ``typer.Exit(code)``.
+    """
+    if json_:
+        from halyard.jsonio import emit
+
+        emit({"error": message})
+    else:
+        err_console.print(f"[bold red]Error:[/] {message}")
+    raise typer.Exit(code=code)
 
 
 def register(app: typer.Typer) -> None:
@@ -169,8 +188,7 @@ def register(app: typer.Typer) -> None:
             try:
                 period = datetime.strptime(month, "%Y-%m")
             except ValueError:
-                console.print("[bold red]Error:[/] --month must be YYYY-MM (e.g. 2026-05).")
-                raise typer.Exit(code=1) from None
+                _fail(json_, "--month must be YYYY-MM (e.g. 2026-05).")
         else:
             period = now
 
@@ -392,8 +410,7 @@ def register(app: typer.Typer) -> None:
         from halyard.evidence import build_evidence_artifact, verify_evidence_artifact
 
         if verify is not None and json_:
-            console.print("[bold red]Error:[/] --verify and --json are mutually exclusive.")
-            raise typer.Exit(code=1)
+            _fail(json_, "--verify and --json are mutually exclusive.")
 
         if verify is not None:
             if not verify.is_file():
@@ -412,8 +429,7 @@ def register(app: typer.Typer) -> None:
             try:
                 datetime.strptime(month, "%Y-%m")
             except ValueError:
-                console.print("[bold red]Error:[/] --month must be YYYY-MM (e.g. 2026-05).")
-                raise typer.Exit(code=1) from None
+                _fail(json_, "--month must be YYYY-MM (e.g. 2026-05).")
 
         from halyard.ai_log import find_project_dir
 
@@ -781,16 +797,11 @@ def register(app: typer.Typer) -> None:
         from halyard.usage import UsageRangeKey, build_usage_analytics, compact_number
 
         if range_key not in ("all", "30d", "7d"):
-            console.print("[bold red]Error:[/] --range must be one of: all, 30d, 7d")
-            raise typer.Exit(code=1)
+            _fail(json_, "--range must be one of: all, 30d, 7d")
 
         project_dir = find_hub() or find_project_dir()
         if project_dir is None:
-            console.print(
-                "[bold red]Error:[/] No Halyard project or hub found. "
-                "Run [bold]halyard init[/] first."
-            )
-            raise typer.Exit(code=1)
+            _fail(json_, "No Halyard project or hub found. Run 'halyard init' first.")
 
         sessions = parse_sessions(project_dir)
         analytics = build_usage_analytics(sessions, range_key=cast(UsageRangeKey, range_key))

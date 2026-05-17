@@ -14,7 +14,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from decimal import Decimal
+from typing import Literal, cast
 
 from halyard.ai_log import AiSession
 from halyard.ai_plans import AiPlan
@@ -81,9 +82,9 @@ def build_ledger(
     direct_sessions, plan_session_map = _partition_by_plan(resolved, active_plans)
 
     # Per-project accumulators: {project: {field: value}}
-    buckets: dict[str, dict[str, float | int | bool]] = {}
+    buckets: dict[str, dict[str, float | int | bool | Decimal]] = {}
 
-    def _bucket(project: str) -> dict[str, float | int | bool]:
+    def _bucket(project: str) -> dict[str, float | int | bool | Decimal]:
         return buckets.setdefault(
             project,
             {
@@ -93,8 +94,8 @@ def build_ledger(
                 "output_tokens": 0,
                 "cache_read": 0,
                 "cache_write": 0,
-                "direct_usd": 0.0,
-                "allocated_usd": 0.0,
+                "direct_usd": Decimal(0),
+                "allocated_usd": Decimal(0),
                 "seat_claimed": 0,
                 "has_inferred": False,
             },
@@ -110,7 +111,7 @@ def build_ledger(
         b["output_tokens"] = int(b["output_tokens"]) + sess.output_tokens
         b["cache_read"] = int(b["cache_read"]) + (sess.cache_read or 0)
         b["cache_write"] = int(b["cache_write"]) + (sess.cache_write or 0)
-        b["direct_usd"] = float(b["direct_usd"]) + sess.cost_usd
+        b["direct_usd"] = cast(Decimal, b["direct_usd"]) + Decimal(str(sess.cost_usd))
         if inferred:
             b["has_inferred"] = True
 
@@ -126,7 +127,7 @@ def build_ledger(
             b["output_tokens"] = int(b["output_tokens"]) + sess.output_tokens
             b["cache_read"] = int(b["cache_read"]) + (sess.cache_read or 0)
             b["cache_write"] = int(b["cache_write"]) + (sess.cache_write or 0)
-            b["allocated_usd"] = float(b["allocated_usd"]) + project_alloc
+            b["allocated_usd"] = cast(Decimal, b["allocated_usd"]) + Decimal(str(project_alloc))
             b["seat_claimed"] = int(b["seat_claimed"]) + 1
             if inferred:
                 b["has_inferred"] = True
@@ -142,7 +143,9 @@ def build_ledger(
             cache_write_tokens=int(b["cache_write"]),
             direct_usd=round_money(float(b["direct_usd"]), 4),
             allocated_usd=round_money(float(b["allocated_usd"]), 4),
-            total_usd=round_money(float(b["direct_usd"]) + float(b["allocated_usd"]), 4),
+            total_usd=round_money(
+                float(cast(Decimal, b["direct_usd"]) + cast(Decimal, b["allocated_usd"])), 4
+            ),
             trust=_trust_label(
                 float(b["direct_usd"]), float(b["allocated_usd"]), int(b["seat_claimed"])
             ),
@@ -150,7 +153,14 @@ def build_ledger(
         )
         for project, b in sorted(
             buckets.items(),
-            key=lambda item: -(float(item[1]["direct_usd"]) + float(item[1]["allocated_usd"])),
+            key=lambda item: (
+                -(
+                    float(
+                        cast(Decimal, item[1]["direct_usd"])
+                        + cast(Decimal, item[1]["allocated_usd"])
+                    )
+                )
+            ),
         )
     ]
 

@@ -48,6 +48,10 @@ def _iter_json_objects(text: str) -> Iterator[dict[str, Any]]:
     are skipped rather than raising."""
     decoder = json.JSONDecoder()
     i, n = 0, len(text)
+    # Bound the malformed-input recovery scan: a buffer of mostly `{`
+    # garbage would otherwise be O(n²) (find next `{`, fail, repeat).
+    max_failures = 10_000
+    failures = 0
     while i < n:
         while i < n and text[i] in " \t\r\n":
             i += 1
@@ -56,6 +60,9 @@ def _iter_json_objects(text: str) -> Iterator[dict[str, Any]]:
         try:
             obj, end = decoder.raw_decode(text, i)
         except ValueError:
+            failures += 1
+            if failures > max_failures:
+                break
             nxt = text.find("{", i + 1)
             if nxt == -1:
                 break

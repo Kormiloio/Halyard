@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import sys
 import tempfile
 import tomllib
 import urllib.error
@@ -18,6 +17,16 @@ from contextlib import suppress
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
+
+from rich.console import Console
+
+_warn_console = Console(stderr=True)
+
+
+def _warn(message: str) -> None:
+    """Emit a pricing warning to stderr via Rich (consistent with the app)."""
+    _warn_console.print(f"[halyard] Warning: {message}", markup=False, style="yellow")
+
 
 # (input_per_mtok, output_per_mtok)
 PRICING: dict[str, tuple[float, float]] = {
@@ -100,10 +109,7 @@ def _check_pricing_hash(body: bytes) -> bool:
         return True
 
     # Hash differs — warn before accepting.
-    print(
-        "[halyard] Warning: remote pricing table has changed. Review before accepting.",
-        file=sys.stderr,
-    )
+    _warn("remote pricing table has changed. Review before accepting.")
     return False
 
 
@@ -149,10 +155,9 @@ def _load_local_raw() -> dict[str, object] | None:
         result: dict[str, object] = tomllib.loads(_LOCAL_PRICING_FILE.read_text())
         return result
     except (tomllib.TOMLDecodeError, ValueError, OSError) as e:
-        print(
-            f"[halyard] Warning: {_LOCAL_PRICING_FILE} is invalid — "
-            f"custom pricing ignored, using bundled prices. ({e})",
-            file=sys.stderr,
+        _warn(
+            f"{_LOCAL_PRICING_FILE} is invalid — "
+            f"custom pricing ignored, using bundled prices. ({e})"
         )
         return None
 
@@ -163,10 +168,9 @@ def _parse_local_rates(raw: dict[str, object] | None) -> dict[str, tuple[float, 
     try:
         return _parse_models_table(raw)
     except ValueError as e:
-        print(
-            f"[halyard] Warning: {_LOCAL_PRICING_FILE} is invalid — "
-            f"custom pricing ignored, using bundled prices. ({e})",
-            file=sys.stderr,
+        _warn(
+            f"{_LOCAL_PRICING_FILE} is invalid — "
+            f"custom pricing ignored, using bundled prices. ({e})"
         )
         return {}
 
@@ -202,10 +206,9 @@ def _coerce_multiplier(val: object, default: float, model: str) -> float:
     if val is None:
         return default
     if not isinstance(val, (int, float)) or not (0 < float(val) <= _MAX_MULTIPLIER):
-        print(
-            f"[halyard] Warning: {_LOCAL_PRICING_FILE} model {model!r} has invalid "
-            f"multiplier {val!r} — using default {default}.",
-            file=sys.stderr,
+        _warn(
+            f"{_LOCAL_PRICING_FILE} model {model!r} has invalid "
+            f"multiplier {val!r} — using default {default}."
         )
         return default
     return float(val)

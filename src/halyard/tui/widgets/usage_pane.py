@@ -27,7 +27,7 @@ class UsagePane(Static):
             return
 
         peak = "--" if summary.peak_hour is None else f"{_hour_label(summary.peak_hour)}"
-        favorite = summary.favorite_model or "--"
+        favorite = escape(summary.favorite_model or "--")
         lines = [
             "〜 Voyage Stats",
             "",
@@ -49,7 +49,7 @@ class UsagePane(Static):
                 f"⚠ Unattributed: {summary.unattributed_sessions} session(s) — run halyard adopt"
             )
             for remote, count in sorted(groups.items(), key=lambda x: -x[1]):
-                lines.append(f"  {truncate(remote, 36)} ({count})")
+                lines.append(f"  {escape(truncate(remote, 36))} ({count})")
         if summary.token_data_missing_sessions:
             lines.append(f"Missing token data: {summary.token_data_missing_sessions}")
         if summary.message_data_missing_sessions:

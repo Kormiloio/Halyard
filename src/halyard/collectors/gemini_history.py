@@ -7,6 +7,7 @@ tool call stats, and accurate multi-model cost for a completed session.
 from __future__ import annotations
 
 import json
+import os
 import re
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -88,6 +89,8 @@ def _read_capped(path: Path) -> str | None:
     an oversized (or unreadable) file as absent.
     """
     try:
+        if os.path.islink(path):
+            return None
         if path.stat().st_size > _MAX_HISTORY_BYTES:
             return None
         return path.read_text()
@@ -229,9 +232,17 @@ def find_session_file(session_id: str) -> Path | None:
         except (OSError, json.JSONDecodeError, UnicodeDecodeError):
             continue
     if exact:
-        return max(exact, key=lambda p: p.stat().st_mtime)
+        return max(exact, key=_safe_mtime)
     # No exact match — fall back to most-recently-modified prefix match.
-    return max(matches, key=lambda p: p.stat().st_mtime)
+    return max(matches, key=_safe_mtime)
+
+
+def _safe_mtime(path: Path) -> float:
+    """mtime, or -1 if the file vanished mid-scan (racing unlink)."""
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return -1.0
 
 
 def find_all_session_files() -> list[Path]:

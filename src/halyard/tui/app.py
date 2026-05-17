@@ -224,7 +224,8 @@ class HalyardApp(App[None]):
 
         try:
             return build_health_checks(self.store.log_path.parent)
-        except Exception:  # health is advisory; never break the TUI
+        except Exception as exc:  # health is advisory; never break the TUI
+            self.log.error(f"health checks failed: {exc!r}")
             return []
 
     def _status_text(self) -> str:
@@ -276,6 +277,7 @@ class HalyardApp(App[None]):
                 else:
                     self.notify("No active timer to stop.", severity="warning")
             except Exception as exc:
+                self.log.error(f"morse stop_timer failed: {exc!r}")
                 self.notify(str(exc), severity="error")
         elif action == "start":
             self.notify(

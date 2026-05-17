@@ -23,6 +23,7 @@ from halyard.ai_log import (
     AiSession,
     append_session,
     find_project_dir,
+    maybe_emit_milestones,
     maybe_show_dashboard_hint,
     read_active_project,
     write_unattributed_session,
@@ -49,6 +50,20 @@ from halyard.model_breakdown import primary_model as _primary_model
 from halyard.pricing import calculate_cost, model_is_known
 
 _CC_SESSION_FILE = Path.home() / ".halyard" / "cc-session"
+
+
+def _coerce_int(value: object, default: int = 0) -> int:
+    """Tolerant int coercion for attacker-influenceable payload fields.
+
+    A malformed token must degrade that one field, never raise out of
+    a hook (defense-in-depth behind the cli_hooks backstop).
+    """
+    if isinstance(value, bool):  # bool is an int subclass — treat as 0/1
+        return int(value)
+    if isinstance(value, (int, float, str)):
+        with suppress(TypeError, ValueError):
+            return int(value)
+    return default
 
 
 def record_session_start() -> int:
@@ -121,10 +136,12 @@ def handle_stop_hook() -> int:
 
     # Try usage from payload first (older Claude Code format)
     usage = payload.get("usage") or payload.get("message", {}).get("usage", {}) or {}
-    input_tokens = int(usage.get("input_tokens", 0))
-    output_tokens = int(usage.get("output_tokens", 0))
-    cache_read = int(usage.get("cache_read_input_tokens", 0) or usage.get("cache_read", 0))
-    cache_write = int(usage.get("cache_creation_input_tokens", 0) or usage.get("cache_write", 0))
+    input_tokens = _coerce_int(usage.get("input_tokens", 0))
+    output_tokens = _coerce_int(usage.get("output_tokens", 0))
+    cache_read = _coerce_int(usage.get("cache_read_input_tokens", 0) or usage.get("cache_read", 0))
+    cache_write = _coerce_int(
+        usage.get("cache_creation_input_tokens", 0) or usage.get("cache_write", 0)
+    )
 
     model = (
         payload.get("model")
@@ -259,6 +276,7 @@ def handle_stop_hook() -> int:
 
     if can_append_project_log and project_dir is not None:
         append_session(project_dir, session)
+        maybe_emit_milestones(project_dir)
     else:
         path = write_unattributed_session(session)
         # stderr: hooks communicate back to the tool via stderr, not stdout
@@ -300,7 +318,10 @@ def _read_session_state() -> dict[str, Any]:
     """
     if not _CC_SESSION_FILE.exists():
         return {}
-    raw = _CC_SESSION_FILE.read_text().strip()
+    try:
+        raw = _CC_SESSION_FILE.read_text().strip()
+    except OSError:
+        return {}
     try:
         data = json.loads(raw)
         start_dt: datetime | None = None

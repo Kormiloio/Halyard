@@ -28,6 +28,7 @@ from halyard.ai_log import (
     AiSession,
     append_session,
     find_project_dir,
+    maybe_emit_milestones,
     maybe_show_dashboard_hint,
     read_active_project,
     write_unattributed_session,
@@ -197,6 +198,7 @@ def handle_stop_hook() -> int:
 
     if can_append_project_log and project_dir is not None:
         append_session(project_dir, session)
+        maybe_emit_milestones(project_dir)
     else:
         path = write_unattributed_session(session)
         # stderr: hooks communicate back to the tool via stderr, not stdout
@@ -322,7 +324,10 @@ def _read_session_state() -> dict[str, Any]:
     """
     if not _CURSOR_SESSION_FILE.exists():
         return {}
-    raw = _CURSOR_SESSION_FILE.read_text().strip()
+    try:
+        raw = _CURSOR_SESSION_FILE.read_text().strip()
+    except OSError:
+        return {}
     try:
         data = json.loads(raw)
         start_dt: datetime | None = None

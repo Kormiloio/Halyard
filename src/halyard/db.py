@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -174,6 +175,15 @@ def get_db() -> sqlite3.Connection:
     _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(_DB_PATH))
     conn.row_factory = sqlite3.Row
+    # The cache is opened concurrently by the dashboard (watchfiles),
+    # the launchd/login service, and ad-hoc CLI runs. Without these a
+    # concurrent writer surfaces as an uncaught OperationalError
+    # ("database is locked") — not a DbError, so main() wouldn't catch
+    # it. WAL is cross-process durable; the file stays a rebuildable
+    # cache. Best-effort: a read-only/locked FS must not break startup.
+    with suppress(sqlite3.OperationalError):
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA journal_mode=WAL")
 
     version: int = conn.execute("PRAGMA user_version").fetchone()[0]
 
@@ -288,12 +298,21 @@ def last_sync() -> dict[str, object] | None:
     """Return the most recent sync_log row as a dict, or None if never synced."""
     if not _DB_PATH.exists():
         return None
-    conn = get_db()
+    # A status read must never demand a cache reset: if the schema is
+    # at a REQUIRES_RESET boundary, report "unknown" (None) instead of
+    # raising DbError out of e.g. `halyard doctor`.
+    try:
+        conn = get_db()
+    except DbError:
+        return None
     try:
         row = conn.execute("SELECT * FROM sync_log ORDER BY id DESC LIMIT 1").fetchone()
         return dict(row) if row else None
+    except sqlite3.OperationalError:
+        return None
     finally:
-        conn.close()
+        with suppress(Exception):
+            conn.close()
 
 
 def reset() -> None:
