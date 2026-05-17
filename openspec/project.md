@@ -738,6 +738,21 @@ layers must read from this local source of truth; they do not replace it.
    risk; recorded).
    **Status: complete (1266 tests passing).**
 
+52. **v2.74 — Ambient status (competitive-read of CodexBar):** adopt
+   the *surface* lesson (the highest-leverage view is the one never
+   opened) without its job. One status contract from existing
+   builders (capture health + spend + adrift + budget burn/
+   projection — zero new captured data), a cross-platform
+   `status --watch`, and an optional Phase-0-gated macOS menu-bar
+   shim via the existing `halyard service`. Hard non-goals enforced
+   as tasks: no provider quota/reset tracking, no provider-breadth
+   race, no incident polling, never reads provider
+   credentials/cookies/keychains. Projection is a labeled estimate;
+   single-source parity with `report`/`budget`/`doctor`. PRD/ARD in
+   `docs/PRD-ambient-status.md` / `docs/ARD-ambient-status.md`; spec
+   in `openspec/changes/v2.74-ambient-status/`.
+   **Status: proposed (spec only).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — connecting sessions to commits, PRs, tests, and
