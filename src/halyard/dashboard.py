@@ -56,6 +56,9 @@ def run_dashboard(
 ) -> str:
     """Start the dashboard server and block until interrupted."""
     host = "127.0.0.1"
+    # Bind to the loopback IP, but show the friendlier `localhost`
+    # hostname (the Host-header allowlist already accepts both).
+    display_host = "localhost"
     resolved = _resolve_port(port)
     try:
         server = ThreadingHTTPServer((host, resolved), _handler_for(project_dir))
@@ -63,13 +66,13 @@ def run_dashboard(
         if exc.errno == errno.EADDRINUSE:
             raise DashboardError(
                 f"port {resolved} is already in use — a Halyard Bridge is "
-                f"likely already running at http://{host}:{resolved}/.\n"
+                f"likely already running at http://{display_host}:{resolved}/.\n"
                 f"Open that URL, or stop the old one with "
                 f"'lsof -ti :{resolved} | xargs kill', "
                 f"or start this one on another port with '--port <N>'."
             ) from exc
         raise
-    url = f"http://{host}:{server.server_port}/"
+    url = f"http://{display_host}:{server.server_port}/"
     print(f"Halyard · The Bridge: {url}")
     print("Press Ctrl-C to stop.")
 
