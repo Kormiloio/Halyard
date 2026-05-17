@@ -98,6 +98,18 @@ def test_no_js_baseline_unchanged(tmp_path: Path) -> None:
     assert "<thead>" in html and "<tbody>" in html
 
 
+def test_sortable_headers_get_an_affordance_icon(tmp_path: Path) -> None:
+    """Sortable columns must look sortable: the CSS + script provide a
+    small indicator (neutral ⇅, ▲/▼ when active)."""
+    _init(tmp_path)
+    append_session(tmp_path, _sess())
+    html = render_dashboard(tmp_path)
+    assert ".sort-ind" in html  # CSS rule shipped
+    assert "h-sortable" in html  # hover/cursor affordance class
+    assert "sort-ind" in html and "⇅" in html  # script injects the icon
+    assert "▲" in html and "▼" in html  # active-direction glyphs
+
+
 def test_budget_panel_is_not_marked_sortable(tmp_path: Path) -> None:
     """Budget is card-based, not a <table> — deliberately dropped from
     the sortable set rather than shipping a broken card sorter."""

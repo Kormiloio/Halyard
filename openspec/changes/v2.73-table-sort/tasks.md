@@ -21,6 +21,10 @@ not launch-blocking. Quality bar held: no column ships a wrong sort.
   set at runtime
 - [x] No-JS baseline unchanged (additive attributes only; server
   still emits fixed-sorted rows)
+- [x] Sortability affordance (user feedback): sortable headers get a
+  small indicator — neutral `⇅`, `▲`/`▼` when active — + an
+  `h-sortable` hover/cursor class, so sortable columns are visually
+  identifiable. CSS shipped; icon injected by the script.
 
 ## Tests (`tests/test_v273_table_sort.py`, 6 cases)
 - [x] `_stbl` shape; `_session_sev` ranks

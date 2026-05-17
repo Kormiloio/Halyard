@@ -2167,9 +2167,21 @@ def _table_sort_script() -> str:
         var c=cmp(x.k,y.k,kind); return (c!==0?(dir<0?-c:c):x.i-y.i);
       });
       dec.forEach(function(d){ tb.appendChild(d.r); });
+      marks(tbl,col,dir);
+    };
+    var marks=function(tbl,col,dir){
       var ths=tbl.tHead?tbl.tHead.rows[0].cells:[];
-      for(var j=0;j<ths.length;j++)
-        ths[j].setAttribute('aria-sort', j===col?(dir<0?'descending':'ascending'):'none');
+      for(var j=0;j<ths.length;j++){
+        var th=ths[j], ind=th.querySelector('.sort-ind');
+        if(!ind) continue;  // not a sortable header
+        if(j===col){
+          th.setAttribute('aria-sort', dir<0?'descending':'ascending');
+          ind.textContent = dir<0?'▼':'▲';
+        } else {
+          th.setAttribute('aria-sort','none');
+          ind.textContent = '⇅';
+        }
+      }
     };
     var origOrder = function(tbl){
       var tb=tbl.tBodies[0]; if(!tb||tbl._orig) return;
@@ -2178,8 +2190,7 @@ def _table_sort_script() -> str:
     var restore = function(tbl){
       var tb=tbl.tBodies[0]; if(!tb||!tbl._orig) return;
       tbl._orig.forEach(function(r){ tb.appendChild(r); });
-      var ths=tbl.tHead?tbl.tHead.rows[0].cells:[];
-      for(var j=0;j<ths.length;j++) ths[j].setAttribute('aria-sort','none');
+      marks(tbl,-1,1);  // clear: all headers back to neutral
     };
     var save=function(k,st){ try{ sessionStorage.setItem('halyard.sort.'+k,st);}catch(e){} };
     var load=function(k){ try{ return sessionStorage.getItem('halyard.sort.'+k);}catch(e){ return null; } };
@@ -2193,9 +2204,16 @@ def _table_sort_script() -> str:
           if(!cols[c]||cols[c]==='x') return;
           var th=ths[c];
           th.setAttribute('aria-sort','none');
-          th.style.cursor='pointer';
+          th.classList.add('h-sortable');
           th.setAttribute('role','button');
           th.setAttribute('tabindex','0');
+          if(!th.querySelector('.sort-ind')){
+            var sp=document.createElement('span');
+            sp.className='sort-ind';
+            sp.setAttribute('aria-hidden','true');
+            sp.textContent='⇅';
+            th.appendChild(sp);
+          }
           var go=function(){
             var cur=load(key)||'';
             var p=cur.split(':'), pc=parseInt(p[0],10), pd=parseInt(p[1],10);
@@ -2797,6 +2815,10 @@ button.status:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2p
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 th, td { border-bottom: 1px solid rgba(37, 64, 74, .72); padding: 10px 8px; text-align: left; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 th { color: var(--muted); font-size: 11px; text-transform: uppercase; }
+th.h-sortable { cursor: pointer; user-select: none; }
+th.h-sortable:hover { color: var(--text); }
+.sort-ind { opacity: .35; margin-left: .35em; font-size: .9em; }
+th[aria-sort="ascending"] .sort-ind, th[aria-sort="descending"] .sort-ind { opacity: .95; }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
 tfoot td { border-bottom: none; border-top: 1px solid var(--line); }
 .empty { min-height: 150px; display: grid; place-items: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; margin: 0; text-align: center; line-height: 1.6; }
