@@ -702,6 +702,21 @@ layers must read from this local source of truth; they do not replace it.
    `openspec/changes/v2.71-review-hardening/`.
    **Status: complete (1260 tests passing).**
 
+50. **v2.72 — Declarative field registry (optional refactor):**
+   `ai_log.py` declares each optional `AiSession` field's wire
+   handling in two hand-synced places (45 `kvs.append` writers + 45
+   parser `case` arms) — the v2.71 `tags` bug was exactly that
+   writer/parser asymmetry. Replace the tail with one ordered
+   `FieldSpec` registry both sides iterate, so the asymmetry class is
+   structurally impossible. NOT Pydantic (it serializes JSON, not the
+   plain-text contract; would not replace the codec). Behaviour-
+   pinned: property + golden-corpus round-trip test written first,
+   byte-identical output required, explicitly **cancellable** at a
+   decision gate if it doesn't net fewer lines + single edit-site +
+   zero behaviour diff. Spec in
+   `openspec/changes/v2.72-field-registry/`.
+   **Status: proposed (spec only).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — connecting sessions to commits, PRs, tests, and
