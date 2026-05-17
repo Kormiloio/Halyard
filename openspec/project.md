@@ -766,7 +766,12 @@ layers must read from this local source of truth; they do not replace it.
    versioned log + `--json` surface) and neutral `payer:work-unit`
    attribution wording. Spec in
    `openspec/changes/v2.75-extensible-log-contract/`.
-   **Status: proposed (spec only); docs pass shipped.**
+   **Status: complete (1275 tests passing).** `AiSession.extra`
+   passthrough shipped: parser `case _:` preserves unknown tokens
+   (key-shape guarded, no shadowing), `to_log_line` re-emits sorted/
+   injection-safe; byte-stable empty case; `_session_id` identity
+   unaffected; OSS never interprets `extra`. Decision gate cleared
+   (byte-stable achieved; no parse-and-warn fallback needed).
 
 ## Deferred or gated
 

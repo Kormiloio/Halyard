@@ -33,13 +33,13 @@ Guarantees:
   change meaning under you.
 - **Old lines always parse.** A line written by an older Halyard is
   forever readable by a newer one.
-- **Unknown tokens are preserved, not dropped** *(mechanism: v2.75,
-  proposed — until it ships, unknown tokens are tolerated but not
-  re-emitted; see that changeset)*. This is the **documented
-  extension point**: a consumer (including Halyard-Enterprise) may
-  add its own `key=value` tokens (e.g. `cost_center=`, `org_unit=`,
-  `roi_ref=`) and Halyard will round-trip them without
-  interpreting them. Do not overload reserved/known keys.
+- **Unknown tokens are preserved, not dropped** (shipped, v2.75).
+  This is the **documented extension point**: a consumer (including
+  Halyard-Enterprise) may add its own well-formed `key=value` tokens
+  (e.g. `cost_center=`, `org_unit=`, `roi_ref=`) and Halyard
+  round-trips them verbatim, percent-encoded on re-emit, **without
+  interpreting them**. Reserved/known keys always win and cannot be
+  shadowed by an extension token.
 
 ### 2. `--json` output schema (v2.69)
 

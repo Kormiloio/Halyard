@@ -76,6 +76,10 @@ _HALYARD_LOG = Path.home() / ".halyard" / "halyard.log"
 # Regex matching characters that would break the space-delimited log line format.
 # Used to sanitize positional fields (tool, model) before writing.
 _UNSAFE_FIELD_RE = re.compile(r"[\s=]")
+# v2.75: well-formed key shape for unknown-token (`extra`) passthrough.
+# Matches the existing token-key style (alnum + _.-), so a corrupt or
+# adversarial line can't turn `extra` into a junk sink.
+_EXTRA_KEY_RE = re.compile(r"\A[A-Za-z][A-Za-z0-9_.-]*\Z")
 _PATH_LOCKS_GUARD = threading.Lock()
 _PATH_LOCKS: dict[str, threading.RLock] = {}
 
@@ -307,6 +311,15 @@ class AiSession:
     outcome_data_available: bool | None = None
     telemetry_source: str | None = None
     telemetry_trust: str | None = None
+    # v2.75: forward-compat passthrough. Unrecognized `s `-line
+    # key=value tokens (from a newer Halyard, or an extending consumer
+    # such as Halyard-Enterprise: cost_center=, roi_ref=, …) are
+    # preserved verbatim and re-emitted, so the line format is
+    # extensible without forking the parser. OSS NEVER interprets
+    # these. compare=False: must not affect equality or the
+    # content-addressed session id / hash (cache + amendment join keys
+    # stay derived from immutable identity fields only).
+    extra: dict[str, str] = field(default_factory=dict, compare=False)
     # v2.29: hash of the original raw `s` line, set at parse time before amendment
     # folding. Excluded from serialization and equality checks. Used by outcome sync
     # to produce amendment records that reference the correct log-line hash.
@@ -455,6 +468,13 @@ class AiSession:
             kvs.append(f"telemetry_source={_safe_field(self.telemetry_source)}")
         if self.telemetry_trust:
             kvs.append(f"telemetry_trust={_safe_field(self.telemetry_trust)}")
+        # v2.75: re-emit forward-compat passthrough tokens last,
+        # sorted for byte-stable output, percent-encoded so a value
+        # with spaces/`=`/`%` can never forge a record delimiter or a
+        # second token (same injection guard as every free-text
+        # field). Empty `extra` ⇒ output byte-identical to pre-v2.75.
+        for ek in sorted(self.extra):
+            kvs.append(f"{ek}={_encode_free_text(self.extra[ek])}")
         return " ".join(parts + kvs)
 
 
@@ -808,6 +828,16 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
                 session.telemetry_source = v
             case "telemetry_trust":
                 session.telemetry_trust = v
+            case _:
+                # v2.75: forward-compat passthrough. An unrecognized
+                # token (newer Halyard / extending consumer) is
+                # preserved verbatim instead of silently dropped, so
+                # the line round-trips losslessly. Known keys are all
+                # matched above, so this can never shadow a real
+                # field. Only well-formed keys are kept so a corrupt
+                # line can't turn `extra` into a junk sink.
+                if _EXTRA_KEY_RE.match(k):
+                    session.extra[k] = _decode_free_text(v) if "%" in v else v
 
     # v2.24 backward-compat: promote legacy "branch:<name>" tag to branch field
     if session.branch is None and session.tags:
