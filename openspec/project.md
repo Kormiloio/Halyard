@@ -691,10 +691,16 @@ layers must read from this local source of truth; they do not replace it.
    TUI store; consistent bounded-read hardening (codex/gemini_history
    symlink+size); `install-hook-claude` byte-stable no-op; Decimal
    ledger accumulation; `last_sync()` read-only-safe; dependency
-   upper bounds. Documented (not built): amendment-record trust gap;
-   unknown-kv preservation. Spec in
+   upper bounds. Folded-in risk list: typst invoked by resolved
+   `which()` path (residual $PATH risk accepted — same model as
+   git/open); timeclock structural anomalies (`timeclock_anomalies`
+   + `_timeclock_check` warning) so silent under-billing on
+   malformed i/o pairs becomes a visible nudge. Documented (not
+   built): amendment-record trust gap; unknown-kv preservation;
+   concurrent-timeclock reconstruction (hledger is sequential —
+   detection not guessing). Spec in
    `openspec/changes/v2.71-review-hardening/`.
-   **Status: complete (1255 tests passing).**
+   **Status: complete (1260 tests passing).**
 
 ## Deferred or gated
 

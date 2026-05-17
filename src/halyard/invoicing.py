@@ -379,9 +379,12 @@ def _render_pr_refs_subsection(sessions: list[AiSession]) -> list[str]:
 
 def render_pdf(invoice_path: Path) -> str | None:
     """Render a PDF via typst when available. Returns a warning when skipped."""
-    if shutil.which("typst") is None:
+    typst = shutil.which("typst")
+    if typst is None:
         return "typst not found — PDF skipped. Install typst to enable PDF output."
-    subprocess.run(["typst", "compile", str(invoice_path)], check=True)
+    # Invoke the resolved absolute path, not the bare name, so the
+    # binary isn't re-resolved against $PATH a second time at exec.
+    subprocess.run([typst, "compile", str(invoice_path)], check=True)
     _open_file(invoice_path.with_suffix(".pdf"))
     return None
 

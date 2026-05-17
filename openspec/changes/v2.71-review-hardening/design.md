@@ -82,6 +82,27 @@ SQLite concurrent open does not raise; `--json` failure emits
 codex/gemini_history reject symlink; install-claude no-op byte-stable.
 Plus the v2.38 suite extension.
 
+## Follow-up risk list (folded in, same changeset)
+
+- **Risk 1 — typst/$PATH (Low, accepted + tightened).** `invoicing.
+  render_pdf` now passes the resolved `shutil.which("typst")` path to
+  `subprocess.run` instead of the bare name (removes a redundant
+  second $PATH resolution / minor TOCTOU). This does NOT close the
+  stated threat (a fully compromised $PATH is already arbitrary code
+  execution, and git/open/xdg-open are PATH-resolved throughout) — it
+  is a free consistency tightening, the residual risk is accepted.
+- **Risk 2 — timeclock overlaps (Low, real fix).** `parse_timeclock`
+  is a single-open state machine: a second `i` before an `o` silently
+  overwrites the first (lost billable time) and an orphan `o` is
+  ignored, with NO signal anywhere (`_timeclock_check` only checked
+  existence+writability). For a billing tool, silent under-count is
+  the worst failure. Fix: `timeclock_anomalies(path) ->
+  (dropped_opens, orphan_closes)` + `_timeclock_check` raises a
+  `warning` (doctor/dashboard inherit it). We deliberately do not
+  reconstruct concurrent entries — hledger timeclock is strictly
+  sequential, so overlaps are malformed input; surfacing beats
+  guessing.
+
 ## Gate
 
 `pytest` + `ruff` + `ruff format --check` + `mypy src/`. Roadmap

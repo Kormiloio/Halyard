@@ -44,11 +44,23 @@ defects from the pre-OSS multi-pass review fixed; gate green.
 - [x] Documented (not built): amendment trust gap; unknown-kv
   preservation — recorded in design Non-goals
 
+## Follow-up risk list (folded in)
+- [x] Risk 1 (typst/$PATH, Low): `render_pdf` invokes the resolved
+  `shutil.which("typst")` path, not the bare name (no second $PATH
+  resolution at exec). Accepted as residual otherwise — same trust
+  model as git/open/xdg-open; PATH compromise is already full RCE
+- [x] Risk 2 (timeclock overlaps, Low): `timeclock_anomalies()`
+  detects dropped opens (double-`i`) and orphan closes (`o` with no
+  `i`); `_timeclock_check` raises a `warning` so doctor/dashboard
+  surface it. Silent under-billing → visible, actionable nudge. We
+  do NOT reconstruct concurrent entries (hledger is strictly
+  sequential; ambiguous) — detection only
+
 ## Tests
-- [x] `tests/test_v271_review_hardening.py` (13 cases) + `test_v238`
+- [x] `tests/test_v271_review_hardening.py` (18 cases) + `test_v238`
   extension (2 cases)
 
 ## Gate
-- [x] `pytest` green (1255 passed)
+- [x] `pytest` green (1260 passed)
 - [x] `ruff check` + `ruff format --check` clean
 - [x] `mypy src/` clean

@@ -211,3 +211,69 @@ def test_install_claude_is_byte_stable_no_op(tmp_path: Path, monkeypatch) -> Non
     first = settings.read_text()
     cli_hooks._do_install_hook_claude(global_=True)
     assert settings.read_text() == first  # second run must not rewrite
+
+
+# --- Risk 1: typst invoked by resolved path, not bare name -----------------
+
+
+def test_render_pdf_uses_resolved_typst_path(tmp_path: Path, monkeypatch) -> None:
+    from halyard import invoicing
+
+    captured: dict = {}
+
+    monkeypatch.setattr(invoicing.shutil, "which", lambda _name: "/opt/safe/bin/typst")
+    monkeypatch.setattr(invoicing, "_open_file", lambda _p: None)
+    monkeypatch.setattr(
+        invoicing.subprocess,
+        "run",
+        lambda argv, **kw: captured.setdefault("argv", argv),
+    )
+    invoice = tmp_path / "inv.typ"
+    invoice.write_text("#text[hi]")
+    assert invoicing.render_pdf(invoice) is None
+    assert captured["argv"][0] == "/opt/safe/bin/typst"  # resolved, not "typst"
+
+
+def test_render_pdf_skips_cleanly_when_typst_absent(tmp_path: Path, monkeypatch) -> None:
+    from halyard import invoicing
+
+    monkeypatch.setattr(invoicing.shutil, "which", lambda _name: None)
+    msg = invoicing.render_pdf(tmp_path / "inv.typ")
+    assert msg is not None and "typst not found" in msg
+
+
+# --- Risk 2: timeclock structural anomalies surfaced, not swallowed --------
+
+
+def test_timeclock_anomalies_detects_double_in_and_orphan_out(tmp_path: Path) -> None:
+    from halyard.reports import timeclock_anomalies
+
+    tc = tmp_path / "time.timeclock"
+    tc.write_text(
+        "i 2026-05-16 09:00:00 acme:web\n"
+        "i 2026-05-16 10:00:00 acme:web\n"  # second open — first is lost
+        "o 2026-05-16 11:00:00\n"
+        "o 2026-05-16 12:00:00\n"  # orphan close — no open
+    )
+    dropped, orphans = timeclock_anomalies(tc)
+    assert dropped == 1
+    assert orphans == 1
+
+
+def test_timeclock_health_warns_on_structural_issue(tmp_path: Path) -> None:
+    from halyard.reports import _timeclock_check
+
+    tc = tmp_path / "time.timeclock"
+    tc.write_text("i 2026-05-16 09:00:00 acme:web\ni 2026-05-16 10:00:00 acme:web\n")
+    check = _timeclock_check(tc)
+    assert check.status == "warning"
+    assert "undercounted" in check.detail
+
+
+def test_clean_timeclock_stays_healthy(tmp_path: Path) -> None:
+    from halyard.reports import _timeclock_check, timeclock_anomalies
+
+    tc = tmp_path / "time.timeclock"
+    tc.write_text("i 2026-05-16 09:00:00 acme:web\no 2026-05-16 10:00:00\n")
+    assert timeclock_anomalies(tc) == (0, 0)
+    assert _timeclock_check(tc).status == "healthy"

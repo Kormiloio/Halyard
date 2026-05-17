@@ -314,6 +314,48 @@ def parse_timeclock(
     return entries
 
 
+def timeclock_anomalies(path: Path) -> tuple[int, int]:
+    """Count structural inconsistencies in a timeclock file.
+
+    Returns ``(dropped_opens, orphan_closes)``:
+    - ``dropped_opens``: an ``i`` seen while an entry is already open —
+      the prior open is silently overwritten (lost billable time).
+    - ``orphan_closes``: an ``o`` with no matching open ``i`` — ignored.
+
+    hledger timeclock is strictly sequential; concurrent/overlapping
+    entries are malformed input. We do not try to reconstruct them
+    (ambiguous) — we surface the inconsistency so silent under-billing
+    becomes a visible, actionable warning instead.
+    """
+    if not path.exists():
+        return (0, 0)
+    dropped_opens = 0
+    orphan_closes = 0
+    is_open = False
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return (0, 0)
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith(";"):
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        marker = parts[0]
+        if marker == "i" and len(parts) >= 4:
+            if is_open:
+                dropped_opens += 1
+            is_open = True
+        elif marker == "o":
+            if is_open:
+                is_open = False
+            else:
+                orphan_closes += 1
+    return (dropped_opens, orphan_closes)
+
+
 def _compute_presence_today(sessions: list[AiSession], now: datetime) -> tuple[int, str]:
     """Return (presence_minutes, label) from today's AI session windows, merged at 30-min gap."""
     today = now.date()
@@ -560,6 +602,19 @@ def _timeclock_check(path: Path) -> HealthCheck:
         return HealthCheck("Timeclock", "neutral", "not started — run halyard start")
     if not os.access(path, os.W_OK):
         return HealthCheck("Timeclock", "error", "time.timeclock is not writable")
+    dropped, orphans = timeclock_anomalies(path)
+    if dropped or orphans:
+        bits = []
+        if dropped:
+            bits.append(f"{dropped} unclosed clock-in(s) overwritten")
+        if orphans:
+            bits.append(f"{orphans} clock-out(s) with no clock-in")
+        return HealthCheck(
+            "Timeclock",
+            "warning",
+            f"structural issue: {'; '.join(bits)} — time may be undercounted. "
+            "Fix the i/o pairs in time.timeclock.",
+        )
     return HealthCheck("Timeclock", "healthy", "time.timeclock ready")
 
 
