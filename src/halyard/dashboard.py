@@ -441,7 +441,8 @@ def _moat_panel(state: DashboardState) -> str:
         )
         leak_html = (
             "<h3 class='mini-head'>Leakage — adrift value, one command from recovered</h3>"
-            "<table class='usage-models-rows'><thead><tr>"
+            + _stbl("leakage", "t,n,n,x", "usage-models-rows")
+            + "<thead><tr>"
             "<th>Remote</th><th class='num'>Sessions</th><th class='num'>Cost</th>"
             "<th>Fix (proposed — not run)</th></tr></thead>"
             f"<tbody>{leak_rows}</tbody></table>"
@@ -458,7 +459,7 @@ def _moat_panel(state: DashboardState) -> str:
           </div>
         </div>
         <h3 class="mini-head">Billable evidence · per client project</h3>
-        <table class="usage-models-rows"><thead><tr>
+        {_stbl("billable-evidence", "t,x,n,n,x,x", "usage-models-rows")}<thead><tr>
           <th>Project</th><th class="num">Human</th><th class="num">AI&nbsp;cost</th>
           <th class="num">Sessions</th><th class="num">▲ship ◐open ✗closed ·none</th>
           <th>Attribution</th></tr></thead>
@@ -956,6 +957,7 @@ def _render_state(
   {_health_popup_script()}
   {_celebration_script()}
   {_easter_egg_script()}
+  {_table_sort_script()}
 </body>
 </html>"""
 
@@ -1289,15 +1291,17 @@ def _sessions_table(sessions: Iterable[AiSession]) -> str:
             f"<td>{_e(session.project or '(unattributed)')}</td>"
             f"<td>{_e(session.model)}</td>"
             f"<td class='num'>{_e(dur)}</td>"
-            f"<td class='num'>{session.input_tokens:,} / {session.output_tokens:,}</td>"
+            f"<td class='num' data-sort-val='{session.input_tokens + session.output_tokens}'>"
+            f"{session.input_tokens:,} / {session.output_tokens:,}</td>"
             f"<td class='num'>${session.cost_usd:.4f}</td>"
-            f"<td class='num'>{health}</td>"
+            f"<td class='num' data-sev='{_session_sev(session)}'>{health}</td>"
             "</tr>"
         )
     if not rows:
         return '<p class="empty">No AI sessions captured this period.<br>Start Claude Code, Cursor, or Gemini CLI in this directory.</p>'
     return (
-        "<table><thead><tr><th>Time</th><th>Tool</th><th>Project</th><th>Model</th>"
+        _stbl("recent-sessions", "m,x,x,x,x,n,n,s")
+        + "<thead><tr><th>Time</th><th>Tool</th><th>Project</th><th>Model</th>"
         "<th>Dur</th><th>In / Out</th><th>Cost</th><th>Health</th></tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>"
@@ -1341,6 +1345,20 @@ def _health_badge(session: AiSession) -> str:
         else:
             parts.append("<span class='dim'>~est</span>")
     return " ".join(parts)
+
+
+def _session_sev(session: AiSession) -> int:
+    """Severity rank for sorting the Health column (v2.73): 0 ok,
+    1 warn, 2 error — never the glyph text."""
+    if (
+        (session.tool_errors or 0) > 0
+        or session.test_status == "fail"
+        or session.build_status == "fail"
+    ):
+        return 2
+    if not session.tokens_available or session.interaction_data_available is False:
+        return 1
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -1558,8 +1576,8 @@ def _model_breakdown_table(by_model: list[ModelUsageBucket], model_index: dict[s
             "</tr>"
         )
     return (
-        "<table class='usage-models-rows'>"
-        "<thead><tr><th>Model</th><th class='num'>Sessions</th>"
+        _stbl("usage-models", "t,n,n,n,n", "usage-models-rows")
+        + "<thead><tr><th>Model</th><th class='num'>Sessions</th>"
         "<th class='num'>Tokens</th><th class='num'>Share</th>"
         "<th class='num'>Cost</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody>"
@@ -1802,7 +1820,8 @@ def _model_table(buckets: Iterable[CostBucket]) -> str:
             "</tr>"
         )
     return (
-        "<table><thead><tr><th>Model</th><th>Sessions</th><th>Cost</th><th>Share</th>"
+        _stbl("models", "t,n,n,n")
+        + "<thead><tr><th>Model</th><th>Sessions</th><th>Cost</th><th>Share</th>"
         "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
     )
 
@@ -1829,7 +1848,7 @@ def _tool_table(buckets: Iterable[ToolUsageBucket]) -> str:
             "</tr>"
         )
     return (
-        "<table><thead><tr><th>Tool</th><th>Sessions</th><th>Tokens</th>"
+        _stbl("tools", "t,n,n,n,n") + "<thead><tr><th>Tool</th><th>Sessions</th><th>Tokens</th>"
         "<th>Cost</th><th>Share</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
     )
 
@@ -1847,7 +1866,8 @@ def _bucket_table(buckets: Iterable[CostBucket], label: str) -> str:
     if not rows:
         return f'<p class="empty">No {label.lower()} data yet.</p>'
     return (
-        f"<table><thead><tr><th>{_e(label)}</th><th>Sessions</th><th>Cost</th>"
+        _stbl(f"bucket-{label}", "t,n,n")
+        + f"<thead><tr><th>{_e(label)}</th><th>Sessions</th><th>Cost</th>"
         "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
     )
 
@@ -1906,7 +1926,8 @@ def _costs_panel(
             table = '<p class="empty">No sessions this period.</p>'
         else:
             table = (
-                "<table><thead><tr><th>Project</th><th>Sessions</th><th>Direct API</th>"
+                _stbl("ledger", "t,n,n,n,n,t")
+                + "<thead><tr><th>Project</th><th>Sessions</th><th>Direct API</th>"
                 "<th>Allocated</th><th>Total</th><th>Trust</th></tr></thead><tbody>"
                 + "".join(rows)
                 + "</tbody></table>"
@@ -1945,7 +1966,8 @@ def _costs_panel(
         f"<td></td></tr></tfoot>"
     )
     return (
-        "<table><thead><tr><th>Project</th><th>Sessions</th><th>Direct API</th>"
+        _stbl("ledger-full", "t,n,n,n,n,t")
+        + "<thead><tr><th>Project</th><th>Sessions</th><th>Direct API</th>"
         "<th>Allocated</th><th>Total</th><th>Trust</th></tr></thead><tbody>"
         + "".join(rows)
         + "</tbody>"
@@ -1959,7 +1981,8 @@ def _unattributed_table(sessions: Iterable[AiSession]) -> str:
     for session in list(sessions)[-25:][::-1]:
         rows.append(
             "<tr>"
-            f"<td>{_e(session.end.strftime('%Y-%m-%d %H:%M'))}</td>"
+            f"<td data-sort-val='{int(session.end.timestamp())}'>"
+            f"{_e(session.end.strftime('%Y-%m-%d %H:%M'))}</td>"
             f"<td>{_e(session.tool)}</td>"
             f"<td>{_e(session.model)}</td>"
             f"<td class='num'>{session.input_tokens:,} / {session.output_tokens:,}</td>"
@@ -1969,7 +1992,8 @@ def _unattributed_table(sessions: Iterable[AiSession]) -> str:
     if not rows:
         return '<p class="empty">All hands accounted for. Manifest clean.</p>'
     return (
-        "<table><thead><tr><th>Time</th><th>Tool</th><th>Model</th>"
+        _stbl("sessions-adrift", "n,t,x,x,n")
+        + "<thead><tr><th>Time</th><th>Tool</th><th>Model</th>"
         "<th>In / Out</th><th>Cost</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
     )
 
@@ -1978,12 +2002,15 @@ def _time_table(buckets: Iterable[TimeBucket]) -> str:
     rows = []
     for bucket in buckets:
         rows.append(
-            f"<tr><td>{_e(bucket.label)}</td><td class='num'>{_e(format_minutes(bucket.minutes))}</td></tr>"
+            f"<tr><td>{_e(bucket.label)}</td>"
+            f"<td class='num' data-sort-val='{bucket.minutes}'>"
+            f"{_e(format_minutes(bucket.minutes))}</td></tr>"
         )
     if not rows:
         return '<p class="empty">No human time recorded this month.<br>Run <code>halyard start &lt;project&gt;</code> to begin tracking.</p>'
     return (
-        "<table><thead><tr><th>Project</th><th>Time</th></tr></thead><tbody>"
+        _stbl("timeclock", "t,n")
+        + "<thead><tr><th>Project</th><th>Time</th></tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>"
     )
@@ -2062,6 +2089,143 @@ def _fmt_limit(spend: float, limit: float | None) -> str:
 
 def _e(value: object) -> str:
     return html.escape(str(value))
+
+
+def _stbl(key: str, cols: str, cls: str = "") -> str:
+    """Open tag for a client-sortable table (v2.73).
+
+    ``cols`` is one code per column, in order:
+    ``t`` text · ``n`` numeric · ``m`` time(HH:MM) · ``s`` severity
+    (cell carries ``data-sev``) · ``x`` not sortable. The sorter reads
+    these; the no-JS render is unchanged (additive attributes only).
+    ``key`` is a stable slug so saved sort survives layout changes.
+    """
+    cls_attr = f" class='{_e(cls)}'" if cls else ""
+    return f"<table{cls_attr} data-sortable data-sort-key='{_e(key)}' data-cols='{_e(cols)}'>"
+
+
+def _table_sort_script() -> str:
+    """Client-side column sort for ``table[data-sortable]`` (v2.73).
+
+    Progressive enhancement: the server already emits correctly
+    fixed-sorted rows; this only reorders an already-correct table and
+    persists the choice in sessionStorage so it survives the 10s
+    ``<meta refresh>`` (a naive sort would reset every 10s — that
+    persistence is the load-bearing requirement, not the click).
+    asc → desc → clear(restore server order). Numeric parsing handles
+    ``$ , % k M`` and ``HH:MM``; blanks always sort last; severity uses
+    each cell's ``data-sev``; any cell may override its sort key with
+    ``data-sort-val``. Stable. Wrapped so any failure leaves the
+    native (server-sorted) table intact.
+    """
+    return """<script>
+(function(){
+  try {
+    var num = function(s){
+      if(s==null) return NaN;
+      s = String(s).trim();
+      if(s===''||s==='—'||s==='-'||s==='n/a') return NaN;
+      var m = s.replace(/[$,%\\s]/g,'');
+      var mult = 1;
+      if(/[kK]$/.test(m)){ mult=1e3; m=m.slice(0,-1); }
+      else if(/[mM]$/.test(m)){ mult=1e6; m=m.slice(0,-1); }
+      else if(/[bB]$/.test(m)){ mult=1e9; m=m.slice(0,-1); }
+      var v = parseFloat(m);
+      return isNaN(v) ? NaN : v*mult;
+    };
+    var timeval = function(s){
+      s = String(s||'').trim();
+      var m = s.match(/(\\d{1,2}):(\\d{2})/);
+      return m ? (parseInt(m[1],10)*60+parseInt(m[2],10)) : NaN;
+    };
+    var keyOf = function(td, kind){
+      if(td && td.dataset && td.dataset.sortVal!=null && td.dataset.sortVal!=='')
+        return parseFloat(td.dataset.sortVal);
+      if(kind==='s') return td ? parseFloat(td.dataset.sev||'99') : 99;
+      var txt = td ? td.textContent : '';
+      if(kind==='n') return num(txt);
+      if(kind==='m') return timeval(txt);
+      return String(txt||'').trim().toLowerCase();
+    };
+    var cmp = function(a,b,kind){
+      if(kind==='t'){
+        if(a<b) return -1; if(a>b) return 1; return 0;
+      }
+      var an=(typeof a==='number'&&isNaN(a)), bn=(typeof b==='number'&&isNaN(b));
+      if(an&&bn) return 0; if(an) return 1; if(bn) return -1;  // blanks last
+      return a<b?-1:(a>b?1:0);
+    };
+    var apply = function(tbl, col, dir){
+      var cols=(tbl.getAttribute('data-cols')||'').split(',');
+      var kind=cols[col]; if(!kind||kind==='x') return;
+      var tb=tbl.tBodies[0]; if(!tb) return;
+      var rows=[].slice.call(tb.rows);
+      var dec=rows.map(function(r,i){
+        return {r:r,i:i,k:keyOf(r.cells[col],kind)};
+      });
+      dec.sort(function(x,y){
+        var c=cmp(x.k,y.k,kind); return (c!==0?(dir<0?-c:c):x.i-y.i);
+      });
+      dec.forEach(function(d){ tb.appendChild(d.r); });
+      var ths=tbl.tHead?tbl.tHead.rows[0].cells:[];
+      for(var j=0;j<ths.length;j++)
+        ths[j].setAttribute('aria-sort', j===col?(dir<0?'descending':'ascending'):'none');
+    };
+    var origOrder = function(tbl){
+      var tb=tbl.tBodies[0]; if(!tb||tbl._orig) return;
+      tbl._orig=[].slice.call(tb.rows);
+    };
+    var restore = function(tbl){
+      var tb=tbl.tBodies[0]; if(!tb||!tbl._orig) return;
+      tbl._orig.forEach(function(r){ tb.appendChild(r); });
+      var ths=tbl.tHead?tbl.tHead.rows[0].cells:[];
+      for(var j=0;j<ths.length;j++) ths[j].setAttribute('aria-sort','none');
+    };
+    var save=function(k,st){ try{ sessionStorage.setItem('halyard.sort.'+k,st);}catch(e){} };
+    var load=function(k){ try{ return sessionStorage.getItem('halyard.sort.'+k);}catch(e){ return null; } };
+    var init=function(tbl){
+      var key=tbl.getAttribute('data-sort-key'); if(!key) return;
+      var cols=(tbl.getAttribute('data-cols')||'').split(',');
+      origOrder(tbl);
+      var ths=tbl.tHead?tbl.tHead.rows[0].cells:[];
+      for(var j=0;j<ths.length;j++){
+        (function(c){
+          if(!cols[c]||cols[c]==='x') return;
+          var th=ths[c];
+          th.setAttribute('aria-sort','none');
+          th.style.cursor='pointer';
+          th.setAttribute('role','button');
+          th.setAttribute('tabindex','0');
+          var go=function(){
+            var cur=load(key)||'';
+            var p=cur.split(':'), pc=parseInt(p[0],10), pd=parseInt(p[1],10);
+            var dir;
+            if(pc===c){ dir = pd>0 ? -1 : (pd<0 ? 0 : 1); }
+            else { dir=1; }
+            if(dir===0){ restore(tbl); save(key,''); }
+            else { apply(tbl,c,dir); save(key, c+':'+dir); }
+          };
+          th.addEventListener('click',go);
+          th.addEventListener('keydown',function(e){
+            if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); }
+          });
+        })(j);
+      }
+      var st=load(key);
+      if(st){
+        var p=st.split(':'), pc=parseInt(p[0],10), pd=parseInt(p[1],10);
+        if(!isNaN(pc)&&!isNaN(pd)&&pd!==0) apply(tbl,pc,pd);
+      }
+    };
+    var boot=function(){
+      var tbls=document.querySelectorAll('table[data-sortable]');
+      for(var i=0;i<tbls.length;i++) init(tbls[i]);
+    };
+    if(document.readyState!=='loading') boot();
+    else document.addEventListener('DOMContentLoaded', boot);
+  } catch(e){}
+})();
+</script>"""
 
 
 def _panel_status_pill(text: str, state: str) -> str:

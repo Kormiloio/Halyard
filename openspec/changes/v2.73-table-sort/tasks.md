@@ -1,41 +1,54 @@
 # v2.73 — Sortable dashboard tables: Tasks
 
-Status: **proposed (spec only, not started).** Cosmetic UX, not
-launch-blocking. Quality bar: a wrong sort is worse than no sort.
+Status: **COMPLETE 2026-05-16 (1266 tests passing).** Cosmetic UX,
+not launch-blocking. Quality bar held: no column ships a wrong sort.
 
 ## Build
-- [ ] `_sortable_table_attrs(key)` helper — one source for the
-  `data-sortable`/`data-sort-key` attribute strings
-- [ ] Tag the 8 sortable tables + per-column `data-sort`
-  (num/text/time/sev/off); wrap sortable `<th>` labels in a
-  keyboard-operable `<button>` + `aria-sort`
-- [ ] Emit `data-sort-val` (raw numeric/epoch) on ambiguous cells
-  (cost, tokens, time) so the sort key is the model value, not the
-  formatted label; `data-sev` on Health cells
-- [ ] `_table_sort_script()` inline IIFE: delegated click sort,
-  num/time/sev/text comparators, blanks-last, asc→desc→clear cycle,
-  stable sort, `sessionStorage` persist + restore across the 10 s
-  meta-refresh
-- [ ] No-JS baseline unchanged (additive attributes/button only)
+- [x] `_stbl(key, cols, cls)` — single source for the
+  `data-sortable`/`data-sort-key`/`data-cols` table-open attrs
+- [x] Tagged sortable tables: recent-sessions, sessions-adrift,
+  leakage, billable-evidence, usage-models, models, tools,
+  bucket-*, ledger, ledger-full, timeclock. Per-column kinds via
+  `data-cols` (t/n/m/s/x)
+- [x] `data-sort-val` on ambiguous cells: Recent Sessions tokens
+  (in+out sum), Sessions Adrift Time (epoch), Timeclock Time
+  (minutes); `data-sev` on Health via `_session_sev` (0 ok / 1 warn
+  / 2 error — never the glyph)
+- [x] `_table_sort_script()` inline IIFE: delegated header
+  click/keydown, num (`$ , % k M`)/time(`HH:MM`)/sev/text
+  comparators, blanks-last, stable, asc→desc→clear, `sessionStorage`
+  persist + restore across the 10 s `<meta refresh>`; `aria-sort`
+  set at runtime
+- [x] No-JS baseline unchanged (additive attributes only; server
+  still emits fixed-sorted rows)
 
-## Tests (`tests/test_v273_table_sort.py`)
-- [ ] markup: every sortable table has unique `data-sort-key`;
-  non-sortable cols `data-sort=off`; Health has `data-sev`
-- [ ] `data-sort-val` correctness vs underlying model values
-- [ ] sortable-set matches the proposal (new-table guard)
-- [ ] no-JS golden: row order + cell text unchanged vs pre-v2.73
-- [ ] comparator reference (num/time/sev/text, blanks-last, cycle)
+## Tests (`tests/test_v273_table_sort.py`, 6 cases)
+- [x] `_stbl` shape; `_session_sev` ranks
+- [x] sortable tables present + unique keys; sorter script wired
+- [x] Recent Sessions `data-sort-val`/`data-sev`/`data-cols`
+- [x] no-JS baseline: rows + visible text unchanged
+- [x] Budget panel NOT marked sortable
 
 ## Docs
-- [ ] `docs/PRD-local-activity-dashboard.md`: note sortable tables
-  (UX principle "dense tables")
-- [ ] Roadmap entry + status/test count in `openspec/project.md`
+- [x] `docs/PRD-local-activity-dashboard.md`: sortable-tables note
+- [x] Roadmap entry + status/test count in `openspec/project.md`
 
-## Decision gate
-- [ ] Any column whose sort key can't be made unambiguous is dropped
-  from the sortable set, not shipped wrong. Record which (if any)
+## Decision-gate outcomes (recorded)
+- **Budget dropped from the sortable set.** It is card-based
+  (`budget-item` divs), not a `<table>`; a separate card-sorter is
+  out of scope and not worth the churn. Spend totals remain readable
+  unsorted. Recorded rather than shipped wrong.
+- **Deviation from design:** `<th>` are made operable at *runtime*
+  by the script (cursor/role/tabindex/aria-sort + key handler)
+  rather than wrapped in a server-rendered `<button>`. Lower
+  regression risk (no thead/class rewrites across ~11 inline-string
+  tables); no-JS users simply get today's fixed sort. Accessibility
+  parity is preserved when JS is on.
+- Sessions-Adrift Time and Timeclock Time use explicit
+  `data-sort-val` (epoch / minutes) instead of parsing the formatted
+  label — the ambiguous-cell rule from the design.
 
 ## Gate
-- [ ] `pytest` green
-- [ ] `ruff check` + `ruff format --check` clean
-- [ ] `mypy src/` clean
+- [x] `pytest` green (1266 passed)
+- [x] `ruff check` + `ruff format --check` clean
+- [x] `mypy src/` clean

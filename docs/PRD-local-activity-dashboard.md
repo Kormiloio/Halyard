@@ -45,7 +45,7 @@ The CLI should remain the fastest workflow, but the dashboard should make the
 system understandable at a glance. It should answer "what is going on right
 now?" without requiring the user to inspect multiple files.
 
-The design target is a modern "Glass Cockpit": calm, high-density, live, and
+The design target is a modern "The Bridge": calm, high-density, live, and
 operational. It should feel like a professional instrument panel for AI work,
 not a generic SaaS admin page.
 
@@ -69,7 +69,7 @@ not a generic SaaS admin page.
 
 ## Primary Views
 
-### Glass Cockpit
+### The Bridge
 
 The first screen is the operational cockpit. It combines active timer state,
 AI capture status, today's spend, model mix, project attribution, and warnings
@@ -155,7 +155,7 @@ browser only if the user passes `--open`.
 
 MVP views:
 
-- Glass Cockpit overview;
+- The Bridge overview;
 - Today summary;
 - recent AI sessions;
 - project cost table;
@@ -251,3 +251,17 @@ and the shared `leverage.summarize`, so the TUI and web can never
 disagree on the moat math. Terminal-appropriate tables/bars stand in
 for the web SVGs; this is a presentation lift only — no new captured
 data.
+
+### Sortable tables (v2.73)
+
+The dense web tables (recent sessions, sessions adrift, models,
+tools, ledger, billable evidence, timeclock, leakage) support
+click-to-sort columns — numeric / time / severity / text, blanks
+last, asc → desc → clear. The choice persists in `sessionStorage`
+and is re-applied across the 10 s auto-refresh (a naive sort would
+reset every 10 s). Progressive enhancement: with JS off, the server's
+fixed sort is unchanged. Health sorts by severity rank, never the
+glyph; columns whose order can't be made unambiguous (free-text
+Note, the proposed-fix command) are intentionally not sortable, and
+the card-based Budget panel is excluded rather than given a broken
+sorter — consistent with "a wrong sort is worse than no sort".

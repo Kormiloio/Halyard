@@ -728,8 +728,15 @@ layers must read from this local source of truth; they do not replace it.
    rank, never glyph text; Note/Fix not sortable; a column whose key
    can't be made unambiguous is dropped, not shipped wrong. Cosmetic,
    not launch-blocking. Spec in
-   `openspec/changes/v2.73-table-sort/`.
-   **Status: proposed (spec only).**
+   `openspec/changes/v2.73-table-sort/`. Shipped: `_stbl` table
+   tagging (`data-cols` per-column kinds) across ~11 tables,
+   `_table_sort_script` (sessionStorage-persisted across the 10 s
+   refresh), `data-sort-val`/`data-sev` on ambiguous cells, no-JS
+   baseline unchanged. Budget panel dropped from the set (card-based,
+   not a table) — recorded, not shipped wrong. Headers made operable
+   at runtime (deviation from server-`<button>`, lower regression
+   risk; recorded).
+   **Status: complete (1266 tests passing).**
 
 ## Deferred or gated
 
