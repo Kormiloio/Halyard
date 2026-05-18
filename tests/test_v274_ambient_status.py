@@ -225,15 +225,15 @@ def test_render_shows_budget_burn_with_estimate_tilde() -> None:
             type(
                 "B",
                 (),
-                dict(
-                    slug="acme:web",
-                    month_limit_usd=400.0,
-                    month_spend_usd=170.0,
-                    pct=42,
-                    projected_month_end_usd=310.0,
-                    days_until_limit=23,
-                    estimate=True,
-                ),
+                {
+                    "slug": "acme:web",
+                    "month_limit_usd": 400.0,
+                    "month_spend_usd": 170.0,
+                    "pct": 42,
+                    "projected_month_end_usd": 310.0,
+                    "days_until_limit": 23,
+                    "estimate": True,
+                },
             )()
         ],
     )
