@@ -1641,6 +1641,19 @@ def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
             "</p>"
         )
 
+    # v3.1: one-line review-friction summary, only when data exists
+    # (R6 — absent friction must render exactly as v3.0, no empty slot).
+    friction = ""
+    parts = []
+    if summary.median_time_to_merge_s is not None:
+        parts.append(
+            f"median time-to-merge {leverage.humanize_seconds(summary.median_time_to_merge_s)}"
+        )
+    if summary.median_review_comments is not None:
+        parts.append(f"median {summary.median_review_comments} review comments")
+    if parts:
+        friction = f"<p class='leverage-friction'>{_e(' · '.join(parts))}</p>"
+
     return (
         "<div class='leverage-grid'>"
         f"<div class='leverage-headline'>"
@@ -1648,6 +1661,7 @@ def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
         f"<div class='leverage-caption'>"
         f"<strong>{merged}</strong> of <strong>{total}</strong> sessions landed in merged PRs"
         "</div>"
+        f"{friction}"
         "</div>"
         f"<div class='leverage-rows'>{row_html}</div>"
         f"{hint}"
@@ -2905,6 +2919,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .leverage-pct.leverage-low { color: var(--muted); }
 .leverage-caption { font-size: 13px; color: var(--muted); }
 .leverage-caption strong { color: var(--fg); }
+.leverage-friction { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
 .leverage-rows { display: grid; gap: 6px; }
 .leverage-row { display: grid; grid-template-columns: 1.4fr 64px 64px; gap: 12px; align-items: center; font-size: 13px; }
 .leverage-row strong { text-align: right; }

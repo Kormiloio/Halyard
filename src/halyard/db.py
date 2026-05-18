@@ -27,7 +27,7 @@ class DbError(RuntimeError):
 _DB_PATH = Path.home() / ".halyard" / "cache.db"
 
 # Schema version this code expects. Bump whenever a migration is added.
-_CURRENT_VERSION = 4
+_CURRENT_VERSION = 5
 
 # Initial schema for a fresh database — always reflects _CURRENT_VERSION.
 _CREATE_SCHEMA_V1 = """
@@ -72,10 +72,14 @@ CREATE TABLE IF NOT EXISTS sync_log (
 );
 
 CREATE TABLE IF NOT EXISTS outcomes (
-    session_id  TEXT PRIMARY KEY,
-    pr_ref      TEXT,
-    pr_state    TEXT,
-    resolved_at TEXT
+    session_id            TEXT PRIMARY KEY,
+    pr_ref                TEXT,
+    pr_state              TEXT,
+    resolved_at           TEXT,
+    review_comment_count  INTEGER,
+    review_round_trips    INTEGER,
+    time_to_merge_seconds INTEGER,
+    review_decision       TEXT
 );
 
 CREATE TABLE IF NOT EXISTS pr_cache (
@@ -120,6 +124,16 @@ CREATE TABLE IF NOT EXISTS pr_cache (
     ),
     # v3 → v4: add code_added column (was in AiSession but omitted from the v3 migration).
     (3, "ALTER TABLE sessions ADD COLUMN code_added INTEGER;"),
+    # v4 → v5: v3.1 review-friction signals — additive columns on outcomes.
+    (
+        4,
+        """
+ALTER TABLE outcomes ADD COLUMN review_comment_count INTEGER;
+ALTER TABLE outcomes ADD COLUMN review_round_trips INTEGER;
+ALTER TABLE outcomes ADD COLUMN time_to_merge_seconds INTEGER;
+ALTER TABLE outcomes ADD COLUMN review_decision TEXT;
+""",
+    ),
 ]
 
 

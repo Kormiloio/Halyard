@@ -116,6 +116,8 @@ def outcome_report_cmd(
     period = f"since {since_date}" if since_date else "last 30 days"
     console.print(f"\n[bold]Outcome Report[/] — {period}\n")
 
+    from halyard.leverage import humanize_seconds
+
     for b in buckets:
         if b.session_count == 0:
             continue
@@ -126,6 +128,14 @@ def outcome_report_cmd(
             f"  {b.label:<30} [bold]{b.session_count:>4}[/] session{plural}  "
             f"[green]{cost_str}[/]{trust_tag}"
         )
+        # v3.1: friction sub-line, only when this bucket has data (R6).
+        fr = []
+        if b.median_time_to_merge_s is not None:
+            fr.append(f"median time-to-merge {humanize_seconds(b.median_time_to_merge_s)}")
+        if b.median_review_comments is not None:
+            fr.append(f"median {b.median_review_comments} review comments")
+        if fr:
+            console.print(f"  [dim]{'└ ' + ' · '.join(fr)}[/]")
 
     unsynced = next((b for b in buckets if b.label == "Not synced"), None)
     if unsynced and unsynced.session_count > 0:

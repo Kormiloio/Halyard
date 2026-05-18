@@ -11,7 +11,7 @@ from datetime import datetime
 from textual.widgets import Static
 
 from halyard.ai_log import AiSession
-from halyard.leverage import summarize
+from halyard.leverage import humanize_seconds, summarize
 
 
 class LeveragePane(Static):
@@ -30,6 +30,16 @@ class LeveragePane(Static):
             "⚑ Leverage (30d)",
             "",
             f"Shipped {s.pct}%  ({s.merged} of {s.total} in merged PRs)",
+        ]
+        # v3.1: friction line, parity with web; only when data exists.
+        friction = []
+        if s.median_time_to_merge_s is not None:
+            friction.append(f"~{humanize_seconds(s.median_time_to_merge_s)} to merge")
+        if s.median_review_comments is not None:
+            friction.append(f"~{s.median_review_comments} review comments")
+        if friction:
+            lines.append(" · ".join(friction))
+        lines += [
             "",
             f"Merged   {s.merged:>3}",
             f"Open     {s.open_:>3}",

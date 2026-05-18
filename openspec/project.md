@@ -779,11 +779,62 @@ layers must read from this local source of truth; they do not replace it.
    unaffected; OSS never interprets `extra`. Decision gate cleared
    (byte-stable achieved; no parse-and-warn fallback needed).
 
+54. **v3.0 — Outcome graph (sessions → commits/PRs/tests):** the
+   strategic anchor — ties each AI session to engineering artifacts so
+   Halyard can answer "is the AI spend producing engineering leverage?"
+   Shipped incrementally rather than as one drop: amendment keys +
+   `AiSession` outcome fields (v2.24), `outcomes`/`pr_cache` schema
+   (v2.18 migration framework), git/gh signal collectors
+   (`halyard.outcomes`, `git_context`, `shell_history`,
+   `attempt_tracker`), `halyard outcome sync/report/attribute`, the
+   Leverage panel (web + TUI parity, v2.70), invoice PR-ref appendix,
+   and the privacy-contract fuzz test. Tasks §1–§6 complete; §7
+   (design-partner dark-mode run + write-up) is a user/GTM gate, not
+   code — the changeset ships green without it.
+   **Status: code-complete (1286 tests passing); gated only on
+   design-partner validation (§7), not on code.** Spec in
+   `openspec/changes/v3.0-outcome-graph/`; full PRD in
+   `strategy/prd-outcome-graph.md`. No standalone `design.md` was
+   written: the design was realized through the incremental changesets
+   above, each carrying its own design notes. The first engineering
+   increment on top of v3.0 shipped as v3.1 (roadmap entry 55).
+
+55. **v3.1 — Review-friction signals (cycle-time + review burden):**
+   the highest-leverage of the three v3.0-deferred workstreams — turns
+   "did it ship?" into "what did shipping cost?", the metric that makes
+   Halyard an AI-ROI record, not just an activity record. An
+   enrichment pass layered on v3.0's resolved `pr_ref` (never
+   re-resolves): per unique PR, `review_comments`, `review_rounds`,
+   `time_to_merge_s`, `review_decision`, all trust `captured`. A
+   gated Phase-0 spike invalidated the design's one-call assumption
+   before any code (`gh pr view --json comments` is issue-only; inline
+   review comments need a second `gh api .../pulls/<n>/comments` call)
+   — so the shipped shape is ≤2 gh calls per unique PR, merged PRs
+   cached permanently (friction immutable post-merge), open/closed on
+   TTL, total-failure not cached. Privacy is the binding constraint:
+   counts/enum/timestamps only, the `--json` field list carries no
+   body/title/author, fuzz-tested across every surface. Surfaces:
+   `outcome report` per-bucket medians, web + TUI Leverage parity line
+   (shared `leverage.summarize`), invoice appendix friction cell — each
+   byte-identical to v3.0 when no friction data exists. Additive SQLite
+   migration (v4→v5), four optional `AiSession` fields + `a` amendment
+   keys (v2.75 extensible-token path unaffected).
+   **Status: complete (1315 tests passing; +30 over v3.0, ≥25
+   required).** Spec in `openspec/changes/v3.1-review-friction/` with
+   recorded Phase-0 findings. The sibling v3.0-deferred workstreams
+   (tool errors / approval rejections; MCP-server inventory) remain
+   unspecced — each needs collector-side work, not GitHub data, and
+   gets its own changeset when prioritized. (One pre-existing,
+   unrelated, order-dependent failure — `test_adrift_regression_fires`
+   — fails identically with v3.1 stashed; tracked separately, not a
+   v3.1 regression.)
+
 ## Deferred or gated
 
-- **v3.0 outcome graph** — connecting sessions to commits, PRs, tests, and
-  deliverables — waits until at least one design partner explicitly asks for it.
-  v2.24 is the incremental step; v3.0 is the full graph. Do not conflate them.
+- **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
+  outstanding item is the §7 design-partner validation run + public
+  write-up, which is a GTM gate, not engineering work. v2.24 was the
+  incremental step; v3.0 is the full graph — do not conflate them.
 - Org admin dashboards, SSO/RBAC, and hosted enterprise reporting wait until
   security posture and design-partner pull justify them.
 - Native automatic collectors (Copilot, Windsurf) wait until v2.18 hardens the

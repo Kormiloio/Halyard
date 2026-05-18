@@ -360,20 +360,56 @@ def _render_pr_refs_subsection(sessions: list[AiSession]) -> list[str]:
     if not by_ref:
         return []
 
-    out: list[str] = [
-        "",
-        "### Linked engineering artifacts",
-        "",
-        "| PR | State | Sessions |",
-        "|---|---|---:|",
-    ]
+    from halyard.leverage import humanize_seconds
+
+    def _friction_cell(ref_bucket: list[AiSession], state: str) -> str:
+        # A pr_ref is one PR — friction is identical across the sessions
+        # that share it; take the first non-None values. Integers only;
+        # never a comment body, title, or branch.
+        ttm = next((s.time_to_merge_s for s in ref_bucket if s.time_to_merge_s is not None), None)
+        rounds = next((s.review_rounds for s in ref_bucket if s.review_rounds is not None), None)
+        bits: list[str] = []
+        if state == "merged" and ttm is not None:
+            bits.append(f"merged in {humanize_seconds(ttm)}")
+        if rounds is not None:
+            bits.append(f"{rounds} review round{'s' if rounds != 1 else ''}")
+        return ", ".join(bits) if bits else "—"
+
+    # R6: only add the Friction column when at least one PR has data, so
+    # an all-v3.0 appendix renders exactly as before (no empty column).
+    cells: dict[str, tuple[str, int, str]] = {}
+    any_friction = False
     for ref in sorted(by_ref):
         bucket = by_ref[ref]
-        # All sessions sharing a ref should agree on state; if not, prefer
-        # the most recently resolved one.
         bucket_sorted = sorted(bucket, key=lambda s: s.outcome_resolved_at or "", reverse=True)
         state = bucket_sorted[0].pr_state or "—"
-        out.append(f"| {ref} | {state} | {len(bucket)} |")
+        fc = _friction_cell(bucket, state)
+        if fc != "—":
+            any_friction = True
+        cells[ref] = (state, len(bucket), fc)
+
+    if any_friction:
+        out: list[str] = [
+            "",
+            "### Linked engineering artifacts",
+            "",
+            "| PR | State | Sessions | Friction |",
+            "|---|---|---:|---|",
+        ]
+        for ref in sorted(cells):
+            state, n, fc = cells[ref]
+            out.append(f"| {ref} | {state} | {n} | {fc} |")
+    else:
+        out = [
+            "",
+            "### Linked engineering artifacts",
+            "",
+            "| PR | State | Sessions |",
+            "|---|---|---:|",
+        ]
+        for ref in sorted(cells):
+            state, n, _fc = cells[ref]
+            out.append(f"| {ref} | {state} | {n} |")
     return out
 
 

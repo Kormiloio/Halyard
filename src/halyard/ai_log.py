@@ -292,6 +292,12 @@ class AiSession:
     pr_ref: str | None = None  # e.g. "owner/repo#42"; written by outcome sync
     pr_state: str | None = None  # merged | closed | open | none
     outcome_resolved_at: str | None = None  # ISO timestamp when pr_ref was resolved
+    # v3.1 review-friction signals — written by `halyard outcome sync`.
+    # Counts/enum only: NEVER review text, PR title, branch, or author.
+    review_comments: int | None = None  # issue + inline review comments; trust: captured
+    review_rounds: int | None = None  # count of CHANGES_REQUESTED reviews; trust: captured
+    time_to_merge_s: int | None = None  # createdAt→mergedAt secs, merged only; captured
+    review_decision: str | None = None  # APPROVED | CHANGES_REQUESTED | REVIEW_REQUIRED
     # v2.32 privacy-safe interaction and outcome metadata.
     # These fields intentionally store counts/statuses only. They must never
     # contain prompts, code, chat text, file names, or file contents.
@@ -359,6 +365,17 @@ class AiSession:
                 self.pr_state = value
             elif key == "outcome_resolved_at":
                 self.outcome_resolved_at = value
+            elif key == "review_comments":
+                with suppress(ValueError):
+                    self.review_comments = int(value)
+            elif key == "review_rounds":
+                with suppress(ValueError):
+                    self.review_rounds = int(value)
+            elif key == "time_to_merge_s":
+                with suppress(ValueError):
+                    self.time_to_merge_s = int(value)
+            elif key == "review_decision":
+                self.review_decision = value
 
     @classmethod
     def log_line_error(cls, line: str) -> str | None:
@@ -436,6 +453,14 @@ class AiSession:
             kvs.append(f"pr_state={_safe_field(self.pr_state)}")
         if self.outcome_resolved_at:
             kvs.append(f"outcome_resolved_at={_safe_field(self.outcome_resolved_at)}")
+        if self.review_comments is not None:
+            kvs.append(f"review_comments={self.review_comments}")
+        if self.review_rounds is not None:
+            kvs.append(f"review_rounds={self.review_rounds}")
+        if self.time_to_merge_s is not None:
+            kvs.append(f"time_to_merge_s={self.time_to_merge_s}")
+        if self.review_decision:
+            kvs.append(f"review_decision={_safe_field(self.review_decision)}")
         if self.interaction_count is not None:
             kvs.append(f"interaction_count={self.interaction_count}")
         if self.user_message_count is not None:
@@ -786,6 +811,17 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
                 session.pr_state = v
             case "outcome_resolved_at":
                 session.outcome_resolved_at = v
+            case "review_comments":
+                with suppress(ValueError):
+                    session.review_comments = int(v)
+            case "review_rounds":
+                with suppress(ValueError):
+                    session.review_rounds = int(v)
+            case "time_to_merge_s":
+                with suppress(ValueError):
+                    session.time_to_merge_s = int(v)
+            case "review_decision":
+                session.review_decision = v
             case "interaction_count":
                 with suppress(ValueError):
                     session.interaction_count = int(v)

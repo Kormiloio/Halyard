@@ -102,6 +102,107 @@ def test_outcome_surfaces_do_not_leak_note_or_resume_command(trial: int) -> None
         assert isinstance(result, int)
 
 
+@pytest.mark.parametrize("trial", range(5))
+def test_v31_friction_does_not_leak_gh_freetext(trial: int, tmp_path: Path) -> None:
+    """v3.1 binding gate: sensitive markers seeded into a gh PR payload's
+    title, body, review bodies, and comment bodies must never reach the
+    ReviewFriction values, the egress-eligible pr_cache payload, the log
+    `a` record, the outcome report, the Leverage panel, or the invoice
+    appendix. parse_friction must read only state/counts/timestamps.
+    """
+    import sqlite3
+
+    from halyard.invoicing import _render_pr_refs_subsection
+    from halyard.outcomes import (
+        ResolutionResult,
+        _friction_cache_set,
+        _write_amendment,
+        outcome_report,
+        parse_friction,
+    )
+
+    seed = random.Random(trial * 31 + 7)
+    m = seed.choice(_SECRET_MARKERS)
+    # A gh `pr view` payload stuffed with the marker in EVERY free-text
+    # field a careless parser might echo.
+    pr_view = {
+        "number": 42,
+        "state": "MERGED",
+        "title": f"feat: {m} secret title",
+        "body": f"PR body with {m}",
+        "bodyText": f"body text {m}",
+        "createdAt": "2026-05-01T10:00:00Z",
+        "mergedAt": "2026-05-01T12:30:00Z",
+        "reviewDecision": "CHANGES_REQUESTED",
+        "reviews": [
+            {"state": "CHANGES_REQUESTED", "body": f"please fix {m}", "author": {"login": m}},
+            {"state": "APPROVED", "body": f"ok {m}"},
+        ],
+        "comments": [{"body": f"comment {m}"}, {"body": f"second {m}"}],
+    }
+    friction = parse_friction(pr_view, inline_comment_count=3)
+
+    # 1. The reduced values are integers/enum only — no marker anywhere.
+    assert m not in repr(friction)
+    assert friction.review_rounds == 1
+    assert friction.review_comments == 5  # 2 issue + 3 inline
+    assert friction.time_to_merge_s == 9000
+    assert friction.review_decision == "CHANGES_REQUESTED"
+
+    # 2. The egress-eligible pr_cache payload must not contain the marker.
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        "CREATE TABLE pr_cache (cache_key TEXT PRIMARY KEY, payload TEXT, fetched_at TEXT)"
+    )
+    _friction_cache_set(conn, "k:friction", friction, "merged")
+    payload = conn.execute("SELECT payload FROM pr_cache").fetchone()["payload"]
+    assert m not in payload
+
+    # 3. The log `a` amendment record must not contain the marker.
+    proj = tmp_path / "p"
+    proj.mkdir(parents=True, exist_ok=True)
+    (proj / "ai-sessions.log").write_text("; log\n")
+    result = ResolutionResult(
+        session_hash="deadbeef",
+        pr_ref="acme/repo#42",
+        pr_state="merged",
+        resolved_at="2026-05-02T09:00:00",
+        review_comments=friction.review_comments,
+        review_rounds=friction.review_rounds,
+        time_to_merge_s=friction.time_to_merge_s,
+        review_decision=friction.review_decision,
+    )
+    _write_amendment(proj, result)
+    assert m not in (proj / "ai-sessions.log").read_text()
+
+    # 4. Rendered surfaces, with a session carrying the friction values.
+    s = AiSession(
+        start=datetime(2026, 5, 1, 10),
+        end=datetime(2026, 5, 1, 11),
+        tool="claude-code",
+        model="sonnet",
+        input_tokens=10,
+        output_tokens=10,
+        cost_usd=1.0,
+        project="acme:web",
+        pr_ref="acme/repo#42",
+        pr_state="merged",
+        review_comments=friction.review_comments,
+        review_rounds=friction.review_rounds,
+        time_to_merge_s=friction.time_to_merge_s,
+        review_decision=friction.review_decision,
+        outcome_resolved_at="2026-05-02T09:00:00",
+    )
+    surfaces = [
+        _leverage_panel([s], datetime(2026, 5, 1, 12)),
+        "\n".join(_render_pr_refs_subsection([s])),
+        repr(outcome_report([s], since=datetime(2026, 4, 1).date())),
+    ]
+    for out in surfaces:
+        assert m not in out
+
+
 def test_shell_history_returns_only_an_integer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

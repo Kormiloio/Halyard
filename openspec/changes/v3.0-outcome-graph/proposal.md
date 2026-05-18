@@ -111,6 +111,29 @@ Until v3.0, "leverage" is a future tense. v3.0 makes it present tense.
 
 ## Detailed design
 
-See `design.md` (to be written when v2.18 lands and the migration
-framework is concrete) and `strategy/prd-outcome-graph.md` for the full
-PRD.
+No standalone `design.md` was written for v3.0. The design was realized
+incrementally and each carrying changeset holds its own design notes:
+
+- Schema + amendment keys — v2.18 (migration framework), v2.24 (outcome
+  metadata fields on `AiSession`, `outcomes`/`pr_cache` tables).
+- Signal collectors — `halyard.outcomes` (gh PR linkage),
+  `git_context` (commits/churn/branch at capture time), `shell_history`
+  (opt-in hashed test-run detection), `attempt_tracker` (branch-pattern
+  repeat heuristic).
+- Surfaces — Leverage panel with web+TUI parity (v2.70), invoice PR-ref
+  appendix, `halyard outcome sync/report/attribute`.
+
+`strategy/prd-outcome-graph.md` remains the full PRD.
+
+## Status (reconciled 2026-05-17)
+
+Code-complete. Tasks §1–§6 are done; §7 (design-partner dark-mode run,
+feedback, public write-up) is a user/GTM gate and the changeset ships
+green without it. 1286 tests passing repo-wide; the v3.0-specific
+suites (`test_outcome_sync`, `test_shell_history`,
+`test_attempt_tracker`, `test_outcomes_config`, `test_leverage_panel`,
+`test_outcomes_privacy_fuzz`) are green. The roadmap entry and the
+"Deferred or gated" note in `openspec/project.md` were corrected to
+reflect code-complete-but-GTM-gated rather than unbuilt. The next
+engineering increment is v3.1 — review-friction signals
+(`openspec/changes/v3.1-review-friction/`).

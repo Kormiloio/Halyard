@@ -74,17 +74,12 @@ def _pr(
 
 
 def _mem_db() -> sqlite3.Connection:
-    """Return an in-memory SQLite connection with the pr_cache and outcomes tables."""
+    """In-memory DB built from the real schema so it never drifts from migrations."""
+    from halyard.db import _CREATE_SCHEMA_V1
+
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.executescript(
-        """
-        CREATE TABLE pr_cache (cache_key TEXT PRIMARY KEY, payload TEXT, fetched_at TEXT);
-        CREATE TABLE outcomes (
-            session_id TEXT PRIMARY KEY, pr_ref TEXT, pr_state TEXT, resolved_at TEXT
-        );
-        """
-    )
+    conn.executescript(_CREATE_SCHEMA_V1)
     conn.commit()
     return conn
 
