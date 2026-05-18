@@ -103,32 +103,41 @@ def _proj(p: Path) -> Path:
     return p
 
 
-def _report_ids(tmp_path: Path, sessions: list[AiSession]) -> set[str]:
+def _report_ids(
+    tmp_path: Path, sessions: list[AiSession], monkeypatch: pytest.MonkeyPatch
+) -> set[str]:
     proj = _proj(tmp_path / "p")
     for s in sessions:
         append_session(proj, s)
+    # Hermetic: build_doctor_report() calls find_hub(), which reads the
+    # real ~/.halyard hub pointer. Without this, a developer's real hub
+    # log is parsed alongside the synthetic sessions and swamps the
+    # trailing-window slices the adrift canary inspects, so the canary
+    # silently does not fire (order-dependent: it only "passed" when
+    # another test had mutated the real hub state first).
+    monkeypatch.setattr("halyard.doctor.find_hub", lambda: None)
     rep = build_doctor_report(start=proj)
     _report_ids.last = rep  # type: ignore[attr-defined]
     return {c.id for c in rep.checks}
 
 
-def test_adrift_regression_fires(tmp_path: Path) -> None:
+def test_adrift_regression_fires(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # 20 prior attributed, 20 recent unattributed → regression.
     prior = [_s(i, project="acme:web", attr="timer") for i in range(20)]
     recent = [_s(20 + i, project=None, attr=None) for i in range(20)]
-    ids = _report_ids(tmp_path, prior + recent)
+    ids = _report_ids(tmp_path, prior + recent, monkeypatch)
     assert "attr.adrift_regression" in ids
     rep = _report_ids.last  # type: ignore[attr-defined]
     assert has_errors(rep) is False  # warning only — exit-code contract
 
 
-def test_stable_attribution_no_canary(tmp_path: Path) -> None:
+def test_stable_attribution_no_canary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     sessions = [_s(i, project="acme:web", attr="timer") for i in range(40)]
-    ids = _report_ids(tmp_path, sessions)
+    ids = _report_ids(tmp_path, sessions, monkeypatch)
     assert "attr.adrift_regression" not in ids
 
 
-def test_per_remote_regression_fires(tmp_path: Path) -> None:
+def test_per_remote_regression_fires(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     prior = [
         _s(i, project="acme:web", attr="timer", remote="git@github.com:acme/web.git")
         for i in range(20)
@@ -136,7 +145,7 @@ def test_per_remote_regression_fires(tmp_path: Path) -> None:
     recent = [
         _s(20 + i, project=None, attr=None, remote="git@github.com:acme/web.git") for i in range(20)
     ]
-    ids = _report_ids(tmp_path, prior + recent)
+    ids = _report_ids(tmp_path, prior + recent, monkeypatch)
     assert any(i.startswith("attr.remote.") for i in ids)
 
 
