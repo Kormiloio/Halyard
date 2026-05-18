@@ -8,6 +8,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch  # MagicMock used in fetch_prs tests
 
+import pytest
+
 from halyard.ai_log import AiSession
 from halyard.outcomes import (
     _best_pr_for_session,
@@ -19,6 +21,29 @@ from halyard.outcomes import (
     outcome_report,
     resolve_sessions,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_real_gh(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default every test in this file to "gh not installed".
+
+    v3.1 wired a review-friction pass into resolve_sessions: it calls
+    gh_available() and, if true, shells out to real `gh pr view` /
+    `gh api` subprocesses per resolved pr_ref. The resolution tests
+    only patch fetch_prs_for_branch, so without this they would make
+    real, network/auth-dependent gh calls (offline-CI flakiness, rate
+    limits). Tests that exercise gh itself (gh_available /
+    fetch_prs_for_branch) patch `halyard.outcomes.subprocess.run`
+    inside their own `with patch(...)`, which overrides this default
+    within their scope. The dedicated friction collector tests live in
+    test_v31_review_friction.py with their own mocked subprocess.
+    """
+
+    def _no_gh(*_a: object, **_k: object) -> None:
+        raise FileNotFoundError("gh not available in tests")
+
+    monkeypatch.setattr("halyard.outcomes.subprocess.run", _no_gh)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
