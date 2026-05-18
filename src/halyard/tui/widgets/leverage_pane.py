@@ -11,7 +11,12 @@ from datetime import datetime
 from textual.widgets import Static
 
 from halyard.ai_log import AiSession
-from halyard.leverage import humanize_seconds, summarize
+from halyard.leverage import (
+    humanize_seconds,
+    render_rejection_phrase,
+    summarize,
+    summarize_struggle,
+)
 
 
 class LeveragePane(Static):
@@ -20,7 +25,8 @@ class LeveragePane(Static):
     last_rendered_text = ""
 
     def render_sessions(self, sessions: list[AiSession], now: datetime | None = None) -> None:
-        s = summarize(sessions, now or datetime.now())
+        when = now or datetime.now()
+        s = summarize(sessions, when)
         if s.total == 0:
             self.last_rendered_text = "⚑ Leverage\n\nNo sessions in the last 30 days."
             self.update(self.last_rendered_text)
@@ -39,6 +45,15 @@ class LeveragePane(Static):
             friction.append(f"~{s.median_review_comments} review comments")
         if friction:
             lines.append(" · ".join(friction))
+        # v3.2: struggle line, parity with web; same shared summary so
+        # the numbers cannot diverge. Only when tool-call data exists.
+        st = summarize_struggle(sessions, when)
+        if st.tool_error_total is not None:
+            seg = f"{st.tool_error_total} tool errors"
+            if st.tool_error_rate is not None:
+                seg += f" ({st.tool_error_rate:.0%})"
+            seg += " · " + render_rejection_phrase(st)
+            lines.append(seg)
         lines += [
             "",
             f"Merged   {s.merged:>3}",

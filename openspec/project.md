@@ -829,6 +829,30 @@ layers must read from this local source of truth; they do not replace it.
    — fails identically with v3.1 stashed; tracked separately, not a
    v3.1 regression.)
 
+56. **v3.2 — Struggle signals (surface-only):** completes the leverage
+   triad — v3.0 "did it ship?", v3.1 "what did review cost?", v3.2
+   "how much did it thrash to get there?" — with **zero new data
+   collection**. A collector-coverage audit found `tool_errors`/
+   `tool_calls` already captured by all four collectors and
+   `accepted/rejected_suggestion_count` captured by Cursor only, so
+   this is purely surfacing already-parsed fields. Shared
+   `summarize_struggle` (web+TUI parity, same mechanism as v3.1) +
+   per-bucket `OutcomeBucket.struggle`. The load-bearing rule is
+   honest asymmetric-capture labelling: rejections are gated on the
+   pre-existing `interaction_data_available` field and rendered via a
+   single `render_rejection_phrase` that is **never a bare 0** —
+   either a count with explicit coverage ("over N of M sessions; rest:
+   not captured") or "not captured". No schema, no log token, no
+   collector diff, invoice appendix untouched (internal signal).
+   **Status: complete (1333 tests passing; +17, ≥15 required).** Spec
+   in `openspec/changes/v3.2-struggle-signals/`. This shipped the
+   v3.1-shaped slice of the deferred "tool errors / approval
+   rejections" workstream (the part where the substrate already
+   existed). Still unspecced by design: **cross-collector rejection
+   capture** (claude_code/gemini_cli/codex_app emitting rejections —
+   the real collector work) and **MCP-server inventory** (greenfield,
+   no field/capture path) — each its own future changeset.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

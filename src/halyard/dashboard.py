@@ -1654,6 +1654,17 @@ def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
     if parts:
         friction = f"<p class='leverage-friction'>{_e(' · '.join(parts))}</p>"
 
+    # v3.2: one-line struggle summary, only when tool-call data exists.
+    # Rejections rendered via the shared R3 phrase — never a bare 0.
+    struggle_html = ""
+    st = leverage.summarize_struggle(sessions, now)
+    if st.tool_error_total is not None:
+        seg = f"{st.tool_error_total} tool errors"
+        if st.tool_error_rate is not None:
+            seg += f" ({st.tool_error_rate:.0%})"
+        seg += " · " + leverage.render_rejection_phrase(st)
+        struggle_html = f"<p class='leverage-struggle'>{_e(seg)}</p>"
+
     return (
         "<div class='leverage-grid'>"
         f"<div class='leverage-headline'>"
@@ -1662,6 +1673,7 @@ def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
         f"<strong>{merged}</strong> of <strong>{total}</strong> sessions landed in merged PRs"
         "</div>"
         f"{friction}"
+        f"{struggle_html}"
         "</div>"
         f"<div class='leverage-rows'>{row_html}</div>"
         f"{hint}"
@@ -2920,6 +2932,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .leverage-caption { font-size: 13px; color: var(--muted); }
 .leverage-caption strong { color: var(--fg); }
 .leverage-friction { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+.leverage-struggle { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
 .leverage-rows { display: grid; gap: 6px; }
 .leverage-row { display: grid; grid-template-columns: 1.4fr 64px 64px; gap: 12px; align-items: center; font-size: 13px; }
 .leverage-row strong { text-align: right; }

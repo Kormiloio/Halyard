@@ -9,8 +9,12 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from halyard.ai_log import AiSession, locked_file, parse_sessions, session_hash
+
+if TYPE_CHECKING:
+    from halyard.leverage import StruggleSummary
 
 # ---------------------------------------------------------------------------
 # PR resolution via gh
@@ -596,6 +600,8 @@ class OutcomeBucket:
     # v3.1 review-friction medians (None when the bucket has no data).
     median_time_to_merge_s: int | None = None
     median_review_comments: int | None = None
+    # v3.2 in-session struggle for this bucket (None for an empty bucket).
+    struggle: StruggleSummary | None = None
 
 
 def _bucket_friction(lst: list[AiSession]) -> tuple[int | None, int | None]:
@@ -639,6 +645,14 @@ def outcome_report(
         else:
             buckets["unsynced"].append(s)
 
+    from halyard.leverage import struggle_signals
+
+    def _struggle(lst: list[AiSession]) -> StruggleSummary | None:
+        # Struggle is orthogonal to PR resolution — compute it for every
+        # non-empty bucket. None for an empty bucket so the surface omits
+        # the sub-line (R4 absent-data path).
+        return struggle_signals(lst) if lst else None
+
     def _captured(label: str, key: str) -> OutcomeBucket:
         lst = buckets[key]
         ttm, rc = _bucket_friction(lst)
@@ -649,6 +663,7 @@ def outcome_report(
             trust="captured",
             median_time_to_merge_s=ttm,
             median_review_comments=rc,
+            struggle=_struggle(lst),
         )
 
     return [
@@ -661,6 +676,7 @@ def outcome_report(
             session_count=len(buckets["unsynced"]),
             total_cost=sum(s.cost_usd for s in buckets["unsynced"]),
             trust=None,
+            struggle=_struggle(buckets["unsynced"]),
         ),
     ]
 

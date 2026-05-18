@@ -76,3 +76,69 @@ def summarize(sessions: list[AiSession], now: datetime) -> LeverageSummary:
         median_time_to_merge_s=_median_int(ttm),
         median_review_comments=_median_int(rc),
     )
+
+
+@dataclass(frozen=True)
+class StruggleSummary:
+    """v3.2 in-session struggle. Tool errors are universally captured;
+    rejections are captured only by interaction-aware collectors
+    (Cursor today), so they are gated and always reported with their
+    coverage — never a misleading bare 0."""
+
+    tool_error_total: int | None
+    tool_error_rate: float | None
+    rejection_total: int | None
+    rejection_rate: float | None
+    rejection_covered: int  # sessions with interaction_data_available
+    rejection_total_sessions: int  # all sessions in the window
+
+
+def struggle_signals(sessions: list[AiSession]) -> StruggleSummary:
+    """Reduce already-parsed sessions to struggle stats. No window of
+    its own — the caller passes the slice it wants (the panels pass the
+    same 30-day `recent` they use for `summarize`). Fail-closed: any
+    figure that cannot be derived from present data is None, never 0."""
+    tool_calls = sum(s.tool_calls for s in sessions if s.tool_calls is not None)
+    has_tool_data = any(s.tool_calls is not None for s in sessions)
+    tool_errs = sum(s.tool_errors for s in sessions if s.tool_errors is not None)
+    tool_error_total = tool_errs if has_tool_data else None
+    tool_error_rate = (tool_errs / tool_calls) if tool_calls else None
+
+    captured = [s for s in sessions if s.interaction_data_available is True]
+    rej = sum(s.rejected_suggestion_count or 0 for s in captured)
+    acc = sum(s.accepted_suggestion_count or 0 for s in captured)
+    if captured:
+        rejection_total: int | None = rej
+        rejection_rate = (rej / (rej + acc)) if (rej + acc) else None
+    else:
+        rejection_total = None
+        rejection_rate = None
+
+    return StruggleSummary(
+        tool_error_total=tool_error_total,
+        tool_error_rate=tool_error_rate,
+        rejection_total=rejection_total,
+        rejection_rate=rejection_rate,
+        rejection_covered=len(captured),
+        rejection_total_sessions=len(sessions),
+    )
+
+
+def summarize_struggle(sessions: list[AiSession], now: datetime) -> StruggleSummary:
+    """30-day-windowed struggle rollup (same window as `summarize`)."""
+    cutoff = now - timedelta(days=LEVERAGE_WINDOW_DAYS)
+    return struggle_signals([s for s in sessions if s.start >= cutoff])
+
+
+def render_rejection_phrase(s: StruggleSummary) -> str:
+    """The R3 honesty rule in one place: rejections are never a bare 0.
+
+    Either the count with explicit coverage, or "not captured"."""
+    if s.rejection_covered == 0 or s.rejection_total is None:
+        return "rejections: not captured"
+    pct = "" if s.rejection_rate is None else f" ({s.rejection_rate:.0%})"
+    return (
+        f"rejections {s.rejection_total}{pct} "
+        f"(over {s.rejection_covered} of {s.rejection_total_sessions} sessions; "
+        f"rest: not captured)"
+    )

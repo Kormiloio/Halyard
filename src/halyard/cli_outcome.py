@@ -116,7 +116,7 @@ def outcome_report_cmd(
     period = f"since {since_date}" if since_date else "last 30 days"
     console.print(f"\n[bold]Outcome Report[/] — {period}\n")
 
-    from halyard.leverage import humanize_seconds
+    from halyard.leverage import humanize_seconds, render_rejection_phrase
 
     for b in buckets:
         if b.session_count == 0:
@@ -136,6 +136,15 @@ def outcome_report_cmd(
             fr.append(f"median {b.median_review_comments} review comments")
         if fr:
             console.print(f"  [dim]{'└ ' + ' · '.join(fr)}[/]")
+        # v3.2: struggle sub-line, only when tool-call data exists (R4).
+        st = b.struggle
+        if st is not None and st.tool_error_total is not None:
+            parts = [f"{st.tool_error_total} tool errors"]
+            if st.tool_error_rate is not None:
+                parts[0] += f" ({st.tool_error_rate:.0%})"
+            # Rejections per R3: with coverage, or "not captured" — never bare 0.
+            parts.append(render_rejection_phrase(st))
+            console.print(f"  [dim]{'└ struggle: ' + ' · '.join(parts)}[/]")
 
     unsynced = next((b for b in buckets if b.label == "Not synced"), None)
     if unsynced and unsynced.session_count > 0:
