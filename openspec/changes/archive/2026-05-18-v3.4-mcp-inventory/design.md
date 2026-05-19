@@ -116,3 +116,40 @@ Invariants (pinned by spec + fuzz test):
 | Web/TUI drift | Single shared summary; parity test (v3.1/v3.2 pattern) |
 | Scope creep into availability/config | Success criterion + explicit out-of-scope; no config read in code |
 | Allowlist becomes a maintenance sink | Fixed small public set; extension = reviewed PR, same as shell_history |
+
+## Phase-0 findings (resolved 2026-05-18)
+
+**S1 — tool-name visibility per collector:**
+
+| Collector | Tool names visible? | MCP-usage derivable? |
+|---|---|---|
+| **Claude Code** | Yes — `tool_use` content blocks carry `name` (Anthropic block format); already iterated in the v3.2 count loop, `name` just not read | **Yes — wire in v3.4** |
+| **Cursor** | No — payload gives interaction/tool *counts* only, no per-tool names | No → honest absence (R5) |
+| **Gemini CLI** | No — `HistorySummary` is aggregate `tool_calls/tool_errors` only | No → honest absence (R5) |
+| **Codex** | Partial — `tool_call_begin` events exist but the tool-name field and whether Codex uses the `mcp__server__tool` convention are unconfirmed; Codex MCP naming may differ | Deferred — honest absence in v3.4; revisit in a follow-up once the Codex event schema is confirmed |
+
+**S2 — prefix collision:** no `mcp__` literal anywhere in `src/`; no
+Halyard builtin or collector emits a tool named with that prefix. Safe
+to anchor the extractor on the exact `mcp__` prefix + `__` server
+delimiter and fail closed on any malformed name.
+
+**Conclusion:** v3.4 ships **Claude-Code-only** MCP-usage inventory.
+Cursor/Gemini/Codex are honest absence (R5) — never "0 servers".
+This is the designed partial-rollout outcome; no scope change. The
+Codex follow-up is noted for a future changeset, not v3.4.
+
+## Deviation (recorded at implementation, 2026-05-18)
+
+R7 originally required a capture-time `[outcomes] enabled = false` gate
+("no MCP fields populated"). Implementation found this inconsistent
+with the established pattern: v3.1 review-friction and v3.2 struggle
+leverage lines do **not** gate on that flag — it gates the `halyard
+outcome` CLI sync/report path, not passive collector capture or the
+dashboard. Inventing a bespoke capture-time gate for MCP only would be
+an inconsistent special case. Since the allowlist reduction already
+guarantees no sensitive value is ever written (a non-public server is
+an integer, never a name), the residual data is privacy-safe by
+construction. R7 was reconciled to follow the same pattern as the other
+two leverage signals rather than over-engineer a new gate. No privacy
+weakening — the reduction is the privacy boundary, and it is
+unconditional.

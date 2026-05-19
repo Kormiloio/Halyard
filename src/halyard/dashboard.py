@@ -1665,6 +1665,12 @@ def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
         seg += " · " + leverage.render_rejection_phrase(st)
         struggle_html = f"<p class='leverage-struggle'>{_e(seg)}</p>"
 
+    # v3.4: MCP capability line, only when ≥1 session has usage data.
+    mcp_html = ""
+    mcp = leverage.summarize_mcp(sessions, now)
+    if mcp is not None:
+        mcp_html = f"<p class='leverage-mcp'>{_e(leverage.render_mcp_phrase(mcp))}</p>"
+
     return (
         "<div class='leverage-grid'>"
         f"<div class='leverage-headline'>"
@@ -1674,6 +1680,7 @@ def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
         "</div>"
         f"{friction}"
         f"{struggle_html}"
+        f"{mcp_html}"
         "</div>"
         f"<div class='leverage-rows'>{row_html}</div>"
         f"{hint}"
@@ -2933,6 +2940,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .leverage-caption strong { color: var(--fg); }
 .leverage-friction { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
 .leverage-struggle { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+.leverage-mcp { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
 .leverage-rows { display: grid; gap: 6px; }
 .leverage-row { display: grid; grid-template-columns: 1.4fr 64px 64px; gap: 12px; align-items: center; font-size: 13px; }
 .leverage-row strong { text-align: right; }

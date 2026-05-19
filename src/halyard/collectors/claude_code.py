@@ -43,6 +43,7 @@ from halyard.git_context import (
     numstat_delta,
 )
 from halyard.hub import find_hub
+from halyard.mcp_inventory import extract_mcp_server, reduce_mcp
 from halyard.model_breakdown import ModelSeg
 from halyard.model_breakdown import cost_of as _breakdown_cost
 from halyard.model_breakdown import encode as _encode_breakdown
@@ -156,6 +157,8 @@ def handle_stop_hook() -> int:
     user_message_count: int | None = None
     tool_calls: int | None = None
     tool_errors: int | None = None
+    mcp_servers_used: int | None = None
+    mcp_server_names: str | None = None
     wall_seconds: int | None = None
     model_breakdown: str | None = None
 
@@ -181,6 +184,8 @@ def handle_stop_hook() -> int:
         user_message_count = ts.user_count
         tool_calls = ts.tool_calls
         tool_errors = ts.tool_errors
+        mcp_servers_used = ts.mcp_servers_used
+        mcp_server_names = ts.mcp_server_names
         wall_seconds = ts.wall_seconds
         model_breakdown = ts.model_breakdown
         # Multi-model session: primary = highest-cost model so the
@@ -253,6 +258,8 @@ def handle_stop_hook() -> int:
         user_message_count=user_message_count,
         tool_calls=tool_calls,
         tool_errors=tool_errors,
+        mcp_servers_used=mcp_servers_used,
+        mcp_server_names=mcp_server_names,
         wall_seconds=wall_seconds,
         model_breakdown=model_breakdown,
         interaction_count=interaction_count,
@@ -416,6 +423,9 @@ class _TranscriptStats:
     user_count: int | None = None
     tool_calls: int | None = None
     tool_errors: int | None = None
+    # v3.4 MCP-usage inventory (privacy-bounded via mcp_inventory.py).
+    mcp_servers_used: int | None = None
+    mcp_server_names: str | None = None
     session_id: str | None = None
     wall_seconds: int | None = None
     # model -> [input, output, cache_read, cache_write] (v2.61 usage form)
@@ -479,6 +489,7 @@ def _read_from_transcript(
         user_count = 0
         tool_calls = 0
         tool_errors = 0
+        mcp_servers: set[str] = set()
         first_ts: datetime | None = None
         last_ts: datetime | None = None
 
@@ -538,11 +549,16 @@ def _read_from_transcript(
                         acc[2] += u_cr
                         acc[3] += u_cw
                     if isinstance(content, list):
-                        tool_calls += sum(
-                            1
-                            for b in content
-                            if isinstance(b, dict) and b.get("type") == "tool_use"
-                        )
+                        for b in content:
+                            if not (isinstance(b, dict) and b.get("type") == "tool_use"):
+                                continue
+                            tool_calls += 1
+                            # v3.4: an MCP tool is mcp__<server>__<tool>.
+                            # Reduce to the server segment only; the raw
+                            # name/args are never retained.
+                            server = extract_mcp_server(b.get("name"))
+                            if server is not None:
+                                mcp_servers.add(server)
                 else:  # user
                     blocks = content if isinstance(content, list) else []
                     results = [
@@ -558,6 +574,7 @@ def _read_from_transcript(
             stats.user_count = user_count
             stats.tool_calls = tool_calls
             stats.tool_errors = tool_errors
+            stats.mcp_servers_used, stats.mcp_server_names = reduce_mcp(mcp_servers)
             if first_ts is not None and last_ts is not None and last_ts >= first_ts:
                 stats.wall_seconds = int((last_ts - first_ts).total_seconds())
         return stats

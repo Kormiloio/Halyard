@@ -130,6 +130,44 @@ def summarize_struggle(sessions: list[AiSession], now: datetime) -> StruggleSumm
     return struggle_signals([s for s in sessions if s.start >= cutoff])
 
 
+@dataclass(frozen=True)
+class McpRollup:
+    """v3.4 capability rollup over the window. Reported from the single
+    most-MCP-heavy session (a coherent data point, not a cross-session
+    statistic): its distinct-server count + its allowlisted names. The
+    count may exceed the names — non-allowlisted servers are counted,
+    never named."""
+
+    peak_servers: int
+    named: tuple[str, ...]  # allowlisted only, sorted
+
+
+def summarize_mcp(sessions: list[AiSession], now: datetime) -> McpRollup | None:
+    """None when no session in the 30-day window has MCP usage (so the
+    surface omits the line — never an implied "0 servers")."""
+    cutoff = now - timedelta(days=LEVERAGE_WINDOW_DAYS)
+    recent = [
+        s for s in sessions if s.start >= cutoff and s.mcp_servers_used is not None
+    ]
+    if not recent:
+        return None
+    peak = max(recent, key=lambda s: s.mcp_servers_used or 0)
+    names = tuple(n for n in (peak.mcp_server_names or "").split(",") if n)
+    return McpRollup(peak_servers=peak.mcp_servers_used or 0, named=names)
+
+
+def render_mcp_phrase(m: McpRollup) -> str:
+    """Single source for the capability line so web and TUI cannot
+    diverge. Names are allowlisted-only; '+N' covers counted-but-unnamed
+    (non-allowlisted) servers."""
+    plural = "s" if m.peak_servers != 1 else ""
+    if not m.named:
+        return f"MCP: {m.peak_servers} server{plural} (none on allowlist)"
+    extra = m.peak_servers - len(m.named)
+    tail = f" +{extra}" if extra > 0 else ""
+    return f"MCP: {m.peak_servers} server{plural} ({', '.join(m.named)}{tail})"
+
+
 def render_rejection_phrase(s: StruggleSummary) -> str:
     """The R3 honesty rule in one place: rejections are never a bare 0.
 

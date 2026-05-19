@@ -27,7 +27,7 @@ class DbError(RuntimeError):
 _DB_PATH = Path.home() / ".halyard" / "cache.db"
 
 # Schema version this code expects. Bump whenever a migration is added.
-_CURRENT_VERSION = 5
+_CURRENT_VERSION = 6
 
 # Initial schema for a fresh database — always reflects _CURRENT_VERSION.
 _CREATE_SCHEMA_V1 = """
@@ -52,7 +52,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     code_removed        INTEGER,
     pr_ref              TEXT,
     pr_state            TEXT,
-    outcome_resolved_at TEXT
+    outcome_resolved_at TEXT,
+    mcp_servers_used    INTEGER,
+    mcp_server_names    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS timeclock (
@@ -132,6 +134,14 @@ ALTER TABLE outcomes ADD COLUMN review_comment_count INTEGER;
 ALTER TABLE outcomes ADD COLUMN review_round_trips INTEGER;
 ALTER TABLE outcomes ADD COLUMN time_to_merge_seconds INTEGER;
 ALTER TABLE outcomes ADD COLUMN review_decision TEXT;
+""",
+    ),
+    # v5 → v6: v3.4 MCP-usage inventory — additive columns on sessions.
+    (
+        5,
+        """
+ALTER TABLE sessions ADD COLUMN mcp_servers_used INTEGER;
+ALTER TABLE sessions ADD COLUMN mcp_server_names TEXT;
 """,
     ),
 ]

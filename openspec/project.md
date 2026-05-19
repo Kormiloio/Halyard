@@ -853,6 +853,38 @@ layers must read from this local source of truth; they do not replace it.
    the real collector work) and **MCP-server inventory** (greenfield,
    no field/capture path) — each its own future changeset.
 
+57. **v3.4 — MCP-server usage inventory (privacy-first):** adds the
+   *capability* axis to the leverage story — which MCP servers a
+   session actually used — at **zero new sensitive-data egress**. A
+   Phase-0 spike found the signal already in Claude Code's parse loop:
+   `tool_use` blocks are iterated for v3.2's count, and an MCP tool is
+   named `mcp__<server>__<tool>`, so the server segment is one read
+   away. The load-bearing piece is the privacy model (new
+   `mcp_inventory.py`), modelled on the `shell_history` allowlist:
+   **integer count always; server names only if on a fixed public
+   in-repo allowlist; a non-allowlisted server is counted but never
+   named/logged/egressed; the raw `mcp__*` string, tool segment, and
+   args are never retained.** Scoped to *usage* (derived) — *MCP
+   availability* (reading config files = commands/URLs/env) is
+   explicitly deferred. Additive migration v5→v6; two optional
+   `AiSession` fields + log tokens (v2.75 path byte-stable). Shared
+   `summarize_mcp`/`render_mcp_phrase` → web + TUI parity line ("MCP: N
+   servers (github, filesystem +2)"), absent → v3.2-identical; report
+   & invoice untouched. Phase-0 found Cursor/Gemini have no per-tool
+   names (honest absence, R5) and Codex unconfirmed (deferred), so
+   v3.4 ships **Claude-Code-only** — the designed partial rollout. One
+   recorded deviation: the R7 capture-time opt-out gate was dropped to
+   match the v3.1/v3.2 pattern (the unconditional allowlist reduction
+   *is* the privacy boundary), rather than add an inconsistent bespoke
+   gate.
+   **Status: complete (1352 tests passing; +19, ≥15 required).** Spec
+   in `openspec/changes/v3.4-mcp-inventory/`. **v3.0-deferred trio
+   status:** review-friction shipped (v3.1); struggle shipped (v3.2);
+   MCP *usage* shipped (v3.4); still open — cross-collector rejection
+   (v3.3 feasibility-gated, awaiting the owner's Claude-Code
+   reclassification decision) and MCP *availability* (deferred,
+   config-reading privacy surface).
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

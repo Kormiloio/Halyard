@@ -68,10 +68,24 @@ contract. Counts/allowlisted-names only.
 - WHEN the outcome report or invoice appendix renders, THEN it is
   byte-identical to v3.2 (MCP is neither per-PR nor client-facing).
 
-## R7 — Opt-out
+## R7 — Opt-out (reconciled to the established pattern)
 
-- WHEN `[outcomes] enabled = false`, THEN no MCP fields are populated
-  and no MCP line renders, exactly as for the other outcome signals.
+Implementation note (deviation recorded in `design.md`): v3.1/v3.2
+leverage-panel signals do **not** gate on `[outcomes] enabled` — that
+flag gates the `halyard outcome` sync/report CLI path, not passive
+capture or the dashboard. MCP usage is privacy-safe *by construction*
+(allowlist reduction happens in the collector before any write; a
+sensitive server only ever becomes an integer), so it follows the same
+pattern rather than inventing a new capture-time gate.
+
+- WHEN MCP usage is captured, THEN the allowlist reduction has already
+  removed every non-public name, so there is no sensitive value to
+  gate; the integer count is privacy-safe and is treated like the
+  other passive leverage signals.
+- WHEN `[outcomes] enabled = false`, THEN the `halyard outcome`
+  sync/report path is disabled exactly as before; the passive Leverage
+  panel behaves consistently with the v3.1/v3.2 friction/struggle
+  lines (no regression, no new divergence).
 
 ## R8 — Privacy fuzz
 

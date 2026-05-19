@@ -13,8 +13,10 @@ from textual.widgets import Static
 from halyard.ai_log import AiSession
 from halyard.leverage import (
     humanize_seconds,
+    render_mcp_phrase,
     render_rejection_phrase,
     summarize,
+    summarize_mcp,
     summarize_struggle,
 )
 
@@ -54,6 +56,10 @@ class LeveragePane(Static):
                 seg += f" ({st.tool_error_rate:.0%})"
             seg += " · " + render_rejection_phrase(st)
             lines.append(seg)
+        # v3.4: MCP capability line, parity with web (shared summary).
+        mcp = summarize_mcp(sessions, when)
+        if mcp is not None:
+            lines.append(render_mcp_phrase(mcp))
         lines += [
             "",
             f"Merged   {s.merged:>3}",

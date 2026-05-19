@@ -298,6 +298,11 @@ class AiSession:
     review_rounds: int | None = None  # count of CHANGES_REQUESTED reviews; trust: captured
     time_to_merge_s: int | None = None  # createdAt→mergedAt secs, merged only; captured
     review_decision: str | None = None  # APPROVED | CHANGES_REQUESTED | REVIEW_REQUIRED
+    # v3.4 MCP-server usage inventory — privacy-bounded (mcp_inventory.py).
+    # Count is always safe; names are allowlisted-only. NEVER the raw
+    # mcp__*__* string, tool segment, args, server command/URL/env.
+    mcp_servers_used: int | None = None  # distinct MCP servers whose tools were used
+    mcp_server_names: str | None = None  # sorted CSV, allowlisted server names only
     # v2.32 privacy-safe interaction and outcome metadata.
     # These fields intentionally store counts/statuses only. They must never
     # contain prompts, code, chat text, file names, or file contents.
@@ -461,6 +466,10 @@ class AiSession:
             kvs.append(f"time_to_merge_s={self.time_to_merge_s}")
         if self.review_decision:
             kvs.append(f"review_decision={_safe_field(self.review_decision)}")
+        if self.mcp_servers_used is not None:
+            kvs.append(f"mcp_servers_used={self.mcp_servers_used}")
+        if self.mcp_server_names:
+            kvs.append(f"mcp_server_names={_safe_field(self.mcp_server_names)}")
         if self.interaction_count is not None:
             kvs.append(f"interaction_count={self.interaction_count}")
         if self.user_message_count is not None:
@@ -822,6 +831,11 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
                     session.time_to_merge_s = int(v)
             case "review_decision":
                 session.review_decision = v
+            case "mcp_servers_used":
+                with suppress(ValueError):
+                    session.mcp_servers_used = int(v)
+            case "mcp_server_names":
+                session.mcp_server_names = v
             case "interaction_count":
                 with suppress(ValueError):
                     session.interaction_count = int(v)
