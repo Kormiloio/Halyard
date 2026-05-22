@@ -367,7 +367,10 @@ def interactive_assign_unattributed(
                     skipped += 1
                     continue
 
-                append_session(target_dir, replace(session, project=target_project))
+                append_session(
+                    target_dir,
+                    replace(session, project=target_project, attr_method="manual"),
+                )
                 to_drop.append(line)
                 assigned += 1
             elif choice == "h":

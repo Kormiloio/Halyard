@@ -232,6 +232,29 @@ def test_assign_unattributed_global_assigns_to_current_project(
     assert (tmp_path / ".halyard" / "unattributed.log").read_text() == ""
 
 
+def test_assign_unattributed_records_manual_attr_method(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: interactive assignment must record ``attr_method=manual``
+    so invoice/audit explainability can distinguish manual reassignment
+    from auto-inferred attribution (timer / git / repo-map). Without this
+    provenance, manually-routed sessions would be indistinguishable from
+    high-confidence captures in the trust ledger.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    _init_project(tmp_path)
+    write_unattributed_session(_session())
+
+    result = runner.invoke(app, ["assign-unattributed", "--project", "acme:auth"])
+
+    assert result.exit_code == 0, result.output
+    assigned = parse_sessions(tmp_path)[0]
+    assert assigned.project == "acme:auth"
+    assert assigned.attr_method == "manual"
+
+
 def test_assign_unattributed_global_moves_to_hub(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
