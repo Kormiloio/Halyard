@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from halyard.service import uninstall_service
+from halyard.service import install_service, uninstall_service
 
 # ---------------------------------------------------------------------------
 # L-2: launchctl unload must warn on non-zero exit code (not silently fail)
@@ -150,6 +150,36 @@ def test_installed_port_returns_default_when_plist_absent(
     fake_plist = tmp_path / "missing.plist"
     monkeypatch.setattr(svc, "PLIST_PATH", fake_plist)
     assert svc._installed_port() == DASHBOARD_PORT
+
+
+def test_install_service_uses_trusted_halyard_resolver(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """LaunchAgent install must not persist an arbitrary PATH hit."""
+    import halyard.service as svc
+
+    fake_plist = tmp_path / "io.kormilo.halyard.plist"
+    trusted_exe = tmp_path / ".venv" / "bin" / "halyard"
+    trusted_exe.parent.mkdir(parents=True)
+    trusted_exe.write_text("#!/bin/sh\n")
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+
+    calls: list[list[str]] = []
+
+    def _ok_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(svc, "PLIST_PATH", fake_plist)
+    monkeypatch.setattr("halyard.cli_hooks._halyard_exe", lambda: str(trusted_exe))
+    monkeypatch.setattr(subprocess, "run", _ok_run)
+
+    url = install_service(project_dir, port=7777)
+
+    assert url == "http://127.0.0.1:7777/"
+    assert calls == [["launchctl", "load", "-w", str(fake_plist)]]
+    assert f"<string>{trusted_exe}</string>" in fake_plist.read_text()
 
 
 # ---------------------------------------------------------------------------

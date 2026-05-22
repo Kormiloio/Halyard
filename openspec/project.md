@@ -125,9 +125,8 @@ layers must read from this local source of truth; they do not replace it.
      Trusted Publishers → Add (Owner: Kormiloio, Repo: Halyard,
      Workflow: publish.yml, Environment: pypi).
    - [ ] Create "pypi" environment in GitHub repo Settings → Environments.
-   - [ ] Push `v0.2.0` tag (already pushed; re-push or cut `v0.2.1` after
-     going public to trigger the publish workflow).
-   - [ ] Confirm `pipx install halyard` installs 0.2.0 from PyPI.
+   - [ ] Push `v0.2.1` tag after going public to trigger the publish workflow.
+   - [ ] Confirm `pipx install halyard` installs 0.2.1 from PyPI.
    - [ ] Write HN / Reddit / Lobsters post.
 3. **v2.24 — Outcome metadata uplift — shipped:** branch as a first-class
    `AiSession` field, commit count at session close, code delta for all four

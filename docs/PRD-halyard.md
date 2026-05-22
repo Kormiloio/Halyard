@@ -496,8 +496,8 @@ Detailed per-feature context lives in:
 - [`PRD-ai-work-ledger.md`](PRD-ai-work-ledger.md) — the AI session ledger,
   plan costs, and attribution model (implemented baseline)
 - [`PRD-local-activity-dashboard.md`](PRD-local-activity-dashboard.md) — The Bridge local dashboard (implemented local surface)
-- [`PRD-org-admin-dashboard.md`](PRD-org-admin-dashboard.md) — org rollup,
-  governance, and enterprise reporting (deferred / design-partner gated)
+- [`AI-work-intelligence.md`](AI-work-intelligence.md) — long-term category
+  framing for org rollups, governance, and enterprise reporting
 
 Feature PRDs are snapshots of the thinking at the time each capability was
 conceived. When they disagree with `current-direction.md`, the current

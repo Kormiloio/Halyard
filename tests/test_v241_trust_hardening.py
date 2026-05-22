@@ -50,9 +50,31 @@ def test_update_pricing_rejects_non_https_final_url(tmp_path: Path) -> None:
 # --- #2 _halyard_exe trust order -------------------------------------------
 
 
-def test_halyard_exe_prefers_which() -> None:
-    with patch("halyard.cli_hooks.shutil.which", return_value="/usr/bin/halyard"):
+def test_halyard_exe_prefers_trusted_which() -> None:
+    with (
+        patch("halyard.cli_hooks.shutil.which", return_value="/usr/bin/halyard"),
+        patch("halyard.cli_hooks._is_trusted_exe_path", return_value=True),
+    ):
         assert _halyard_exe() == str(Path("/usr/bin/halyard").resolve())
+
+
+def test_halyard_exe_rejects_untrusted_which_and_uses_trusted_argv0(tmp_path: Path) -> None:
+    evil = tmp_path / "evil" / "halyard"
+    trusted = tmp_path / "trusted" / "bin" / "halyard"
+    evil.parent.mkdir(parents=True)
+    trusted.parent.mkdir(parents=True)
+    evil.write_text("#!/bin/sh\n")
+    trusted.write_text("#!/bin/sh\n")
+
+    def _trusted(path: Path) -> bool:
+        return path == trusted.resolve()
+
+    with (
+        patch("halyard.cli_hooks.shutil.which", return_value=str(evil)),
+        patch("halyard.cli_hooks.sys.argv", [str(trusted)]),
+        patch("halyard.cli_hooks._is_trusted_exe_path", side_effect=_trusted),
+    ):
+        assert _halyard_exe() == str(trusted.resolve())
 
 
 def test_halyard_exe_rejects_untrusted_argv0(tmp_path: Path) -> None:

@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 from halyard.ai_log import AI_LOG_FILENAME, AiSession
 from halyard.cli import app
 from halyard.doctor import _claude_hook_duplicate_check, build_doctor_report, render_json
+from halyard.state_integrity import write_trusted_state
 
 
 def _project(path: Path) -> Path:
@@ -174,6 +175,28 @@ def test_doctor_unattributed_and_quarantine_warnings(tmp_path: Path, monkeypatch
     assert any(
         check.id == "state.quarantine" and check.status == "warning" for check in report.checks
     )
+
+
+def test_doctor_integrity_uses_project_mode(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from halyard import state_integrity
+
+    home = tmp_path / "home"
+    project = _project(tmp_path / "project")
+    (project / "halyard.toml").write_text('state_integrity = "hash"\n')
+    active = home / ".halyard" / "active"
+    write_trusted_state(
+        active,
+        f"slug=acme:auth\ntimeclock={project / 'time.timeclock'}\nstarted=2026-05-22T12:00:00\n",
+        mode="hash",
+    )
+    monkeypatch.setattr(Path, "home", lambda: home)
+    state_integrity._reset_cache_for_tests()
+
+    report = build_doctor_report(start=project)
+    integrity = next(check for check in report.checks if check.id == "state.integrity")
+
+    assert integrity.status == "ok"
+    assert integrity.detail.startswith("mode=hash")
 
 
 def test_doctor_first_capture_recent_project_session(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

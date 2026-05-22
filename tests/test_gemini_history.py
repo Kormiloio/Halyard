@@ -209,7 +209,7 @@ def test_find_session_file_found(tmp_path: Path) -> None:
     chats = tmp_path / "myproject" / "chats"
     chats.mkdir(parents=True)
     f = chats / "session-2026-05-07T10-00-abcd1234.json"
-    f.write_text("{}")
+    f.write_text(json.dumps(_make_session(session_id=session_id)))
 
     with patch.object(gh_mod, "_GEMINI_TMP", tmp_path):
         result = find_session_file(session_id)
@@ -222,14 +222,16 @@ def test_find_session_file_not_found(tmp_path: Path) -> None:
     assert result is None
 
 
-def test_find_session_file_multiple_matches_returns_newest(tmp_path: Path) -> None:
+def test_find_session_file_multiple_exact_matches_returns_newest(tmp_path: Path) -> None:
     import time
 
     session_id = "abcd1234-0000-0000-0000-000000000000"
     for slug in ("proj-a", "proj-b"):
         chats = tmp_path / slug / "chats"
         chats.mkdir(parents=True)
-        (chats / "session-2026-05-07T10-00-abcd1234.json").write_text("{}")
+        (chats / "session-2026-05-07T10-00-abcd1234.json").write_text(
+            json.dumps(_make_session(session_id=session_id))
+        )
         time.sleep(0.01)  # ensure different mtime
 
     with patch.object(gh_mod, "_GEMINI_TMP", tmp_path):
@@ -237,6 +239,18 @@ def test_find_session_file_multiple_matches_returns_newest(tmp_path: Path) -> No
     assert result is not None
     # Most recently modified wins
     assert result.parent.parent.name == "proj-b"
+
+
+def test_find_session_file_rejects_prefix_match_without_exact_session_id(tmp_path: Path) -> None:
+    session_id = "abcd1234-0000-0000-0000-000000000000"
+    chats = tmp_path / "myproject" / "chats"
+    chats.mkdir(parents=True)
+    f = chats / "session-2026-05-07T10-00-abcd1234.json"
+    f.write_text(json.dumps(_make_session(session_id="abcd1234-9999-0000-0000-000000000000")))
+
+    with patch.object(gh_mod, "_GEMINI_TMP", tmp_path):
+        result = find_session_file(session_id)
+    assert result is None
 
 
 # ---------------------------------------------------------------------------

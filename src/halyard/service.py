@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import plistlib
 import secrets
-import shutil
 import subprocess
 import sys
 from contextlib import suppress
@@ -57,7 +56,9 @@ def _load_or_create_token() -> str:
 
 def install_service(project_dir: Path, port: int = 7432) -> str:
     """Write the LaunchAgent plist and load it. Returns the dashboard URL."""
-    halyard_exe = shutil.which("halyard") or "halyard"
+    from halyard.cli_hooks import _halyard_exe
+
+    halyard_exe = _halyard_exe()
     PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
     PLIST_PATH.write_text(_plist(halyard_exe, project_dir, port))
     subprocess.run(["launchctl", "load", "-w", str(PLIST_PATH)], check=True)

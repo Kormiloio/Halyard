@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import shutil
 import sys
 from collections.abc import Callable
@@ -56,14 +57,18 @@ def _halyard_exe() -> str:
     """Return the path hooks should use to invoke halyard.
 
     Resolution order (most→least trustworthy):
-    1. ``shutil.which("halyard")`` — the normal installed entrypoint.
+    1. ``shutil.which("halyard")`` *only if* it lies under a trusted prefix
+       (venv/site/system), so an attacker-controlled PATH entry cannot be
+       persisted into hook/service configs.
     2. resolved ``sys.argv[0]`` *only if* it lies under a trusted prefix
        (venv/site/system), so a writable-dir wrapper can't be embedded.
     3. the literal ``"halyard"`` — trust PATH at hook-run time.
     """
     found = shutil.which("halyard")
     if found:
-        return str(Path(found).resolve())
+        found_path = Path(found).resolve()
+        if _is_trusted_exe_path(found_path):
+            return str(found_path)
     candidate = Path(sys.argv[0]).resolve()
     if (
         candidate.name in ("halyard", "halyard.exe")
@@ -72,6 +77,19 @@ def _halyard_exe() -> str:
     ):
         return str(candidate)
     return "halyard"  # fallback: trust PATH at hook-run time
+
+
+def _command_parts(cmd: str) -> list[str]:
+    """Split a hook command string while respecting shell quotes."""
+    try:
+        return shlex.split(cmd)
+    except ValueError:
+        return cmd.split()
+
+
+def _hook_command(exe: str, subcommand: str) -> str:
+    """Return a shell-safe hook command string for command-style hook APIs."""
+    return f"{shlex.quote(exe)} {subcommand}"
 
 
 # Claude Code hook config injected by `halyard install-hook`
@@ -120,7 +138,7 @@ _VSCODE_TASK_INPUTS: tuple[dict[str, str], ...] = (
 
 def _cc_hook_cmd_key(cmd: str) -> str:
     """Normalise hook command to subcommand name so absolute paths don't create false duplicates."""
-    parts = cmd.split()
+    parts = _command_parts(cmd)
     return f"{Path(parts[0]).name} {' '.join(parts[1:])}" if parts else cmd
 
 
@@ -131,7 +149,7 @@ def _is_halyard_hook_cmd(cmd: str) -> bool:
     (uv-tool, repo venv, deleted temp/pipx venvs) is recognised as ours
     while another vendor's command never is.
     """
-    parts = cmd.split()
+    parts = _command_parts(cmd)
     return bool(parts) and Path(parts[0]).name in ("halyard", "halyard.exe")
 
 
@@ -147,7 +165,7 @@ def _resolve_claude_hook_entries(entries: list[dict[str, Any]], exe: str) -> lis
                 if isinstance(hook, dict) and isinstance(hook.get("command"), str):
                     command = hook["command"]
                     if command.startswith("halyard "):
-                        command = command.replace("halyard ", f"{exe} ", 1)
+                        command = _hook_command(exe, command.removeprefix("halyard "))
                     resolved_hooks.append({**hook, "command": command})
                 else:
                     resolved_hooks.append(hook)
@@ -351,7 +369,7 @@ def _do_install_hook_gemini() -> None:
     exe = _halyard_exe()
 
     for event, template in _GC_HOOKS.items():
-        command = template.replace("halyard ", f"{exe} ", 1)
+        command = _hook_command(exe, template.removeprefix("halyard "))
         current = hooks.setdefault(event, [])
         # Drop every prior halyard block for this event (any path,
         # incl. dead venvs), preserving foreign blocks and order, then
@@ -429,7 +447,7 @@ def _do_install_hook_cursor() -> None:
     exe = _halyard_exe()
 
     for event, template in _CURSOR_HOOKS.items():
-        command = template.replace("halyard ", f"{exe} ", 1)
+        command = _hook_command(exe, template.removeprefix("halyard "))
         current = hooks.setdefault(event, [])
         # Keep foreign entries (bun/other vendors) in place; collapse
         # every prior halyard entry (any path) to one for current exe.

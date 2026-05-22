@@ -34,6 +34,21 @@ def test_set_hub_then_find_hub(hub_pointer: Path, tmp_path: Path) -> None:
     assert find_hub() == project
 
 
+def test_set_hub_honors_project_integrity_mode(hub_pointer: Path, tmp_path: Path) -> None:
+    from halyard import state_integrity
+
+    project = tmp_path / "myproject"
+    project.mkdir()
+    (project / "halyard.toml").write_text('state_integrity = "hash"\n')
+    state_integrity._reset_cache_for_tests()
+
+    set_hub(project)
+
+    assert hub_pointer.exists()
+    assert (tmp_path / "hub.sha256").exists()
+    assert find_hub() == project
+
+
 def test_find_hub_returns_none_when_dir_missing(hub_pointer: Path, tmp_path: Path) -> None:
     # We bypass set_hub's validation to test find_hub's resilience
     missing = tmp_path / "gone"
@@ -49,6 +64,8 @@ def test_clear_hub(hub_pointer: Path, tmp_path: Path) -> None:
     assert find_hub() is not None
     clear_hub()
     assert find_hub() is None
+    assert not (hub_pointer.with_suffix(hub_pointer.suffix + ".sha256")).exists()
+    assert not (hub_pointer.with_suffix(hub_pointer.suffix + ".hmac")).exists()
 
 
 def test_clear_hub_is_idempotent(hub_pointer: Path) -> None:

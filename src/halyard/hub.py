@@ -57,12 +57,12 @@ def find_hub() -> Path | None:
 
 def set_hub(path: Path) -> None:
     """Designate path as the hub directory."""
-    from halyard.state_integrity import write_trusted_state
+    from halyard.state_integrity import current_mode, write_trusted_state
 
     if not (path / "halyard.toml").exists():
         raise ValueError(f"Directory {path} has no halyard.toml")
     pointer = _hub_pointer()
-    write_trusted_state(pointer, str(path.resolve()) + "\n")
+    write_trusted_state(pointer, str(path.resolve()) + "\n", mode=current_mode(path))
 
 
 def clear_hub() -> None:
@@ -70,6 +70,7 @@ def clear_hub() -> None:
     pointer.unlink(missing_ok=True)
     # Remove sidecar too so a future hash-mode read does not see orphan state.
     pointer.with_suffix(pointer.suffix + ".sha256").unlink(missing_ok=True)
+    pointer.with_suffix(pointer.suffix + ".hmac").unlink(missing_ok=True)
 
 
 def get_hub_status() -> HubStatus:

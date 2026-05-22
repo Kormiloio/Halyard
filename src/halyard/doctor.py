@@ -56,7 +56,7 @@ def build_doctor_report(
     checks.extend(_unwired_tool_checks(tool, current))
     checks.extend(_collector_drift_checks(project_dir, hub_dir))
     checks.extend(_attribution_quality_checks(project_dir, hub_dir))
-    checks.extend(_collector_state_checks())
+    checks.extend(_collector_state_checks(project_dir, hub_dir))
     if first_capture:
         checks.append(_first_capture_check(project_dir, hub_dir, now=now or datetime.now()))
 
@@ -577,11 +577,24 @@ def _collector_drift_checks(project_dir: Path | None, hub_dir: Path | None) -> l
     return checks
 
 
-def _integrity_check(home_state: Path) -> DoctorCheck:
+def _integrity_check(
+    home_state: Path, project_dir: Path | None, hub_dir: Path | None
+) -> DoctorCheck:
     """Report the active state-integrity mode and verify tracked files."""
-    from halyard.state_integrity import current_mode, verify_all
+    from halyard.state_integrity import (
+        IntegrityError,
+        current_mode,
+        detect_sidecar_mode,
+        read_trusted_state,
+    )
 
-    mode = current_mode()
+    mode = current_mode(project_dir or hub_dir)
+    tracked = [home_state / "active", home_state / "hub"]
+    for path in tracked:
+        sidecar_mode = detect_sidecar_mode(path)
+        if sidecar_mode == "hmac" or (sidecar_mode == "hash" and mode == "off"):
+            mode = sidecar_mode
+
     if mode == "off":
         return DoctorCheck(
             id="state.integrity",
@@ -590,34 +603,38 @@ def _integrity_check(home_state: Path) -> DoctorCheck:
             detail="mode=off (opt-in via halyard.toml state_integrity)",
         )
 
-    tracked = [home_state / "active", home_state / "hub"]
-    ok, failure = verify_all([p for p in tracked if p.exists()])
-    if ok:
-        if mode == "hash":
+    for path in tracked:
+        if not path.exists():
+            continue
+        try:
+            read_trusted_state(path, mode=mode)
+        except (IntegrityError, OSError):
             return DoctorCheck(
                 id="state.integrity",
                 label="Integrity",
-                status="ok",
-                detail="mode=hash — corruption detection only, NOT "
-                'tamper-resistant; set state_integrity="hmac" for '
-                "authenticated integrity",
+                status="warning",
+                detail=f"mode={mode} — verification failed at {path}",
+                fix="inspect the tampered file or re-write via halyard CLI",
             )
+
+    if mode == "hash":
         return DoctorCheck(
             id="state.integrity",
             label="Integrity",
             status="ok",
-            detail=f"mode={mode} — all tracked sidecars verify",
+            detail="mode=hash — corruption detection only, NOT "
+            'tamper-resistant; set state_integrity="hmac" for '
+            "authenticated integrity",
         )
     return DoctorCheck(
         id="state.integrity",
         label="Integrity",
-        status="warning",
-        detail=f"mode={mode} — verification failed at {failure}",
-        fix="inspect the tampered file or re-write via halyard CLI",
+        status="ok",
+        detail=f"mode={mode} — all tracked sidecars verify",
     )
 
 
-def _collector_state_checks() -> list[DoctorCheck]:
+def _collector_state_checks(project_dir: Path | None, hub_dir: Path | None) -> list[DoctorCheck]:
     home_state = Path.home() / ".halyard"
     checks: list[DoctorCheck] = []
 
@@ -685,7 +702,7 @@ def _collector_state_checks() -> list[DoctorCheck]:
             DoctorCheck(id="state.quarantine", label="Quarantine", status="ok", detail="none")
         )
 
-    checks.append(_integrity_check(home_state))
+    checks.append(_integrity_check(home_state, project_dir, hub_dir))
 
     for name, filename in (("Gemini state", "gc-session"), ("Cursor state", "cursor-session")):
         path = home_state / filename

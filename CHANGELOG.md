@@ -4,7 +4,7 @@ All notable changes to Halyard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.1] — 2026-05-22
 
 ### Fixed
 
@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parses the installed plist's `ProgramArguments` and reports the actual
   port; falls back to the default with a one-line warning if the plist
   is malformed.
+- **Release metadata:** package version now matches the next public release
+  tag, so the wheel builds as `halyard-0.2.1` instead of reusing the already
+  tagged `0.2.0` artifact name.
+- **Documentation links:** docs index and README no longer point at deleted
+  PRD/OpenSpec files.
 
 ### Changed
 
@@ -62,6 +67,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Repositioned framing:** README lead, `pyproject.toml` description, and
   the root CLI `--help` epilog now all read *"Your AI work leaves a trail.
   Halyard makes that trail legible, auditable, and client-safe."*
+- **Dashboard service executable resolution:** `halyard service install`
+  now uses the same trusted executable resolver as hook installation instead
+  of persisting an arbitrary PATH hit into the LaunchAgent plist.
+- **Doctor integrity reporting:** `halyard doctor` now evaluates
+  state-integrity mode from the active project or hub, and honors existing
+  sidecars, so hash/HMAC state no longer appears as `mode=off`.
 
 ### Added
 

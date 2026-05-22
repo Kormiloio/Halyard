@@ -17,7 +17,6 @@ public orientation for what Halyard is building now.
 - [`trust-model.md`](trust-model.md) — captured/calculated/allocated/inferred
   labels used in reports, invoices, and future attestable appendices.
 - [`demo.md`](demo.md) — short CLI demo for proof-of-work by project.
-- [`demo-presentation.md`](demo-presentation.md) — spoken demo script.
 - [`troubleshooting.md`](troubleshooting.md) — capture and setup recovery.
 
 ## Historical PRDs
@@ -29,13 +28,13 @@ win when docs conflict.
 - [`PRD-ai-work-ledger.md`](PRD-ai-work-ledger.md)
 - [`PRD-developer-experience.md`](PRD-developer-experience.md)
 - [`PRD-local-activity-dashboard.md`](PRD-local-activity-dashboard.md)
-- [`PRD-org-admin-dashboard.md`](PRD-org-admin-dashboard.md)
 - [`PRD-usage-analytics.md`](PRD-usage-analytics.md)
 
 ## Reviews And Audits
 
 - [`security-review-2026-05-08.md`](security-review-2026-05-08.md)
 - [`security-architecture-review-2026-05-08.md`](security-architecture-review-2026-05-08.md)
+- [`security-review-2026-05-22.md`](security-review-2026-05-22.md)
 
 ## Samples
 

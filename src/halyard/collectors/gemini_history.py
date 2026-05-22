@@ -217,9 +217,9 @@ def find_session_file(session_id: str) -> Path | None:
         matches.append(candidate)
     if not matches:
         return None
-    if len(matches) == 1:
-        return matches[0]
-    # Ambiguous prefix — verify each candidate against the full session ID.
+    # Verify every prefix candidate against the full session ID.  A prefix-only
+    # match is not enough: stale or crafted files can share the same first eight
+    # characters and would otherwise contaminate token/cost attribution.
     exact: list[Path] = []
     for path in matches:
         try:
@@ -233,8 +233,7 @@ def find_session_file(session_id: str) -> Path | None:
             continue
     if exact:
         return max(exact, key=_safe_mtime)
-    # No exact match — fall back to most-recently-modified prefix match.
-    return max(matches, key=_safe_mtime)
+    return None
 
 
 def _safe_mtime(path: Path) -> float:

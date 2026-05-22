@@ -394,7 +394,7 @@ that recent sessions on the API plan aren't being dropped.
 This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-driven development. Every feature lives as a change folder under `openspec/changes/` with a proposal, specs, design, and task checklist.
 
 > **Versioning note:** the published PyPI package is `0.x` (currently
-> `0.2.0`). The `vN.x` identifiers below (e.g. `v2.24`) are internal
+> `0.2.1`). The `vN.x` identifiers below (e.g. `v2.24`) are internal
 > OpenSpec changeset IDs, **not** release versions — they track
 > design history, not what you `pipx install`.
 
@@ -402,7 +402,7 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 
 | Change | Description |
 |--------|-------------|
-| [`v2.19-attestable-appendix`](./openspec/changes/v2.19-attestable-appendix/) | Signed, verifiable, privacy-preserving AI work appendix (gated on v2.24) |
+| [`v3.5-claude-code-surface`](./openspec/changes/v3.5-claude-code-surface/) | Feasibility-gated client surface for Claude Code evidence |
 
 ### Shipped
 
@@ -454,7 +454,7 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 
 ## Roadmap
 
-- **Shipped** — OSS launch (v0.2.0), honors and achievements (`halyard honors`),
+- **Shipped** — OSS launch (v0.2.1), honors and achievements (`halyard honors`),
   Passport stamps, Friends of the Sea voyage stages (`halyard voyage`), outcome
   metadata v2.24: branch field, commit count, code delta, `halyard outcome sync`.
 - **Then** — Attestable AI work appendix (v2.19): signed, client-safe proof of
