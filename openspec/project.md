@@ -885,6 +885,24 @@ layers must read from this local source of truth; they do not replace it.
    reclassification decision) and MCP *availability* (deferred,
    config-reading privacy surface).
 
+58. **v3.5 — Claude Code client-surface tag (CLI vs. desktop):** the
+   Claude Code collector tags every session `tool="claude-code"`
+   regardless of which launcher the user actually invoked — terminal
+   CLI, desktop app, or IDE extension all collapse into one bucket.
+   For an owner who uses two surfaces daily, the dashboard cannot
+   answer "which surface do I lean on for what kind of work?" v3.5
+   adds an optional advisory `client_surface` sub-tag
+   (`cli`/`desktop`/`ide`/`unknown`) on `AiSession`, detected from the
+   hook process's own environment (env vars + parent-process
+   ancestry) — the Stop payload and transcript are byte-identical
+   across surfaces, so the signal *must* come from the hook's local
+   context. `tool="claude-code"` is unchanged; the tag is purely
+   additive and rendered with honest "(heuristic)" labelling.
+   **Status: proposed, feasibility-gated** on a Phase-0 spike that
+   confirms which env signals actually differ between the owner's
+   CLI and desktop surfaces. Spec in
+   `openspec/changes/v3.5-claude-code-surface/`.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
