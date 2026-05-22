@@ -35,16 +35,18 @@ def _hub_pointer() -> Path:
 def find_hub() -> Path | None:
     """Return the hub project directory, or None if not configured.
 
-    Goes through :func:`halyard.state_integrity.read_trusted_state` so a
-    tampered pointer fails the integrity check when integrity mode is
-    enabled. On IntegrityError, returns None — the rest of Halyard will
-    fall back to project-dir discovery.
+    Goes through :func:`halyard.state_integrity.read_global_trusted_state`
+    so an existing sidecar on disk is honored even when the resolved
+    mode is ``off`` — otherwise a tampered ``~/.halyard/hub`` pointer
+    would be silently accepted in the default runtime. On
+    IntegrityError, returns None — the rest of Halyard will fall back
+    to project-dir discovery.
     """
-    from halyard.state_integrity import IntegrityError, read_trusted_state
+    from halyard.state_integrity import IntegrityError, read_global_trusted_state
 
     pointer = _hub_pointer()
     try:
-        content = read_trusted_state(pointer)
+        content = read_global_trusted_state(pointer)
     except (IntegrityError, OSError):
         return None
     if content is None:

@@ -144,6 +144,28 @@ def _reset_cache_for_tests() -> None:
     _MODE_CACHE.clear()
 
 
+def read_global_trusted_state(path: Path) -> str | None:
+    """Read a *global* state file (e.g. ``~/.halyard/active``, ``~/.halyard/hub``).
+
+    Global pointers are not owned by any project, so the resolved mode
+    comes from the env override / process default only. If a sidecar
+    already exists on disk, integrity was previously enabled and must
+    not be silently downgraded to ``off`` — the sidecar mode wins over
+    a default-off resolution. This mirrors the per-project pattern in
+    :func:`halyard.reports.read_active_timer` and is the canonical entry
+    point for any caller reading a global trusted-state file.
+
+    Returns the file's contents on success, ``None`` if the file does
+    not exist. Raises :class:`IntegrityError` on verification failure
+    (callers decide fail-closed vs fail-open).
+    """
+    mode = current_mode()
+    sidecar_mode = detect_sidecar_mode(path)
+    if sidecar_mode is not None and mode == "off":
+        mode = sidecar_mode
+    return read_trusted_state(path, mode=mode)
+
+
 def read_trusted_state(path: Path, *, mode: IntegrityMode | None = None) -> str | None:
     """Read a state file with integrity verification per ``mode``.
 

@@ -11,6 +11,7 @@ from halyard import state_integrity
 from halyard.state_integrity import (
     IntegrityError,
     current_mode,
+    read_global_trusted_state,
     read_trusted_state,
     verify_all,
     write_trusted_state,
@@ -148,6 +149,78 @@ def test_read_active_project_returns_none_on_tamper(
 def test_find_hub_returns_none_on_tamper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("HALYARD_STATE_INTEGRITY", "hash")
+    state_integrity._reset_cache_for_tests()
+    from halyard.hub import find_hub
+
+    pointer = tmp_path / ".halyard" / "hub"
+    fake_hub = tmp_path / "fake_hub"
+    fake_hub.mkdir()
+    write_trusted_state(pointer, str(fake_hub) + "\n", mode="hash")
+    pointer.write_text("/some/evil/path\n", encoding="utf-8")  # tamper
+
+    assert find_hub() is None
+
+
+# ---------------------------------------------------------------------------
+# read_global_trusted_state — sidecar auto-detect prevents downgrade-on-default
+# ---------------------------------------------------------------------------
+# Threat model: a sidecar on disk proves integrity *was* enabled at write
+# time. A later process where current_mode() resolves to "off" (env unset,
+# no project halyard.toml) must NOT silently trust unverified content
+# alongside that sidecar. The shared helper raises ``mode`` from off to
+# the sidecar's mode before reading.
+
+
+def test_global_helper_uses_sidecar_when_default_off(tmp_path: Path) -> None:
+    p = tmp_path / "active"
+    write_trusted_state(p, "slug=acme\n", mode="hash")
+    # current_mode() resolves to "off" (no env override, no project).
+    # Sidecar exists from the prior write — helper must honor it.
+    assert read_global_trusted_state(p) == "slug=acme\n"
+
+
+def test_global_helper_raises_on_tamper_when_default_off(tmp_path: Path) -> None:
+    p = tmp_path / "active"
+    write_trusted_state(p, "slug=acme\n", mode="hash")
+    p.write_text("slug=evil\n", encoding="utf-8")  # tamper, sidecar untouched
+
+    with pytest.raises(IntegrityError):
+        read_global_trusted_state(p)
+
+
+def test_global_helper_returns_none_for_missing_file(tmp_path: Path) -> None:
+    p = tmp_path / "active"
+    # No file, no sidecar — absence is not tampering.
+    assert read_global_trusted_state(p) is None
+
+
+def test_read_active_project_blocks_downgrade(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: in default runtime (mode resolves to off), a tampered
+    ``~/.halyard/active`` with a stale sidecar must NOT be silently
+    accepted. This is the P1 finding fixed by routing
+    read_active_project through read_global_trusted_state.
+    """
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("HALYARD_STATE_INTEGRITY", raising=False)
+    state_integrity._reset_cache_for_tests()
+    from halyard.ai_log import read_active_project
+
+    active = tmp_path / ".halyard" / "active"
+    # Write under hash mode explicitly so the sidecar exists, then drop
+    # the env override and tamper the content. With mode resolving to
+    # off, the previous implementation would have returned "evil".
+    write_trusted_state(active, "slug=acme\n", mode="hash")
+    active.write_text("slug=evil\n", encoding="utf-8")
+
+    assert read_active_project() is None
+
+
+def test_find_hub_blocks_downgrade(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: same sidecar-downgrade defense for the hub pointer."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("HALYARD_STATE_INTEGRITY", raising=False)
     state_integrity._reset_cache_for_tests()
     from halyard.hub import find_hub
 

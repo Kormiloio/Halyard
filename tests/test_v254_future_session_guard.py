@@ -61,7 +61,7 @@ def test_parse_sessions_excludes_future_keeps_file(tmp_path: Path) -> None:
     append_session(proj, future)
 
     before = (proj / AI_LOG_FILENAME).read_text()
-    got = parse_sessions(proj)
+    got = parse_sessions(proj, now=_NOW)
 
     assert len(got) == 1
     assert got[0].start == datetime(2026, 5, 15, 23, 57)

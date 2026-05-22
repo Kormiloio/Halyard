@@ -566,7 +566,7 @@ def api_plus_tool_seconds(session: AiSession) -> int | None:
     return session.api_seconds + session.tool_seconds
 
 
-def parse_sessions(project_dir: Path) -> list[AiSession]:
+def parse_sessions(project_dir: Path, *, now: datetime | None = None) -> list[AiSession]:
     # v2.17 task 2.4: fold ``a`` amendment records in file order (last-write-wins per key).
     #
     # Design note: sessions are stored as a list to preserve all ``s`` lines,
@@ -638,7 +638,7 @@ def parse_sessions(project_dir: Path) -> list[AiSession]:
     return [
         s
         for s in sessions
-        if not session_is_synthetic_telemetry(s) and not session_starts_in_future(s)
+        if not session_is_synthetic_telemetry(s) and not session_starts_in_future(s, now=now)
     ]
 
 
@@ -1019,16 +1019,18 @@ def read_active_project() -> str | None:
     written atomically by the dashboard (tmp-then-rename), so a partial read
     will simply find no ``slug=`` line and return None — a safe degradation.
 
-    Goes through :func:`halyard.state_integrity.read_trusted_state` so
-    out-of-band tampering is detected when integrity mode is enabled. On
-    IntegrityError the function logs and returns None rather than crashing
-    every collector hook.
+    Goes through :func:`halyard.state_integrity.read_global_trusted_state`
+    so a pre-existing sidecar is honored even when the resolved mode is
+    ``off`` — without this, a tampered ``~/.halyard/active`` would be
+    silently accepted in the default runtime. On IntegrityError the
+    function logs and returns None rather than crashing every collector
+    hook.
     """
-    from halyard.state_integrity import IntegrityError, read_trusted_state
+    from halyard.state_integrity import IntegrityError, read_global_trusted_state
 
     active = Path.home() / ".halyard" / "active"
     try:
-        content = read_trusted_state(active)
+        content = read_global_trusted_state(active)
     except IntegrityError as exc:
         _log_error("read_active_project: integrity verification failed", exc)
         return None
