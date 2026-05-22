@@ -1,0 +1,10 @@
+node_modules/**
+src/**
+out/**/*.map
+out/**/*.test.js
+out/**/__mocks__/**
+*.vsix
+.gitignore
+tsconfig.json
+vitest.config.ts
+package-lock.json

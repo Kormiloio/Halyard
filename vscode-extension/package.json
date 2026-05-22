@@ -4,6 +4,29 @@
   "description": "Privacy-safe Halyard session capture for VS Code AI work.",
   "version": "0.1.0",
   "publisher": "kormilo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Kormiloio/Halyard.git",
+    "directory": "vscode-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/Kormiloio/Halyard/issues"
+  },
+  "homepage": "https://github.com/Kormiloio/Halyard/tree/main/vscode-extension#readme",
+  "icon": "media/icon.png",
+  "keywords": [
+    "halyard",
+    "ai",
+    "copilot",
+    "usage",
+    "time-tracking",
+    "invoicing"
+  ],
+  "galleryBanner": {
+    "color": "#0f172a",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.92.0"
   },
