@@ -54,6 +54,11 @@ jobs:
         run: |
           cd /tmp/halyard-install-test/sample-project
           # Create a minimal client + project + one logged session so invoice has data.
+          # Project slugs are unscoped (see orchestration._PROJECTS_TOML template);
+          # the composite client:project form is only used in timeclock account
+          # names. A scoped slug like "acme:web" silently produces a $0.00 invoice
+          # because no project matches the lookup — the assertion below catches
+          # that regression class.
           cat > clients.toml <<'EOF'
           [[client]]
           slug = "acme"
@@ -63,7 +68,7 @@ jobs:
           EOF
           cat > projects.toml <<'EOF'
           [[project]]
-          slug = "acme:web"
+          slug = "web"
           client_slug = "acme"
           name = "Acme Web"
           hourly_rate = 150.0
@@ -74,5 +79,12 @@ jobs:
           EOF
           # halyard invoice renders the invoice markdown via the Jinja template.
           # Failure here would mean templates/invoice.md.j2 was not packaged in
-          # the wheel (the v2.16 C1 bug).
-          $VENV/bin/halyard invoice acme --month 2026-01 --dry-run
+          # the wheel (the v2.16 C1 bug). Capture stdout so we can assert the
+          # rendered total is the expected $150.00 (1 hr × $150/hr) — a $0.00
+          # render means slug/account mismatch silently swallowed the entries.
+          out=$($VENV/bin/halyard invoice acme --month 2026-01 --dry-run)
+          echo "$out"
+          echo "$out" | grep -qF 'Total: USD 150.00' || {
+            echo "ERROR: expected 'Total: USD 150.00' in invoice output; got above"
+            exit 1
+          }

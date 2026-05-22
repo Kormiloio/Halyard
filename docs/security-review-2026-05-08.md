@@ -2,9 +2,17 @@
 
 **Reviewer:** Adrian, AppSec Reviewer — Halyard  
 **Review Date:** 2026-05-08  
-**Codebase Snapshot:** `/Users/camaj/Documents/Claude/AI/artifacts/Kormilo/Halyard/`  
+**Codebase Snapshot:** Halyard repository (commit at review time)  
 **Scope:** Full static code review across all 10 threat domains defined in Adrian.md  
 **Methodology:** Static analysis, pattern matching, data-flow tracing — no live exploitation
+
+> **Status as of 2026-05-22: All findings in this review have been resolved.**
+> Both High findings (H-1 CSRF guard, H-2 base_url validation) and the
+> Medium/Low items are addressed in mainline code. This document is
+> retained as the historical record of the review; per-finding
+> resolution notes are inline below. A subsequent review pass
+> (2026-05-22) added two further P1 findings around global-state
+> integrity sidecar downgrade, also resolved — see commit history.
 
 ---
 
@@ -12,7 +20,7 @@
 
 Halyard is a well-structured Python CLI application with a local-first threat model. The code is generally clean and security-conscious: subprocess calls avoid shell interpolation, HTML output is consistently escaped via `html.escape()`, the plist generator is XML-safe, and temp-file writes follow atomic rename patterns. No critical vulnerabilities were found.
 
-**Two High findings** require attention before broad deployment:
+**Two High findings** required attention before broad deployment (both now resolved):
 
 1. **H-1 (High) — Unauthenticated POST endpoints on ThreadingHTTPServer**: The `/api/start` and `/api/stop` dashboard endpoints write to the user's timeclock file in response to any localhost POST request, with no CSRF protection. Because the server binds on `127.0.0.1` and uses `ThreadingHTTPServer`, any process or browser tab on the same machine can fire these endpoints without restriction.
 

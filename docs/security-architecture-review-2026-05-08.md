@@ -3,10 +3,18 @@
 
 **Reviewer:** Sage, Senior AppSec Engineer  
 **Review Date:** 2026-05-08  
-**Codebase Snapshot:** `/Users/camaj/Documents/Claude/AI/artifacts/Kormilo/Halyard/`  
+**Codebase Snapshot:** Halyard repository (commit at review time)  
 **Scope:** Architectural, design-level, and assurance review — not a re-run of Adrian's targeted vulnerability scan  
 **Prior Work Baseline:** Adrian's review (2026-05-08), 11 findings (2 High, 5 Medium, 5 Low), all remediated by Kai. 39 security tests added post-remediation.  
 **Methodology:** Full source read (47 Python files, ~10K LOC), full test suite read (39 files), data-flow tracing, trust model analysis, implicit assumption surfacing. No live execution or fuzzing.
+
+> **Status note (2026-05-22):** The Adrian/Kai baseline findings (11 items)
+> are resolved — see `security-review-2026-05-08.md`. The five design-level
+> risks (D-1…D-5) below are architectural by nature; their resolution
+> status is tracked in `openspec/` changesets (e.g. v2.40 HMAC authenticated
+> state integrity addresses parts of D-2/D-3) and is not implied by this
+> document. Read each finding alongside the most recent codebase before
+> acting.
 
 ---
 
@@ -869,7 +877,7 @@ The following were explicitly excluded from this review:
 
 **Reviewer:** Sage, Senior AppSec Engineer  
 **Review completed:** 2026-05-08  
-**Scope:** Full architectural review of `/Users/camaj/Documents/Claude/AI/artifacts/Kormilo/Halyard/` — source tree (47 files), test suite (39 files), prior findings (Adrian's review, 2026-05-08)  
+**Scope:** Full architectural review of the Halyard repository — source tree (47 files), test suite (39 files), prior findings (Adrian's review, 2026-05-08)  
 **Next review recommended:** After R-1 through R-5 (Tier 1) are implemented, before any multi-user hub deployment, and before v1.0 public release.
 
 **Findings summary:**

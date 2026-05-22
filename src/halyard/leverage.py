@@ -146,9 +146,7 @@ def summarize_mcp(sessions: list[AiSession], now: datetime) -> McpRollup | None:
     """None when no session in the 30-day window has MCP usage (so the
     surface omits the line — never an implied "0 servers")."""
     cutoff = now - timedelta(days=LEVERAGE_WINDOW_DAYS)
-    recent = [
-        s for s in sessions if s.start >= cutoff and s.mcp_servers_used is not None
-    ]
+    recent = [s for s in sessions if s.start >= cutoff and s.mcp_servers_used is not None]
     if not recent:
         return None
     peak = max(recent, key=lambda s: s.mcp_servers_used or 0)
