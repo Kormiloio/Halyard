@@ -38,4 +38,4 @@ jobs:
         run: pytest --cov=halyard --cov-report=term-missing
 
       - name: Audit dependencies for known CVEs
-        run: pip-audit --requirement <(pip freeze) --skip-editable || true
+        run: pip-audit --requirement <(pip freeze) --skip-editable
