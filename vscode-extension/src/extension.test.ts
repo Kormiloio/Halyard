@@ -1,5 +1,16 @@
-import { describe, it, expect } from "vitest";
-import { buildRecordArgs, numericPart, splitExecutable } from "./extension.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+vi.mock("node:child_process", () => ({
+  execFile: vi.fn(),
+  spawn: vi.fn(() => ({ unref: vi.fn() })),
+}));
+
+import { execFile, spawn } from "node:child_process";
+import { buildRecordArgs, numericPart, splitExecutable, readGitStats, startAIWork, stopAndRecordAIWork, markActivity, openDashboard, showCurrentScope } from "./extension.js";
+import { resetVscodeMocks, setConfiguration } from "./__mocks__/vscode";
+
+const execFileMock = execFile as unknown as ReturnType<typeof vi.fn>;
+const spawnMock = spawn as unknown as ReturnType<typeof vi.fn>;
 
 describe("splitExecutable — wrapper command support", () => {
   it("treats a bare binary as the command with no prefix args", () => {
@@ -149,5 +160,158 @@ describe("buildRecordArgs — privacy boundary", () => {
     // No extra flags beyond what was explicitly passed
     const flagCount = args.filter((a) => a.startsWith("--")).length;
     expect(flagCount).toBeLessThan(15);
+  });
+});
+
+describe("extension lifecycle and git stats", () => {
+  const SESSION_KEY = "halyard.activeSession";
+
+  function makeContext() {
+    const state = new Map<string, unknown>();
+    return {
+      workspaceState: {
+        get: <T>(key: string): T | undefined => state.get(key) as T | undefined,
+        update: (key: string, value: unknown): Promise<void> => {
+          if (value === undefined) {
+            state.delete(key);
+          } else {
+            state.set(key, value);
+          }
+          return Promise.resolve();
+        },
+      },
+      subscriptions: [] as unknown[],
+    };
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    resetVscodeMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("readGitStats parses branch and numstat output", async () => {
+    execFileMock.mockImplementation((command, args, _options, callback) => {
+      if (command === "git" && args[0] === "branch") {
+        callback(null, "main\n", "");
+      } else if (command === "git" && args[0] === "diff") {
+        callback(null, "-\t-\timage.png\n5\t1\tsrc/extension.ts\n", "");
+      } else {
+        callback(null, "", "");
+      }
+    });
+
+    const stats = await readGitStats();
+
+    expect(stats.branch).toBe("main");
+    expect(stats.filesTouched).toBe(2);
+    expect(stats.added).toBe(5);
+    expect(stats.removed).toBe(1);
+  });
+
+  it("startAIWork creates a pending VS Code session", async () => {
+    execFileMock.mockImplementation((command, args, _options, callback) => {
+      if (command === "git") {
+        if (args[0] === "branch") callback(null, "main\n", "");
+        else callback(null, "1\t0\tsrc/extension.ts\n", "");
+      } else {
+        callback(null, "", "");
+      }
+    });
+
+    const context = makeContext();
+    await startAIWork(context as any);
+
+    expect(context.workspaceState.get(SESSION_KEY)).toEqual(
+      expect.objectContaining({
+        activeSeconds: 0,
+        idleSeconds: 0,
+        initialBranch: "main",
+      }),
+    );
+  });
+
+  it("markActivity records active and idle seconds correctly", () => {
+    const context = makeContext();
+    const state = {
+      startedAt: 0,
+      activeSeconds: 0,
+      idleSeconds: 0,
+      lastActivityAt: 1_000,
+    };
+    context.workspaceState.update(SESSION_KEY, state);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000 + 200_000);
+    markActivity(context as any);
+    expect(state.activeSeconds).toBe(200);
+
+    vi.setSystemTime(601_000);
+    markActivity(context as any);
+    expect(state.idleSeconds).toBe(400);
+  });
+
+  it("stopAndRecordAIWork records the session and clears state", async () => {
+    const now = 1_000_000;
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const context = makeContext();
+    const state = {
+      startedAt: now - 70_000,
+      activeSeconds: 0,
+      idleSeconds: 0,
+      lastActivityAt: now - 30_000,
+      initialBranch: "main",
+    };
+    await context.workspaceState.update(SESSION_KEY, state);
+
+    execFileMock.mockImplementation((command, args, _options, callback) => {
+      if (command === "git") {
+        if (args[0] === "branch") callback(null, "main\n", "");
+        else callback(null, "2\t1\tsrc/extension.ts\n", "");
+      } else if (command === "halyard") {
+        callback(null, "", "");
+      } else {
+        callback(null, "", "");
+      }
+    });
+
+    await stopAndRecordAIWork(context as any);
+
+    expect(execFileMock).toHaveBeenLastCalledWith(
+      "halyard",
+      expect.arrayContaining(["record-session", "--tool", "vscode", "--minutes", "1", "--branch", "main", "--code-added", "2", "--code-removed", "1", "--files-touched-count", "1"]),
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(context.workspaceState.get(SESSION_KEY)).toBeUndefined();
+  });
+
+  it("openDashboard constructs a detached process invocation", () => {
+    setConfiguration("halyard", "executable", "uv run halyard");
+    openDashboard();
+    expect(spawnMock).toHaveBeenCalledWith(
+      "uv",
+      expect.arrayContaining(["run", "halyard", "dashboard", "--open"]),
+      expect.objectContaining({ detached: true, stdio: "ignore" }),
+    );
+  });
+
+  it("showCurrentScope displays workspace and branch info", async () => {
+    execFileMock.mockImplementation((command, args, _options, callback) => {
+      if (command === "git" && args[0] === "branch") {
+        callback(null, "main\n", "");
+      } else if (command === "git" && args[0] === "diff") {
+        callback(null, "", "");
+      } else {
+        callback(null, "", "");
+      }
+    });
+
+    await showCurrentScope({ workspaceState: { get: () => undefined }, subscriptions: [] } as any);
   });
 });

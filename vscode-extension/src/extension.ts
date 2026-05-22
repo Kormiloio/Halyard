@@ -93,7 +93,7 @@ async function autoStartSession(context: vscode.ExtensionContext): Promise<void>
   updateStatus(context);
 }
 
-async function startAIWork(context: vscode.ExtensionContext): Promise<void> {
+export async function startAIWork(context: vscode.ExtensionContext): Promise<void> {
   const existing = context.workspaceState.get<SessionState>(STATE_KEY);
   if (existing) {
     vscode.window.showInformationMessage("Halyard is already tracking this VS Code AI session.");
@@ -114,7 +114,7 @@ async function startAIWork(context: vscode.ExtensionContext): Promise<void> {
   vscode.window.showInformationMessage("Halyard started tracking VS Code AI work.");
 }
 
-async function stopAndRecordAIWork(context: vscode.ExtensionContext): Promise<void> {
+export async function stopAndRecordAIWork(context: vscode.ExtensionContext): Promise<void> {
   markActivity(context);
   const state = context.workspaceState.get<SessionState>(STATE_KEY);
   if (!state) {
@@ -144,7 +144,7 @@ async function stopAndRecordAIWork(context: vscode.ExtensionContext): Promise<vo
   }
 }
 
-async function recordAISession(context: vscode.ExtensionContext): Promise<void> {
+export async function recordAISession(context: vscode.ExtensionContext): Promise<void> {
   const minutesRaw = await vscode.window.showInputBox({
     title: "Halyard: Record AI Session",
     prompt: "Minutes spent in this VS Code AI session",
@@ -178,7 +178,7 @@ async function recordAISession(context: vscode.ExtensionContext): Promise<void> 
   }
 }
 
-function openDashboard(): void {
+export function openDashboard(): void {
   const { command, prefixArgs } = resolveExecutable();
   const cwd = workspaceRoot();
   const child = spawn(command, [...prefixArgs, "dashboard", "--open"], {
@@ -189,7 +189,7 @@ function openDashboard(): void {
   child.unref();
 }
 
-async function showCurrentScope(context: vscode.ExtensionContext): Promise<void> {
+export async function showCurrentScope(context: vscode.ExtensionContext): Promise<void> {
   const state = context.workspaceState.get<SessionState>(STATE_KEY);
   const cwd = workspaceRoot();
   const branch = (await readGitStats()).branch ?? "unknown";
@@ -203,7 +203,7 @@ async function showCurrentScope(context: vscode.ExtensionContext): Promise<void>
   }
 }
 
-function markActivity(context: vscode.ExtensionContext): void {
+export function markActivity(context: vscode.ExtensionContext): void {
   const state = context.workspaceState.get<SessionState>(STATE_KEY);
   if (!state) {
     if (config().get<boolean>("autoTrack", true)) {
@@ -225,6 +225,10 @@ function markActivity(context: vscode.ExtensionContext): void {
 }
 
 function updateStatus(context: vscode.ExtensionContext): void {
+  if (!status) {
+    return;
+  }
+
   const state = context.workspaceState.get<SessionState>(STATE_KEY);
   if (state) {
     const minutes = Math.max(1, Math.round((Date.now() - state.startedAt) / 60000));
@@ -300,7 +304,7 @@ function runHalyard(args: string[]): Promise<void> {
   });
 }
 
-async function readGitStats(): Promise<GitStats> {
+export async function readGitStats(): Promise<GitStats> {
   const cwd = workspaceRoot();
   const [branch, numstat] = await Promise.all([
     execGit(["branch", "--show-current"], cwd),
