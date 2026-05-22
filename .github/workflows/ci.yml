@@ -38,4 +38,12 @@ jobs:
         run: pytest --cov=halyard --cov-report=term-missing
 
       - name: Audit dependencies for known CVEs
-        run: pip-audit --requirement <(pip freeze) --skip-editable
+        # Audit the installed environment directly. The previous form
+        # (`--requirement <(pip freeze)`) drove pip-audit into its
+        # ephemeral-venv mode, where `pip freeze`'s rendering of an
+        # editable install as `halyard @ git+https://...` made
+        # --skip-editable miss it; pip-audit then tried to clone that
+        # URL into the sandbox and failed on non-interactive auth.
+        # Inspecting the current env in place avoids the re-resolution
+        # entirely; --skip-editable still skips the local halyard.
+        run: pip-audit --skip-editable
