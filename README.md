@@ -187,7 +187,7 @@ halyard log "what did I spend this month?"   # from the CLI (local by
 #   …or via your coding agent through the MCP server (see below)
 
 # Generate an invoice with an AI usage evidence appendix
-halyard invoice acme --period 2026-05 --include-ai-evidence
+halyard invoice acme --month 2026-05 --include-ai-evidence
 ```
 
 <details>
