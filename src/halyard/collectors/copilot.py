@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 from urllib.parse import unquote, urlparse
 
 from halyard.ai_log import AiSession, append_session, find_project_dir
@@ -124,8 +125,56 @@ def discover_workspaces() -> dict[str, Path]:
     return mapping
 
 
+def _apply_patch(state: dict[str, Any], key_path: list[Any], value: Any) -> None:
+    """Set ``value`` at ``key_path`` within ``state``.
+
+    VS Code chat sessions are an incremental log: a kind-0 snapshot followed by
+    kind-1/kind-2 events that each set a value at a nested key path (e.g.
+    ``["requests", 0, "response"]``). A path that doesn't resolve (an update for
+    an index/key not yet present) is skipped rather than raising.
+    """
+    cur: Any = state
+    try:
+        for key in key_path[:-1]:
+            cur = cur[key]
+        cur[key_path[-1]] = value
+    except (KeyError, IndexError, TypeError):
+        return
+
+
 def parse_chat_session(path: Path) -> AiSession | None:
-    """Extract metadata from a VS Code chatSession JSONL."""
+    """Extract metadata from a VS Code chatSession JSONL.
+
+    The file is an incremental log: an optional kind-0 snapshot followed by
+    kind-1 (scalar) and kind-2 (value) patches targeting a key path ``k``.
+    Reconstruct the final state by applying the patches, then count from it.
+    Earlier versions read events line-by-line and only handled a kind-2 update
+    whose path was exactly ``["requests"]``; current VS Code emits the model
+    output via ``["requests", N, "response"]`` sub-path updates, so every recent
+    session looked empty and was skipped. Metadata only — no message/response
+    content is ever read.
+    """
+    state: dict[str, Any] = {}
+    try:
+        if path.stat().st_size > 50 * 1024 * 1024:  # 50MB safety cap
+            return None
+        with path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                kind = event.get("kind")
+                if kind == 0 and isinstance(event.get("v"), dict):
+                    state = event["v"]
+                elif kind in (1, 2) and isinstance(event.get("k"), list):
+                    _apply_patch(state, event["k"], event.get("v"))
+    except OSError:
+        return None
+
     start_dt: datetime | None = None
     end_dt: datetime | None = None
     output_tokens = 0
@@ -133,67 +182,35 @@ def parse_chat_session(path: Path) -> AiSession | None:
     assistant_count = 0
     tool_calls = 0
 
-    try:
-        if path.stat().st_size > 50 * 1024 * 1024:  # 50MB safety cap
-            return None
+    created = state.get("creationDate")
+    if isinstance(created, (int, float)):
+        start_dt = datetime.fromtimestamp(created / 1000.0)
 
-        with path.open(encoding="utf-8") as f:
-            for line in f:
-                try:
-                    event = json.loads(line)
-                    kind = event.get("kind")
-                    val = event.get("v")
-                    key_path = event.get("k", [])
-
-                    # 1. Start time (from session creation)
-                    if kind == 0 and isinstance(val, dict):
-                        created = val.get("creationDate")
-                        if created:
-                            start_dt = datetime.fromtimestamp(created / 1000.0)
-
-                    # 2. Token counts (kind 1 updates to requests[i].completionTokens)
-                    if kind == 1 and isinstance(key_path, list):
-                        if "completionTokens" in key_path:
-                            output_tokens += int(val or 0)
-                        if "elapsedMs" in key_path:
-                            # Use last elapsed update to push end time forward
-                            # but we usually have turn timestamps which are better.
-                            pass
-
-                    # 3. Interactions (from requests array in kind 0 or kind 2)
-                    requests = []
-                    if kind == 0 and isinstance(val, dict):
-                        requests = val.get("requests", [])
-                    elif kind == 2 and key_path == ["requests"]:
-                        requests = val if isinstance(val, list) else []
-
-                    for req in requests:
-                        if not isinstance(req, dict):
-                            continue
-                        user_count += 1
-                        ts = req.get("timestamp")
-                        if ts:
-                            dt = datetime.fromtimestamp(ts / 1000.0)
-                            if start_dt is None or dt < start_dt:
-                                start_dt = dt
-                            if end_dt is None or dt > end_dt:
-                                end_dt = dt
-
-                        # Assistant messages and tool calls are in the response array
-                        response = req.get("response", [])
-                        if isinstance(response, list):
-                            for part in response:
-                                if not isinstance(part, dict):
-                                    continue
-                                if part.get("kind") in ("message", "thinking"):
-                                    assistant_count += 1
-                                if part.get("kind") == "toolInvocationSerialized":
-                                    tool_calls += 1
-
-                except json.JSONDecodeError:
+    requests = state.get("requests")
+    for req in requests if isinstance(requests, list) else []:
+        if not isinstance(req, dict):
+            continue
+        user_count += 1
+        ts = req.get("timestamp")
+        if isinstance(ts, (int, float)):
+            dt = datetime.fromtimestamp(ts / 1000.0)
+            if start_dt is None or dt < start_dt:
+                start_dt = dt
+            if end_dt is None or dt > end_dt:
+                end_dt = dt
+        ct = req.get("completionTokens")
+        if isinstance(ct, (int, float)):
+            output_tokens += int(ct)
+        response = req.get("response")
+        if isinstance(response, list):
+            for part in response:
+                if not isinstance(part, dict):
                     continue
-    except OSError:
-        return None
+                part_kind = part.get("kind")
+                if part_kind in ("message", "thinking"):
+                    assistant_count += 1
+                elif part_kind == "toolInvocationSerialized":
+                    tool_calls += 1
 
     if not start_dt:
         return None

@@ -645,14 +645,24 @@ _COVERAGE_FIX = {
         "recover with `halyard import-gemini`, then check the AfterAgent hook "
         "(`halyard doctor --tool gemini`)"
     ),
+    "github-copilot": (
+        "run `halyard import-copilot` — if it still misses sessions the VS Code "
+        "storage format may have changed (see collectors/copilot.py)"
+    ),
+    "codex": "run `halyard import-codex` (or enable the scheduled importer)",
 }
+
+# Live-capture tools read an on-disk source continuously; importer tools only
+# land in the ledger when an importer runs. Both are probed the same way — disk
+# newer than the last captured row by > grace means capture is lagging — but a
+# broken importer is the failure this caught for Copilot (format drift made
+# every session silently skip).
+_COVERAGE_TOOLS = ("claude-code", "gemini-cli", "github-copilot", "codex")
 
 
 def _newest_disk_activity(tool: str) -> datetime | None:
-    """Newest mtime among a live-capture tool's on-disk session files.
+    """Newest mtime among a tool's on-disk session files.
 
-    Only tools with a cheap on-disk source the collector reads are probed;
-    importer tools (codex/copilot) are covered by the unwired-import nudge.
     Returns None for an un-probed tool or when no files exist.
     """
     paths: list[Path] = []
@@ -665,6 +675,16 @@ def _newest_disk_activity(tool: str) -> datetime | None:
             from halyard.collectors.gemini_history import find_all_session_files
 
             paths = find_all_session_files()
+        elif tool == "github-copilot":
+            from halyard.collectors.copilot import _VSCODE_STORAGE_DIR
+
+            if _VSCODE_STORAGE_DIR.exists():
+                paths = list(_VSCODE_STORAGE_DIR.glob("*/chatSessions/*.jsonl"))
+        elif tool == "codex":
+            from halyard.collectors.codex_app import _CODEX_SESSIONS_DIR
+
+            if _CODEX_SESSIONS_DIR.exists():
+                paths = list(_CODEX_SESSIONS_DIR.rglob("rollout-*.jsonl"))
         else:
             return None
     except OSError:
@@ -700,7 +720,7 @@ def _capture_coverage_checks(
             last_end[s.tool] = s.end
 
     checks: list[DoctorCheck] = []
-    for tool in ("claude-code", "gemini-cli"):
+    for tool in _COVERAGE_TOOLS:
         captured = last_end.get(tool)
         if captured is None:
             continue  # no baseline — never captured, not a regression

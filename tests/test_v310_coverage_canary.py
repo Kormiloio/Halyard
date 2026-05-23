@@ -69,6 +69,18 @@ def test_no_warning_without_baseline(tmp_path: Path) -> None:
     assert not any(c.id.startswith("coverage.") for c in checks)
 
 
+def test_warns_for_stale_importer_tool(tmp_path: Path) -> None:
+    """Importer tools (Copilot/Codex) are probed too: on-disk sessions newer
+    than the last import means the importer is failing — the silent break that
+    hit Copilot when VS Code changed its session format."""
+    tmp = _init(tmp_path / "p")
+    _seed(tmp, "github-copilot", _NOW - timedelta(days=16))
+    with patch.object(doc, "_newest_disk_activity", lambda tool: _NOW):
+        checks = _capture_coverage_checks(tmp, None)
+    ids = {c.id for c in checks}
+    assert "coverage.github-copilot" in ids
+
+
 def test_grace_window_absorbs_small_lag(tmp_path: Path) -> None:
     tmp = _init(tmp_path / "p")
     _seed(tmp, "gemini-cli", _NOW - timedelta(days=1))  # 1d lag < 2d grace

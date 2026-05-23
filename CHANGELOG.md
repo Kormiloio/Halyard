@@ -40,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-imported everything and created duplicates. It now dedups against the dir
   each session actually routes to, so repeated/scheduled runs are idempotent
   regardless of cwd.
+- **Copilot sessions silently not captured (v3.13):** VS Code changed its chat
+  session file to an incremental patch log (a `kind:0` snapshot plus
+  `kind:1`/`kind:2` key-path updates), with the model output arriving via
+  `["requests", N, "response"]` sub-path patches. The importer only applied a
+  whole-array `["requests"]` replace, so every recent session looked empty and
+  was skipped — a live Copilot review captured nothing. The parser now
+  reconstructs the final state from the patches (metadata only; no content).
 
 ### Added
 
@@ -53,6 +60,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs the Codex, Copilot, and Gemini importers. `halyard install-import-timer`
   / `uninstall-import-timer` schedule it via a macOS LaunchAgent (default
   30 min) so import-based tools stay current. Opt-in — never auto-activated.
+- **Coverage canary now probes importer tools (v3.13):** `halyard doctor`'s
+  capture-coverage check was extended from the live-capture tools to
+  `github-copilot` and `codex`, so a silent importer break (on-disk sessions
+  newer than the last import) is flagged instead of going unnoticed.
 
 ## [0.2.1] — 2026-05-22
 

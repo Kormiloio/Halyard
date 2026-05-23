@@ -9,7 +9,60 @@ from pathlib import Path
 import pytest
 
 from halyard.ai_log import AI_LOG_FILENAME, parse_sessions
-from halyard.collectors.copilot import import_copilot_sessions
+from halyard.collectors.copilot import import_copilot_sessions, parse_chat_session
+
+
+def test_parse_chat_session_incremental_subpath_format(tmp_path: Path) -> None:
+    """Regression: current VS Code emits the model output via incremental
+    ['requests', N, 'response'] sub-path updates (not a single ['requests']
+    replace). The parser must reconstruct the final state from those patches,
+    or every recent session looks empty and is silently skipped (observed
+    2026-05-23 — a Copilot review captured nothing)."""
+    f = tmp_path / "session-x.jsonl"
+    f.write_text(
+        "\n".join(
+            [
+                # kind-0 snapshot: request exists, but response is just a
+                # placeholder (the real output arrives via later patches).
+                json.dumps(
+                    {
+                        "kind": 0,
+                        "v": {
+                            "creationDate": 1779563464638,
+                            "sessionId": "session-x",
+                            "requests": [
+                                {
+                                    "requestId": "r1",
+                                    "timestamp": 1779563464638,
+                                    "response": [{"kind": "mcpServersStarting"}],
+                                }
+                            ],
+                        },
+                    }
+                ),
+                # sub-path update: the actual response (thinking + a tool call)
+                json.dumps(
+                    {
+                        "kind": 2,
+                        "k": ["requests", 0, "response"],
+                        "v": [
+                            {"kind": "thinking", "value": "SECRET reasoning"},
+                            {"kind": "message", "value": "SECRET answer"},
+                            {"kind": "toolInvocationSerialized"},
+                        ],
+                    }
+                ),
+                json.dumps({"kind": 1, "k": ["requests", 0, "completionTokens"], "v": 779}),
+            ]
+        )
+    )
+    s = parse_chat_session(f)
+    assert s is not None  # not skipped as "empty"
+    assert s.output_tokens == 779
+    assert s.assistant_message_count == 2  # thinking + message
+    assert s.tool_calls == 1
+    # content is never read
+    assert "SECRET" not in s.to_log_line()
 
 
 @pytest.fixture

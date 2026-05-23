@@ -993,6 +993,29 @@ layers must read from this local source of truth; they do not replace it.
    Spec in `openspec/changes/v3.11-scheduled-import/`.
    **Status: complete (1407 tests passing; +2).**
 
+66. **v3.12 — VS Code OpenTelemetry collector (Copilot capture):** the durable
+   replacement for scraping VS Code's internal storage, which keeps drifting
+   (v3.13). VS Code 1.119+ emits standard OpenTelemetry (GenAI semconv) to a
+   configurable local OTLP endpoint (`github.copilot.chat.otel.*`, off by
+   default) — confirmed via a spike. Plan: a localhost OTLP/HTTP+JSON receiver
+   hosted in `halyard service` maps GenAI spans → `AiSession` (metadata only;
+   content attributes dropped), aggregated per `session.id` with TTL flush;
+   importer kept as fallback, dedup-coordinated. Out of scope: the Azure/Grafana
+   ops dashboard (their lane; the ledger is ours). **Status: specced — Phase-0
+   gate before code.** Spec in `openspec/changes/v3.12-vscode-otel-collector/`.
+
+67. **v3.13 — Copilot session format-drift fix + importer coverage canary:** a
+   live test caught `import-copilot` capturing nothing — VS Code changed the
+   chat-session file to an incremental patch log (`kind:0` snapshot +
+   `kind:1/2` key-path updates), and the output now arrives via
+   `["requests", N, "response"]` sub-path patches the old parser never applied,
+   so every recent session skipped as "empty" (same drift class as Gemini).
+   `parse_chat_session` now reconstructs the final state from the patches.
+   The v3.10 coverage canary is extended to `github-copilot`/`codex` (it had
+   only probed live-capture tools, so it missed this). Capture restored; v3.12
+   is the durable fix. Spec in `openspec/changes/v3.13-copilot-format-drift/`.
+   **Status: complete.**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
