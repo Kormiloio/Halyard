@@ -652,11 +652,94 @@ def parse_sessions(project_dir: Path, *, now: datetime | None = None) -> list[Ai
     # Local import: collectors imports ai_log (cycle otherwise).
     from halyard.collectors import session_is_synthetic_telemetry, session_starts_in_future
 
-    return [
+    surfaced = [
         s
         for s in sessions
         if not session_is_synthetic_telemetry(s) and not session_starts_in_future(s, now=now)
     ]
+    # v3.14: collapse redundant Gemini rows for the same session (the live
+    # hook writes the whole-session cumulative total every turn and the
+    # importer writes one more whole-session row). Read-time only — the raw
+    # lines stay in the file.
+    return collapse_gemini_sessions(surfaced)
+
+
+_GEMINI_JOB_PREFIX = "gemini:"
+
+
+def _gemini_session_key(session: AiSession) -> str | None:
+    """A stable id for the Gemini CLI session a row belongs to, else None.
+
+    Both capture paths derive from the same whole-session history file:
+    the live hook tags rows with ``session_id=<id>``; the importer tags
+    them with ``job_id=gemini:<id>``. Either resolves to the same key, so
+    rows already in the log collapse too. Returns None for non-Gemini
+    rows and for Gemini rows with no resolvable id (left untouched).
+    """
+    if session.tool != "gemini-cli":
+        return None
+    if session.session_id:
+        return session.session_id
+    if session.job_id and session.job_id.startswith(_GEMINI_JOB_PREFIX):
+        return session.job_id[len(_GEMINI_JOB_PREFIX) :]
+    return None
+
+
+def _canonical_gemini_row(rows: list[AiSession]) -> AiSession:
+    """Pick the single canonical row for one Gemini session.
+
+    Most complete wins (max input+output — the hook's final cumulative
+    snapshot and the importer's whole-session row both reach the true
+    total). Ties prefer the better-attributed row (one with a ``project``),
+    then the wider [start, end] window, then larger cache_read — so the
+    attributed hook row is kept over an unattributed importer duplicate.
+    """
+    if len(rows) == 1:
+        return rows[0]
+
+    def rank(s: AiSession) -> tuple[int, int, float, int]:
+        return (
+            s.input_tokens + s.output_tokens,
+            1 if s.project else 0,
+            (s.end - s.start).total_seconds(),
+            s.cache_read or 0,
+        )
+
+    return max(rows, key=rank)
+
+
+def collapse_gemini_sessions(sessions: list[AiSession]) -> list[AiSession]:
+    """Collapse rows that redundantly describe the same Gemini session.
+
+    One Gemini CLI session = one ledger session. An N-turn session today
+    yields up to N+1 rows because the whole-session history file is read by
+    both the per-turn hook (cumulative each turn) and the importer. Keep
+    exactly one canonical row per resolvable Gemini session id; pass
+    everything else (non-Gemini rows, Gemini rows without an id, distinct
+    sessions) through untouched and in order. Idempotent. Read-time only —
+    callers must not write the result back to the log.
+    """
+    groups: dict[str, list[AiSession]] = {}
+    order: list[tuple[str | None, AiSession]] = []
+    for s in sessions:
+        key = _gemini_session_key(s)
+        if key is None:
+            order.append((None, s))
+            continue
+        if key not in groups:
+            groups[key] = []
+            order.append((key, s))  # reserve this position for the group
+        groups[key].append(s)
+
+    out: list[AiSession] = []
+    emitted: set[str] = set()
+    for key, s in order:
+        if key is None:
+            out.append(s)
+        elif key not in emitted:
+            emitted.add(key)
+            out.append(_canonical_gemini_row(groups[key]))
+    return out
 
 
 def assign_unattributed_sessions(project_dir: Path, project: str) -> int:

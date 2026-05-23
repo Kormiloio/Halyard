@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from halyard.ai_log import AI_LOG_FILENAME, AiSession, parse_sessions
+from halyard.ai_log import AI_LOG_FILENAME, AiSession, collapse_gemini_sessions, parse_sessions
 from halyard.pricing import pricing_table_age_days
 from halyard.usage import ToolUsageBucket
 
@@ -481,7 +481,10 @@ def build_aggregate_dashboard_state() -> DashboardState:
     merged: list[AiSession] = []
     for d in dirs:
         merged.extend(parse_sessions(d))
-    all_sessions = _dedup_sessions(merged)
+    # v3.14: collapse the cross-log case too — the hook may write a Gemini
+    # session to the project log while the importer writes it to the hub.
+    # parse_sessions already collapsed within each log; this catches splits.
+    all_sessions = collapse_gemini_sessions(_dedup_sessions(merged))
 
     primary = find_project_dir() or find_hub() or (dirs[0] if dirs else Path.cwd())
 

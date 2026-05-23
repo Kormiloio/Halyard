@@ -1027,6 +1027,27 @@ layers must read from this local source of truth; they do not replace it.
    is the durable fix. Spec in `openspec/changes/v3.13-copilot-format-drift/`.
    **Status: complete.**
 
+68. **v3.14 — Gemini session de-duplication:** a live Gemini session
+   (`70615981-…`) was counted ~2.5× over (3 ledger rows: 147,186/2,990/365,090
+   vs the `/quit` 59,970/1,451/170,196). Root cause: the Gemini history file is
+   the *whole-session* record, and both capture paths read all of it — the live
+   hook re-parses it every `AfterAgent` fire and writes the running **cumulative**
+   total as that turn's row (so an N-turn session sums overlapping snapshots),
+   and the importer appends one more whole-session row that `_dedup_sessions`
+   misses (different `start`, no `project`). Fix: a read-time
+   `collapse_gemini_sessions` in `parse_sessions` (the one choke point all 20
+   counting surfaces share) keeps a single canonical row per Gemini session id
+   — resolved from `session_id=` (hook) or `job_id=gemini:<id>` (importer), so
+   already-written rows collapse too — picking the most-complete row (max
+   input+output), tie-broken toward the attributed/wider-window row. Also applied
+   in the aggregate merge for the cross-log case. Read-time only; raw lines stay
+   in the log (v2.53/v2.54 philosophy), so it retroactively corrects the polluted
+   ledger without a rewrite. Honest limitation: the secondary `gemini-3.1-flash-lite`
+   utility/router model is **not in the history source** (only `/quit`/OTel have
+   it), so it stays uncaptured — documented in `docs/collector-coverage.md`, not
+   fabricated. Spec in `openspec/changes/v3.14-gemini-session-dedup/`.
+   **Status: complete (1439 tests passing; +7).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

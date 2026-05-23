@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Gemini sessions counted multiple times (v3.14):** a multi-turn Gemini CLI
+  session was over-counted (one observed session counted ~2.5×). The Gemini
+  history file is the whole-session record, and both capture paths read all of
+  it: the live hook re-parses it every turn and writes the running *cumulative*
+  total as that turn's row (so turns sum overlapping snapshots), and
+  `import-gemini` appends one more whole-session row that the existing dedup
+  missed (different start, no project). A read-time collapse in `parse_sessions`
+  now keeps a single canonical row per Gemini session id (resolved from the hook
+  row's `session_id` or the import row's `job_id=gemini:<id>`), so every surface
+  — report, dashboard, budget, MCP, status — counts each session once. It is
+  read-time only (raw lines stay in the log) and so also corrects sessions
+  already recorded. Known limitation: a secondary utility/router model
+  (`gemini-3.1-flash-lite`) that Gemini shows in `/quit` but does not write to
+  the session history remains uncaptured — see `docs/collector-coverage.md`.
 - **Gemini CLI sessions silently not captured (v3.8):** Gemini CLI switched
   its on-disk session history from a single-object `session-*.json`
   checkpoint to a line-delimited `session-*.jsonl` rollout, which the

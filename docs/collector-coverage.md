@@ -70,6 +70,22 @@ are reported directly by Cursor and do not overlap with tool errors.
 **gemini-cli:** Rich telemetry depends on the local Gemini history file. Rejection
 capture is N/A because the tool lacks an inline approval UX or history markers.
 
+The history file is the *whole-session* record. Both capture paths read all of
+it — the live hook re-parses it every turn (writing the running cumulative total)
+and `import-gemini` parses it once — so a session can produce several redundant
+rows. Since v3.14, `parse_sessions` collapses all rows sharing a Gemini session
+id into one canonical row (most-complete wins) at read time, so every surface
+counts each session exactly once.
+
+*Known limitation (Defect C, v3.14):* Gemini's `/quit` summary may list a
+secondary utility/router model (e.g. `gemini-3.1-flash-lite` for
+`utility_router`/`utility_summarizer`) that it does **not** write to the session
+history `.jsonl`. Halyard's history-derived collectors only see the models Gemini
+persists, so that utility-model usage is **not captured** (it is not fabricated
+either — "unavailable is not zero"). The only sources that carry it are the
+terminal `/quit` summary (not a persisted artifact) and OpenTelemetry (durations,
+not per-model token counts).
+
 **codex-app:** Data is imported from Codex Desktop's exported conversation
 files. Since v3.3, rejections are detected from rollout event statuses; these
 counts overlap with `tool_errors`.
