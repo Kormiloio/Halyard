@@ -225,6 +225,14 @@ depending on implementation. Plain text remains authoritative.
 
 ## Open Questions
 
+> **Partially resolved (v3.12):** VS Code 1.119+ exposes a public,
+> standards-based source — OpenTelemetry (GenAI semconv) over a local OTLP
+> endpoint — that carries model, token, and tool-call metadata for Copilot
+> sessions natively (no internal-storage scraping). Halyard consumes it via a
+> local receiver; see `openspec/changes/v3.12-vscode-otel-collector/` and
+> `docs/copilot-otel.md`. It does **not** resolve the suggestion-count question
+> below (the OTLP stream carries tool/token usage, not accept/reject counts).
+
 - Which VS Code/Copilot APIs expose accepted and rejected suggestion counts
   without content?
 - Should `files_touched_count` count git-tracked changed files only, or editor

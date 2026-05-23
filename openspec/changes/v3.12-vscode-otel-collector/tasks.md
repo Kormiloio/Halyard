@@ -2,47 +2,56 @@
 
 ## Phase 0 — spike (gate before any mapper code)
 
-- [ ] Point VS Code at a throwaway local collector; run one Copilot agent
-      session; capture a real OTLP/JSON payload.
-- [ ] Confirm: exact GenAI attribute keys; whether `session.id` is a
-      resource vs span attribute; token usage on spans vs metrics; the
-      session-end / flush signal. Record findings in `design.md`.
-- [ ] Decide tool slug (`github-copilot` reuse vs `vscode-copilot`) and
-      `job_id` scheme; record the decision.
+- [~] **DEFERRED (no live capture possible).** The GitHub Copilot Chat
+      extension is not installed in the build environment (only
+      third-party `namdang.ollama-copilot-vscode` + `github.codespaces`),
+      so a live Copilot agent session could not be run to capture a real
+      OTLP/JSON payload. Owner approved building now against the
+      *documented* GenAI semconv + OTLP/JSON encoding, with the live
+      verification deferred. See design.md "Phase 0 (deferred)".
+- [~] Confirm exact GenAI attribute keys / placement — **deferred**; the
+      mapper instead probes both placements defensively (resource *and*
+      span `session.id`; tokens harvested wherever they appear on spans;
+      metrics endpoint accepted but not parsed). Re-verify against a live
+      capture before production reliance.
+- [x] Tool slug + `job_id` scheme decided: reuse `tool="github-copilot"`
+      (existing report/dashboard bucket) with `telemetry_source="copilot-otel"`
+      to distinguish from the importer's `copilot-jsonl`; `job_id=copilot-otel:<session.id>`.
 
 ## Implementation (only after Phase 0)
 
-- [ ] Span→`AiSession` mapper (`collectors/vscode_otel.py`): GenAI semconv →
+- [x] Span→`AiSession` mapper (`collectors/vscode_otel.py`): GenAI semconv →
       fields, per-`session.id` aggregation, `normalise_input`, model_breakdown,
-      duration/TTFT → `api_seconds`. Pure function, unit-testable.
-- [ ] Local OTLP/HTTP receiver on `127.0.0.1:4318` hosted in `halyard service`
-      (no protobuf; OTLP/JSON via stdlib). TTL/end-of-session flush
-      (Windsurf v3.6 pattern) → `append_session`.
-- [ ] `install-vscode-otel` / `uninstall-vscode-otel` (diff-and-approve writes
-      the three `github.copilot.chat.otel.*` keys, content capture off).
-- [ ] Importer dedup coordination (skip OTel-captured sessions; document
-      preference order).
-- [ ] `doctor` nudge: Copilot on disk but OTel unwired (warning).
+      duration → `api_seconds`/`tool_seconds`. Pure function, unit-testable.
+- [x] Local OTLP/HTTP receiver on `127.0.0.1:4318` (`collectors/otel_receiver.py`),
+      started from `run_dashboard` **only when opted in** (no protobuf; OTLP/JSON
+      via stdlib). Idle-TTL + shutdown flush (Windsurf v3.6 pattern) → `append_session`.
+- [x] `install-vscode-otel` / `uninstall-vscode-otel` (diff-and-approve writes
+      the three `github.copilot.chat.otel.*` keys, content capture off; opt-in marker).
+- [x] Importer dedup coordination (skip OTel-captured sessions via dedup-state
+      fast path + authoritative ledger `job_id` scan; OTel wins, importer fills gaps).
+- [x] `doctor` nudge: Copilot on disk but OTel unwired (warning, never error).
 
 ## Privacy (binding)
 
-- [ ] Metadata allowlist in the mapper; everything else dropped.
-- [ ] Fuzz/contract test: content-stuffed spans never reach row / log line /
-      `--json`.
-- [ ] Test: receiver binds localhost only.
+- [x] Metadata allowlist in the mapper; everything else dropped (never looked up).
+- [x] Fuzz/contract test: content-stuffed spans never reach row / log line /
+      `--json` (asdict) surface.
+- [x] Test: receiver binds localhost only (`server_address[0] == 127.0.0.1`).
 
 ## Tests / verification
 
-- [ ] Mapper unit tests (single + multi-model, tool calls/errors, aggregation).
-- [ ] Coexistence test: OTel row + importer → no double-count.
-- [ ] ruff / mypy / full suite green.
+- [x] Mapper unit tests (single + multi-model, tool calls/errors, aggregation,
+      span-attr session id, malformed-input tolerance, value decoding).
+- [x] Coexistence test: OTel row + importer → no double-count (state file + ledger + e2e).
+- [x] ruff / mypy / full suite green (1432 tests).
 
 ## Docs
 
-- [ ] `openspec/project.md` roadmap entry (item 66, v3.12).
-- [ ] `docs/` setup note (enable OTel in VS Code → halyard receiver; the
+- [x] `openspec/project.md` roadmap entry (v3.12).
+- [x] `docs/` setup note (enable OTel in VS Code → halyard receiver; the
       collector-file fallback).
-- [ ] CHANGELOG.
+- [x] CHANGELOG.
 
 ## Related — SHIPPED as v3.13 (separate changeset)
 

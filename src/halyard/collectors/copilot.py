@@ -35,6 +35,11 @@ def import_copilot_sessions(
 
     imported: list[AiSession] = []
     new_ids: set[str] = set()
+    # v3.12 coexistence: sessions already captured live via the OTel
+    # receiver carry job_id=copilot-otel:<id> in the target ledger.
+    # Cache the captured-id set per target dir so the importer never
+    # double-counts an OTel-sourced session.
+    otel_captured: dict[Path, set[str]] = {}
 
     for ws_id, project_path in workspaces.items():
         # 1. Scoping logic
@@ -60,9 +65,19 @@ def import_copilot_sessions(
         if not chat_dir.exists():
             continue
 
+        # Authoritative coexistence check: any session already recorded
+        # via OTel in the resolved target ledger is skipped (the state
+        # file is the fast path; this survives a cleared state file).
+        captured = otel_captured.get(target_dir) if target_dir is not None else None
+        if target_dir is not None and captured is None:
+            captured = _otel_captured_ids(target_dir)
+            otel_captured[target_dir] = captured
+
         for session_path in chat_dir.glob("*.jsonl"):
             session_id = session_path.stem
             if session_id in already_imported:
+                continue
+            if captured and session_id in captured:
                 continue
 
             session = parse_chat_session(session_path)
@@ -252,6 +267,52 @@ def parse_editing_session(path: Path) -> int:
     except (json.JSONDecodeError, OSError):
         pass
     return 0
+
+
+_OTEL_JOB_PREFIX = "copilot-otel:"
+
+
+def record_otel_capture(session_id: str) -> None:
+    """Mark a session id as captured via the OTel receiver (v3.12).
+
+    Adds the id to the shared importer dedup state so the v3.7 importer
+    skips it. Read-modify-write so a concurrent importer append is not
+    clobbered. Best-effort: a write failure must never break live capture.
+    """
+    if not session_id:
+        return
+    try:
+        ids = _load_imported_state()
+        if session_id in ids:
+            return
+        _save_imported_state(ids | {session_id})
+    except OSError:
+        pass
+
+
+def _otel_captured_ids(target_dir: Path) -> set[str]:
+    """Session ids already recorded in ``target_dir`` via the OTel path.
+
+    Reads the ledger and collects the ``session_id`` of any row whose
+    ``job_id`` is ``copilot-otel:<id>`` (or whose telemetry source is the
+    OTel collector). Bounded by the existing parser; failures yield an
+    empty set so the importer degrades to the state-file fast path.
+    """
+    from halyard.ai_log import AI_LOG_FILENAME, parse_sessions
+
+    if not (target_dir / AI_LOG_FILENAME).exists():
+        return set()
+    try:
+        sessions = parse_sessions(target_dir)
+    except (OSError, ValueError):
+        return set()
+    captured: set[str] = set()
+    for s in sessions:
+        if s.telemetry_source == "copilot-otel" and s.session_id:
+            captured.add(s.session_id)
+        elif s.job_id and s.job_id.startswith(_OTEL_JOB_PREFIX):
+            captured.add(s.job_id[len(_OTEL_JOB_PREFIX) :])
+    return captured
 
 
 def _load_imported_state() -> set[str]:

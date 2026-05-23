@@ -79,12 +79,21 @@ def run_dashboard(
     if open_browser:
         webbrowser.open(url)
 
+    # v3.12: ride a localhost OTLP receiver inside this long-lived service
+    # process — but only when the user opted into VS Code OTel capture, so
+    # a default install gets no new listener. Best-effort: never fatal.
+    from halyard.collectors.otel_receiver import start_receiver
+
+    otel_receiver = start_receiver(project_dir)
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         server.server_close()
+        if otel_receiver is not None:
+            otel_receiver.stop()
 
     return url
 

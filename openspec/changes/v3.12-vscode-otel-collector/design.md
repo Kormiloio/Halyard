@@ -93,15 +93,63 @@ session id, so:
 - Setup writes only the three `github.copilot.chat.otel.*` keys; never enables
   content capture.
 
-## Phase 0 (gate before code)
+## Phase 0 (deferred — built against the documented spec)
 
-Point VS Code at a throwaway local collector (or a debug receiver), run one
-Copilot agent session, and capture a real OTLP payload to confirm: exact
-GenAI attribute keys present, whether `session.id` is a resource or span
-attribute, whether token usage is on spans or metrics, and the
-session-end/flush signal. Record findings here (mirrors the v2.67 Phase-0 that
-corrected the Gemini framing assumption). Do not write the mapper until the
-real shape is confirmed.
+The intended gate was: point VS Code at a debug receiver, run one Copilot
+agent session, capture a real OTLP payload, confirm exact keys/placement,
+then write the mapper.
+
+**Outcome (2026-05-23): the gate could not be run.** The GitHub Copilot
+Chat extension is not installed in the build environment (only third-party
+`namdang.ollama-copilot-vscode` and `github.codespaces`), and the build
+machine has no Copilot license, so no live agent session — and therefore
+no real OTLP payload — was obtainable. Owner approved proceeding ("build
+now, defer live verify").
+
+Unlike the reverse-engineered internal file format (the thing v3.12
+exists to escape), the OTel **GenAI semantic conventions** and the
+**OTLP/JSON** encoding are *documented public specs*, so a defensive,
+spec-conformant build is meaningfully safer than guessing an undocumented
+format. To absorb the residual uncertainty the live capture would have
+removed, the mapper is written defensively rather than against a single
+assumed shape:
+
+- **`session.id` placement:** probed as **both** a resource attribute
+  (`session.id`) **and** a span attribute (`gen_ai.conversation.id` /
+  `session.id`). Span attr wins; falls back to resource attr.
+- **Usage on spans vs metrics:** tokens are harvested off **spans**
+  wherever they appear (`gen_ai.usage.{input,output}_tokens`, plus the
+  legacy `prompt`/`completion` aliases). The receiver accepts
+  `POST /v1/metrics` with a 200 but does not parse it — re-confirm whether
+  Copilot puts per-call usage on metrics during live verification.
+- **Session-end signal:** unknown, so finalization relies on the proven
+  idle-TTL flush (Windsurf v3.6 pattern, 10-min idle) plus a force-flush
+  on service shutdown — not on a Copilot-specific end-marker.
+- **"Unavailable is not zero":** any attribute the stream omits stays
+  `None`, never a fabricated `0`.
+
+**Re-verification (do before production reliance):** capture one real
+payload and confirm the four unknowns above; tighten the allowlist /
+classifier if the live keys differ. The mapper is a pure function with
+spec-derived fixtures, so re-verification is a fixture diff, not a rewrite.
+
+## As-built decisions (deviations from the original sketch)
+
+- **Receiver is opt-in, not always-on.** The original "host in
+  `halyard service`" sketch would start a listener for every user.
+  Instead the receiver starts from `run_dashboard` **only when the opt-in
+  marker `~/.halyard/vscode-otel.enabled` exists** (written by
+  `install-vscode-otel`). A default install gets no new socket — correct
+  for a feature gated on unverified live behaviour, and matches the
+  proposal's "opt-in" framing. Best-effort: a bind failure is swallowed so
+  it can never take down the dashboard service it rides inside.
+- **Tool slug:** `tool="github-copilot"` (reuse the existing bucket) with
+  `telemetry_source="copilot-otel"`; `job_id="copilot-otel:<session.id>"`.
+- **Dedup is two-layered:** the receiver records each captured id into the
+  importer's existing dedup-state file (fast path), **and** the importer
+  authoritatively scans the target ledger for `job_id=copilot-otel:<id>`
+  rows (survives a cleared state file). OTel wins; the importer only fills
+  gaps OTel didn't capture.
 
 ## Stack / reuse
 

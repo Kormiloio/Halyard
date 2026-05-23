@@ -201,6 +201,14 @@ the command/workflow, accepted/rejected suggestion counts when available through
 public APIs, code delta from git, file count without filenames, and test/build
 status when user invokes extension commands. Mark unavailable fields honestly.
 
+> **Update (v3.12):** the "public API exists" condition above is now met for
+> *native* Copilot capture. VS Code 1.119+ emits standard OpenTelemetry
+> (GenAI semconv) to a local OTLP endpoint, so Halyard can capture Copilot
+> sessions — model, tokens, tool calls, duration — without the extension and
+> without scraping internal storage. That path ships as its own changeset
+> (`openspec/changes/v3.12-vscode-otel-collector/`, see `docs/copilot-otel.md`);
+> this PRD's extension-observed scope is unchanged and complementary.
+
 ## Reporting Requirements
 
 Reports and dashboards should be able to answer:

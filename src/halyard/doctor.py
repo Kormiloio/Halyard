@@ -54,6 +54,10 @@ def build_doctor_report(
     checks.extend(_project_checks(project_dir, hub_dir))
     checks.extend(_hub_checks(project_dir, hub_dir))
     checks.extend(_hook_checks(tool, current))
+    if tool in ("all", "copilot"):
+        copilot_otel = _copilot_otel_check()
+        if copilot_otel is not None:
+            checks.append(copilot_otel)
     checks.extend(_unwired_tool_checks(tool, current))
     checks.extend(_collector_drift_checks(project_dir, hub_dir))
     checks.extend(_capture_coverage_checks(project_dir, hub_dir, now=now))
@@ -327,6 +331,33 @@ def _gemini_telemetry_check() -> DoctorCheck | None:
         status="warning",
         detail="off — api/tool time not captured",
         fix="halyard install-gemini-telemetry",
+    )
+
+
+def _copilot_otel_check() -> DoctorCheck | None:
+    """Nudge (warn-only) when VS Code Copilot history is on disk but the
+    durable OTel capture path is not configured (v3.12). Never an error —
+    the doctor exit code must not change. Returns None when no Copilot
+    history exists (nothing to nudge about).
+    """
+    from halyard.collectors.copilot import copilot_history_present
+    from halyard.collectors.vscode_otel import otel_capture_enabled
+
+    if not copilot_history_present():
+        return None
+    if otel_capture_enabled():
+        return DoctorCheck(
+            id="telemetry.copilot",
+            label="Copilot OTel",
+            status="ok",
+            detail="OTel capture configured",
+        )
+    return DoctorCheck(
+        id="telemetry.copilot",
+        label="Copilot OTel",
+        status="warning",
+        detail="off — Copilot sessions rely on the brittle file importer",
+        fix="halyard install-vscode-otel",
     )
 
 

@@ -997,12 +997,23 @@ layers must read from this local source of truth; they do not replace it.
    replacement for scraping VS Code's internal storage, which keeps drifting
    (v3.13). VS Code 1.119+ emits standard OpenTelemetry (GenAI semconv) to a
    configurable local OTLP endpoint (`github.copilot.chat.otel.*`, off by
-   default) — confirmed via a spike. Plan: a localhost OTLP/HTTP+JSON receiver
-   hosted in `halyard service` maps GenAI spans → `AiSession` (metadata only;
-   content attributes dropped), aggregated per `session.id` with TTL flush;
-   importer kept as fallback, dedup-coordinated. Out of scope: the Azure/Grafana
-   ops dashboard (their lane; the ledger is ours). **Status: specced — Phase-0
-   gate before code.** Spec in `openspec/changes/v3.12-vscode-otel-collector/`.
+   default). Shipped: a pure span→`AiSession` mapper (`collectors/vscode_otel.py`)
+   over the documented GenAI semconv + OTLP/JSON encoding (metadata-only
+   allowlist — content attributes, tool names, file paths never read);
+   per-`session.id` aggregation; a localhost OTLP/HTTP+JSON receiver
+   (`collectors/otel_receiver.py`) on `127.0.0.1:4318`, started from
+   `run_dashboard` **only when opted in** (`~/.halyard/vscode-otel.enabled`),
+   idle-TTL + shutdown flush (Windsurf v3.6 pattern); `install-vscode-otel` /
+   `uninstall-vscode-otel`; importer dedup-coordinated (OTel wins; fast-path
+   state file + authoritative ledger `job_id` scan); `doctor` nudge when Copilot
+   is on disk but OTel unwired. Out of scope: the Azure/Grafana ops dashboard
+   (their lane; the ledger is ours). **Phase-0 deferred:** the Copilot Chat
+   extension isn't installed in the build env, so no live OTLP payload was
+   captured — the mapper is built defensively against the documented spec and
+   probes both resource/span `session.id` placements; live verification is a
+   fixture diff, not a rewrite (see design.md "Phase 0 (deferred)").
+   **Status: code-complete (1432 tests passing; +19), gated on live re-verify.**
+   Spec in `openspec/changes/v3.12-vscode-otel-collector/`.
 
 67. **v3.13 — Copilot session format-drift fix + importer coverage canary:** a
    live test caught `import-copilot` capturing nothing — VS Code changed the

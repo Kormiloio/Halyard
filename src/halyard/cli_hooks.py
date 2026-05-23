@@ -442,6 +442,75 @@ def _do_install_gemini_telemetry() -> None:
     )
 
 
+# --- VS Code Copilot OpenTelemetry (v3.12) --------------------------------
+
+_VSCODE_USER_SETTINGS = (
+    Path.home() / "Library" / "Application Support" / "Code" / "User" / "settings.json"
+)
+# VS Code settings.json uses flat dotted keys (not nested objects).
+_VSCODE_OTEL_KEYS: dict[str, Any] = {
+    "github.copilot.chat.otel.enabled": True,
+    "github.copilot.chat.otel.otlpEndpoint": "http://localhost:4318",
+    "github.copilot.chat.otel.exporterType": "http",
+}
+
+
+def _do_install_vscode_otel() -> None:
+    """Point VS Code Copilot's OTLP exporter at Halyard's local receiver.
+
+    Writes only the three ``github.copilot.chat.otel.*`` keys; foreign
+    settings round-trip intact. Content capture is never enabled (the
+    receiver's allowlist drops content regardless). Also writes the
+    opt-in marker so ``halyard service`` starts the receiver. Byte-stable
+    no-op when already configured.
+    """
+    from halyard.collectors.vscode_otel import MARKER_PATH
+
+    settings_path = _VSCODE_USER_SETTINGS
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: dict[str, Any] = _load_existing_settings(settings_path)
+    existing.update(_VSCODE_OTEL_KEYS)
+
+    new_text = json.dumps(existing, indent=2) + "\n"
+    if _settings_unchanged(settings_path, new_text) and MARKER_PATH.exists():
+        console.print(
+            f"[yellow]VS Code Copilot OTel already configured[/] in [bold]{settings_path}[/]"
+        )
+        return
+    if not _settings_unchanged(settings_path, new_text):
+        _write_settings(settings_path, new_text)
+
+    MARKER_PATH.parent.mkdir(parents=True, exist_ok=True)
+    MARKER_PATH.write_text("enabled\n")
+    console.print(
+        f"[bold green]VS Code Copilot OTel configured[/] "
+        f"(endpoint [bold]http://localhost:4318[/]) in [bold]{settings_path}[/]\n"
+        "[dim]Restart VS Code, then ensure 'halyard service' is running to receive sessions.[/]"
+    )
+
+
+def _do_uninstall_vscode_otel() -> None:
+    """Remove the three OTel keys and the opt-in marker (best-effort)."""
+    from halyard.collectors.vscode_otel import MARKER_PATH
+
+    settings_path = _VSCODE_USER_SETTINGS
+    if settings_path.exists():
+        existing: dict[str, Any] = _load_existing_settings(settings_path)
+        removed = False
+        for key in _VSCODE_OTEL_KEYS:
+            if key in existing:
+                del existing[key]
+                removed = True
+        if removed:
+            _write_settings(settings_path, json.dumps(existing, indent=2) + "\n")
+
+    MARKER_PATH.unlink(missing_ok=True)
+    console.print(
+        f"[bold green]VS Code Copilot OTel disabled[/] (keys removed from [bold]{settings_path}[/])"
+    )
+
+
 def _do_install_hook_cursor() -> None:
     settings_path = Path.home() / ".cursor" / "hooks.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -756,6 +825,16 @@ def register(app: typer.Typer) -> None:
     def install_gemini_telemetry() -> None:
         """Enable Gemini's opt-in local OTLP outfile for api/tool time."""
         _run_installer(_do_install_gemini_telemetry)
+
+    @app.command(name="install-vscode-otel")
+    def install_vscode_otel() -> None:
+        """Wire VS Code Copilot's OTLP exporter to Halyard's local receiver."""
+        _run_installer(_do_install_vscode_otel)
+
+    @app.command(name="uninstall-vscode-otel")
+    def uninstall_vscode_otel() -> None:
+        """Remove the VS Code Copilot OTel keys and stop the receiver opt-in."""
+        _run_installer(_do_uninstall_vscode_otel)
 
     @app.command(name="install-hook-cursor")
     def install_hook_cursor() -> None:

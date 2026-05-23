@@ -64,6 +64,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture-coverage check was extended from the live-capture tools to
   `github-copilot` and `codex`, so a silent importer break (on-disk sessions
   newer than the last import) is flagged instead of going unnoticed.
+- **VS Code Copilot OpenTelemetry capture (v3.12):** a durable, standards-based
+  capture path for Copilot that does not read VS Code's internal storage (the
+  thing that keeps drifting). `halyard install-vscode-otel` points VS Code's
+  Copilot OTLP exporter at a local receiver Halyard runs on `127.0.0.1:4318`
+  (inside the `halyard service` process, started only when you opt in);
+  `uninstall-vscode-otel` reverses it. GenAI-semconv spans are mapped to
+  `AiSession` rows — model, tokens, tool calls/errors, api/tool time — and
+  aggregated per session. Privacy is enforced by a metadata allowlist: prompt,
+  response, tool names, and file paths are never read, proven by a fuzz test.
+  The v3.7 file importer stays as a fallback and is dedup-coordinated so the two
+  paths never double-count a session (OTel wins). `halyard doctor` nudges when
+  Copilot is on disk but OTel isn't wired up. (Phase-0 live verification is
+  deferred — the build environment had no Copilot Chat install — so the mapper
+  is built defensively against the documented spec; see the v3.12 design notes.)
 
 ## [0.2.1] — 2026-05-22
 
