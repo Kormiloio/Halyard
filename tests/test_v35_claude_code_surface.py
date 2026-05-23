@@ -12,6 +12,15 @@ def test_detect_surface_returns_cli_for_terminal_env(monkeypatch) -> None:
     monkeypatch.setenv("TERM_PROGRAM", "Apple_Terminal")
     monkeypatch.delenv("__CFBundleIdentifier", raising=False)
     monkeypatch.setenv("TERM", "xterm-256color")
+    # Isolate from the real process tree: detect_surface() shells out to `ps`
+    # to walk ancestors, so without this stub the result depends on what
+    # launched the test runner (a desktop-app parent makes this return
+    # "desktop"). Stub the ancestry probe so the test deterministically
+    # exercises the terminal-TERM_PROGRAM → cli path it intends to.
+    monkeypatch.setattr(
+        "halyard.collectors.claude_code_surface._parent_process_chain_contains_desktop",
+        lambda: False,
+    )
 
     assert detect_surface() == "cli"
 
