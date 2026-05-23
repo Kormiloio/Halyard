@@ -1,5 +1,7 @@
 # v2.72 — Declarative field registry: Design
 
+Status: **final.**
+
 > Spec only — proposed. Verified against current `ai_log.py` (1029
 > lines; 45 `kvs.append` writers, 45 matching parser `case` arms).
 

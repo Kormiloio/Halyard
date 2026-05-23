@@ -46,13 +46,14 @@ class ProjectPane(Static):
         for session in sessions[:12]:
             tokens = session.input_tokens + session.output_tokens
             err = f" ⚠{session.tool_errors}e" if session.tool_errors else ""
+            surface = f" [{escape(session.client_surface)}]" if session.client_surface else ""
             lines.append(
                 f"{tool_icon(session.tool)} "
                 f"{escape(truncate(session.model, 18)):18} "
                 f"{duration_str(session.end - session.start):>7} "
                 f"{tokens:>8} tok "
                 f"{cost_str(session.cost_usd):>9}"
-                f"{err}"
+                f"{surface}{err}"
             )
         # Most recent resume command, if any
         resume = next(

@@ -137,6 +137,7 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
     assistant_message_count = 0
     tool_calls = 0
     tool_errors = 0
+    rejections = 0
 
     for raw in _iter_jsonl_lines(path):
         raw = raw.strip()
@@ -183,11 +184,23 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
                 user_message_count += 1
             elif msg_type in {"agent_message", "assistant_message", "assistant"}:
                 assistant_message_count += 1
+                # v3.3: detect rejection marker in agent messages (e.g. from an observer)
+                if "user doesn't want to proceed" in str(payload.get("message", "")).lower():
+                    rejections += 1
             elif msg_type in {"exec_command_begin", "apply_patch_begin", "tool_call_begin"}:
                 tool_calls += 1
             elif msg_type in {"exec_command_end", "apply_patch_end", "tool_call_end"}:
                 if _payload_failed(payload):
                     tool_errors += 1
+                    # v3.3: distinguish explicit user rejection from tool failure
+                    out_agg = str(payload.get("aggregated_output", ""))
+                    out_std = str(payload.get("stdout", ""))
+                    if "user doesn't want to proceed" in (out_agg or out_std).lower():
+                        rejections += 1
+            elif msg_type in {"custom_tool_call_output", "function_call_output"}:
+                # v3.3: detect rejection marker in tool outputs
+                if "user doesn't want to proceed" in str(payload.get("output", "")).lower():
+                    rejections += 1
 
     if session_start is None or session_end is None:
         return None
@@ -231,7 +244,8 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
         billing="credits",
         source="sdk",
         tool_calls=tool_calls if tool_calls else None,
-        tool_errors=tool_errors if tool_errors else None,
+        tool_errors=tool_errors if tool_calls else None,
+        rejected_suggestion_count=rejections if (tool_calls or rejections) else None,
         wall_seconds=max(0, int((session_end - session_start).total_seconds())),
         interaction_count=(
             user_message_count + assistant_message_count

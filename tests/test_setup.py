@@ -16,9 +16,10 @@ def test_resolve_selection_all_yes() -> None:
         claude=False,
         cursor=False,
         gemini=False,
+        windsurf=False,
         yes=True,
     )
-    assert selection.tools == ("claude", "cursor", "gemini")
+    assert selection.tools == ("claude", "cursor", "gemini", "windsurf")
 
 
 def test_resolve_selection_yes_without_tool_flags_defaults_to_all() -> None:
@@ -27,9 +28,10 @@ def test_resolve_selection_yes_without_tool_flags_defaults_to_all() -> None:
         claude=False,
         cursor=False,
         gemini=False,
+        windsurf=False,
         yes=True,
     )
-    assert selection.tools == ("claude", "cursor", "gemini")
+    assert selection.tools == ("claude", "cursor", "gemini", "windsurf")
 
 
 def test_resolve_selection_selected_tools() -> None:
@@ -38,6 +40,7 @@ def test_resolve_selection_selected_tools() -> None:
         claude=True,
         cursor=True,
         gemini=False,
+        windsurf=False,
         yes=True,
     )
     assert selection.tools == ("claude", "cursor")
@@ -56,11 +59,21 @@ def test_setup_all_yes_installs_all_tools(monkeypatch, tmp_path: Path) -> None: 
     monkeypatch.setattr(
         "halyard.cli_hooks._do_install_hook_gemini", lambda: calls.append(("gemini", None))
     )
+    monkeypatch.setattr(
+        "halyard.cli_hooks._do_install_hook_windsurf", lambda: calls.append(("windsurf", None))
+    )
+    monkeypatch.setattr("halyard.cli_hooks._do_install_mcp", lambda client: None)
 
     result = CliRunner().invoke(app, ["setup", "--all", "--yes"])
 
     assert result.exit_code == 0
-    assert calls == [("claude", False), ("cursor", None), ("gemini", None)]
+    assert calls == [
+        ("claude", False),
+        ("cursor", None),
+        ("gemini", None),
+        ("windsurf", None),
+    ]
+
     assert "doctor --first-capture" in result.stdout
 
 
@@ -72,6 +85,9 @@ def test_setup_selected_tools(monkeypatch, tmp_path: Path) -> None:  # type: ign
     )
     monkeypatch.setattr("halyard.cli_hooks._do_install_hook_cursor", lambda: calls.append("cursor"))
     monkeypatch.setattr("halyard.cli_hooks._do_install_hook_gemini", lambda: calls.append("gemini"))
+    monkeypatch.setattr(
+        "halyard.cli_hooks._do_install_hook_windsurf", lambda: calls.append("windsurf")
+    )
 
     result = CliRunner().invoke(app, ["setup", "--claude", "--cursor", "--yes"])
 
@@ -96,6 +112,11 @@ def test_setup_global_claude_forwards_flag(monkeypatch, tmp_path: Path) -> None:
 def test_setup_no_project_no_hub_guidance(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_claude", lambda global_=False: None)
+    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_cursor", lambda: None)
+    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_gemini", lambda: None)
+    monkeypatch.setattr("halyard.cli_hooks._do_install_hook_windsurf", lambda: None)
+    monkeypatch.setattr("halyard.cli_hooks._do_install_mcp", lambda client: None)
 
     result = CliRunner().invoke(app, ["setup", "--yes"])
 

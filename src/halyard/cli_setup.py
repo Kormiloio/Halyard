@@ -82,15 +82,20 @@ def register(app: typer.Typer) -> None:
             "--first-capture",
             help="Verify that a recent AI session was captured somewhere.",
         ),
-        tool: str = typer.Option("all", "--tool", help="claude | cursor | gemini | all"),
+        tool: str = typer.Option(
+            "all", "--tool", help="claude | cursor | gemini | windsurf | copilot | all"
+        ),
     ) -> None:
         """Diagnose Halyard setup, hooks, logs, and first-capture readiness."""
         from typing import Any, cast
 
         from halyard.doctor import build_doctor_report, has_errors, render_json, render_text
 
-        if tool not in {"claude", "cursor", "gemini", "all"}:
-            console.print("[bold red]Error:[/] --tool must be one of: claude, cursor, gemini, all")
+        if tool not in {"claude", "cursor", "gemini", "windsurf", "copilot", "all"}:
+            console.print(
+                "[bold red]Error:[/] --tool must be one of: "
+                "claude, cursor, gemini, windsurf, copilot, all"
+            )
             raise typer.Exit(code=1)
 
         report = build_doctor_report(tool=cast(Any, tool), first_capture=first_capture)
@@ -108,6 +113,7 @@ def register(app: typer.Typer) -> None:
         claude: bool = typer.Option(False, "--claude", help="Install Claude Code hooks."),
         cursor: bool = typer.Option(False, "--cursor", help="Install Cursor hooks."),
         gemini: bool = typer.Option(False, "--gemini", help="Install Gemini CLI hooks."),
+        windsurf: bool = typer.Option(False, "--windsurf", help="Install Windsurf hooks."),
         yes: bool = typer.Option(False, "--yes", "-y", help="Run non-interactively."),
         global_claude: bool = typer.Option(
             False,
@@ -120,6 +126,7 @@ def register(app: typer.Typer) -> None:
             _do_install_hook_claude,
             _do_install_hook_cursor,
             _do_install_hook_gemini,
+            _do_install_hook_windsurf,
             _do_install_mcp,
         )
         from halyard.doctor import build_doctor_report, render_text
@@ -146,12 +153,13 @@ def register(app: typer.Typer) -> None:
             claude=claude,
             cursor=cursor,
             gemini=gemini,
+            windsurf=windsurf,
             yes=yes,
         )
 
         tools = list(selection.tools)
         if not tools and not yes:
-            for candidate in ("claude", "cursor", "gemini"):
+            for candidate in ("claude", "cursor", "gemini", "windsurf"):
                 install = typer.confirm(
                     f"Install {tool_label(candidate)} hooks?",
                     default=candidate == "claude",
@@ -189,6 +197,8 @@ def register(app: typer.Typer) -> None:
                         _do_install_hook_cursor()
                     elif selected == "gemini":
                         _do_install_hook_gemini()
+                    elif selected == "windsurf":
+                        _do_install_hook_windsurf()
                     _do_install_mcp(selected)
                 except OSError as exc:
                     install_errors.append(f"{tool_label(selected)}: {exc}")

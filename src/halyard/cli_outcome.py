@@ -43,6 +43,22 @@ def outcome_sync(
         console.print("Install gh CLI to enable outcome sync: https://cli.github.com")
         raise typer.Exit()
 
+    # v3.6: finalize stale Windsurf sessions before resolution
+    try:
+        from halyard.collectors.windsurf import finalize_stale_sessions
+
+        finalize_stale_sessions(project_dir=project_dir)
+    except ImportError:
+        pass
+
+    # v3.7: import retroactive Copilot sessions
+    try:
+        from halyard.collectors.copilot import import_copilot_sessions
+
+        import_copilot_sessions(project_dir=project_dir, dry_run=dry_run)
+    except ImportError:
+        pass
+
     since_date = None
     if since:
         parsed = dateparser.parse(since, settings={"RETURN_AS_TIMEZONE_AWARE": False})

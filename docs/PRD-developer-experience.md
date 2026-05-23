@@ -139,15 +139,19 @@ and `halyard.toml` to generate a Jinja2-rendered invoice markdown file:
 
 ## Change 2: Data integrity — no-silent-writes and schema validation
 
-### Implementation status — May 7, 2026
+### Implementation status — May 22, 2026
 
-First slice implemented.
+Fully implemented and hardened.
 
 - Collectors preserve sessions that would previously have been dropped by
   writing them to `~/.halyard/unattributed.log` and warning on stderr.
 - `AiSession.from_log_line()` validates required fields, token/cost types, and
   non-negative numeric values; malformed lines are quarantined in
   `~/.halyard/quarantine.log`.
+- **v2.72 — Declarative field registry** (shipped): `ai_log.py` refactored to use
+  a single source of truth for all 45+ optional session fields. This ensures
+  byte-for-byte symmetry between writer and parser, eliminating the writer/parser
+  drift bug class. Verified by property-based round-trip tests.
 - `AiSession.remote` captures the normalized git remote (`host/owner/repo`) at
   session time so unattributed sessions can be grouped by repo — no local paths
   stored. Non-git sessions stay anonymous.
@@ -160,9 +164,6 @@ First slice implemented.
 - `halyard adopt <path>` is the one-command promotion flow: writes a minimal
   `halyard.toml` with `[project].slug`, wires `repos.toml`, and registers
   the path. Does not scaffold the full project layout (`halyard init` does that).
-
-Still pending: a design document for the final serialization/quarantine shape
-and any broader migration guidance for older logs.
 
 ### The gap
 

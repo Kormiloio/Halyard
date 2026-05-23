@@ -7,10 +7,12 @@ type SessionState = {
   idleSeconds: number;
   lastActivityAt: number;
   initialBranch?: string;
+  initialSha?: string;
 };
 
 type GitStats = {
   branch?: string;
+  sha?: string;
   filesTouched?: number;
   added?: number;
   removed?: number;
@@ -88,6 +90,7 @@ async function autoStartSession(context: vscode.ExtensionContext): Promise<void>
     idleSeconds: 0,
     lastActivityAt: now,
     initialBranch: gitStats.branch,
+    initialSha: gitStats.sha,
   };
   await context.workspaceState.update(STATE_KEY, state);
   updateStatus(context);
@@ -108,6 +111,7 @@ export async function startAIWork(context: vscode.ExtensionContext): Promise<voi
     idleSeconds: 0,
     lastActivityAt: now,
     initialBranch: gitStats.branch,
+    initialSha: gitStats.sha,
   };
   await context.workspaceState.update(STATE_KEY, state);
   updateStatus(context);
@@ -123,7 +127,7 @@ export async function stopAndRecordAIWork(context: vscode.ExtensionContext): Pro
   }
 
   const minutes = Math.max(1, Math.round((Date.now() - state.startedAt) / 60000));
-  const gitStats = await readGitStats();
+  const gitStats = await readGitStats(state.initialSha);
   const args = buildRecordArgs({
     minutes,
     branch: gitStats.branch ?? state.initialBranch,
@@ -304,14 +308,16 @@ function runHalyard(args: string[]): Promise<void> {
   });
 }
 
-export async function readGitStats(): Promise<GitStats> {
+export async function readGitStats(baseSha?: string): Promise<GitStats> {
   const cwd = workspaceRoot();
-  const [branch, numstat] = await Promise.all([
+  const [branch, sha, numstat] = await Promise.all([
     execGit(["branch", "--show-current"], cwd),
-    execGit(["diff", "--numstat", "HEAD"], cwd),
+    execGit(["rev-parse", "HEAD"], cwd),
+    execGit(["diff", "--numstat", baseSha ?? "HEAD"], cwd),
   ]);
   const stats: GitStats = {
     branch: branch.trim() || undefined,
+    sha: sha.trim() || undefined,
   };
 
   let files = 0;
@@ -359,12 +365,41 @@ function config(): vscode.WorkspaceConfiguration {
  * execFile() treat their first argument as a single binary, so a
  * multi-token string has to be split: the first token is the binary,
  * the rest are prepended to every invocation's args.
+ *
+ * Supports quoted tokens to allow paths with spaces (e.g. "C:\Program Files\halyard").
  */
 export function splitExecutable(raw: string): {
   command: string;
   prefixArgs: string[];
 } {
-  const tokens = raw.trim().split(/\s+/).filter((t) => t.length > 0);
+  const tokens: string[] = [];
+  let current = "";
+  let inQuote: string | null = null;
+  const input = raw.trim();
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    if ((char === '"' || char === "'") && (i === 0 || input[i - 1] !== "\\")) {
+      if (inQuote === char) {
+        inQuote = null;
+      } else if (inQuote === null) {
+        inQuote = char;
+      } else {
+        current += char;
+      }
+    } else if (/\s/.test(char) && inQuote === null) {
+      if (current.length > 0) {
+        tokens.push(current);
+        current = "";
+      }
+    } else {
+      current += char;
+    }
+  }
+  if (current.length > 0) {
+    tokens.push(current);
+  }
+
   if (tokens.length === 0) {
     return { command: "halyard", prefixArgs: [] };
   }

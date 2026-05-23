@@ -69,8 +69,8 @@ privacy-preserving usage record.
 - Show session, token, model, active-day, streak, and peak-hour metrics.
 - Show time-series trends for all time, 30 days, and 7 days.
 - Show model share using input/output tokens, cost, and sessions where useful.
-- Show tool share so users can compare Claude Code, Cursor, Gemini CLI, Codex,
-  and future collectors.
+- Show tool and surface share so users can compare Claude Code (by cli/desktop),
+  Cursor, Gemini CLI, Codex, and future collectors.
 - Preserve Halyard's local-first privacy contract: no prompts, transcripts,
   code contents, or secrets.
 - Reuse the same parsers and report services as CLI reports and the dashboard.
@@ -142,6 +142,10 @@ clearly.
 - Total tokens, split into input, output, cache read, and cache write where
   available.
 - Total direct cost and, when configured, allocated plan cost.
+- **Tool and surface breakdown** — tool mix by sessions/tokens/cost, including
+  advisory client-surface sub-buckets (cli/desktop/ide) for Claude Code. Since
+  v3.3, rejections for Claude Code and Codex are captured as a subset of
+  tool errors and labeled as such to avoid double-counting confusion.
 - Active days in selected range.
 - Current streak and longest streak in selected range.
 - Peak hour based on session start time.

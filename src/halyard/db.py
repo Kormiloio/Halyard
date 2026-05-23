@@ -385,8 +385,9 @@ def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
                  input_tok, output_tok, cache_read, cache_write,
                  cost_usd, tool_calls, tool_errors, source_file,
                  branch, commit_count, code_added, code_removed,
-                 pr_ref, pr_state, outcome_resolved_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 pr_ref, pr_state, outcome_resolved_at,
+                 mcp_servers_used, mcp_server_names)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 sid,
@@ -410,6 +411,8 @@ def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
                 session.pr_ref,
                 session.pr_state,
                 session.outcome_resolved_at,
+                session.mcp_servers_used,
+                ",".join(session.mcp_server_names) if session.mcp_server_names else None,
             ),
         )
         if is_new:

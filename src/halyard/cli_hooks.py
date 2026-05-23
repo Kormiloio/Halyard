@@ -113,6 +113,12 @@ _CURSOR_HOOKS: dict[str, str] = {
     "stop": "halyard cursor-hook",
 }
 
+# Windsurf hook config injected by `halyard install-hook-windsurf`
+_WS_HOOKS: dict[str, str] = {
+    "pre_user_prompt": "halyard windsurf-session-start",
+    "post_cascade_response": "halyard windsurf-session-stop",
+}
+
 _VSCODE_TASK_LABEL = "Halyard: Record VS Code AI session"
 _VSCODE_TASK_INPUTS: tuple[dict[str, str], ...] = (
     {
@@ -463,6 +469,31 @@ def _do_install_hook_cursor() -> None:
     console.print(f"[bold green]Cursor hooks installed[/] in [bold]{settings_path}[/]")
 
 
+def _do_install_hook_windsurf() -> None:
+    settings_path = Path.home() / ".codeium" / "windsurf" / "hooks.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: dict[str, Any] = _load_existing_settings(settings_path)
+
+    hooks = existing.setdefault("hooks", {})
+    exe = _halyard_exe()
+
+    for event, template in _WS_HOOKS.items():
+        command = _hook_command(exe, template.removeprefix("halyard "))
+        current = hooks.setdefault(event, [])
+        # Windsurf hook entries include "show_output": false
+        kept = [e for e in current if not _is_halyard_hook_cmd(e.get("command", ""))]
+        kept.append({"command": command, "show_output": False})
+        hooks[event] = kept
+
+    new_text = json.dumps(existing, indent=2) + "\n"
+    if _settings_unchanged(settings_path, new_text):
+        console.print(f"[yellow]Windsurf hooks already present[/] in [bold]{settings_path}[/]")
+        return
+    _write_settings(settings_path, new_text)
+    console.print(f"[bold green]Windsurf hooks installed[/] in [bold]{settings_path}[/]")
+
+
 # --- MCP server auto-registration (v2.51) ---------------------------------
 
 _MCP_SERVER_NAME = "halyard"
@@ -474,6 +505,7 @@ _MCP_CLIENTS: dict[str, tuple[str, Path]] = {
     "claude": ("Claude Code", Path.home() / ".claude.json"),
     "cursor": ("Cursor", Path.home() / ".cursor" / "mcp.json"),
     "gemini": ("Gemini CLI", Path.home() / ".gemini" / "settings.json"),
+    "windsurf": ("Windsurf", Path.home() / ".codeium" / "windsurf" / "mcp_config.json"),
 }
 
 
@@ -602,6 +634,7 @@ def _auto_install_detected_hooks() -> None:
         ("claude", "Claude Code", lambda: _do_install_hook_claude(global_=True)),
         ("cursor", "Cursor", _do_install_hook_cursor),
         ("gemini", "Gemini CLI", _do_install_hook_gemini),
+        ("windsurf", "Windsurf", _do_install_hook_windsurf),
     ]:
         if shutil.which(binary):
             try:
@@ -673,6 +706,20 @@ def register(app: typer.Typer) -> None:
 
         raise typer.Exit(code=_run_hook(handle_stop_hook))
 
+    @app.command(name="windsurf-session-start", hidden=True)
+    def windsurf_session_start() -> None:
+        """Record Windsurf turn start (called by pre_user_prompt hook)."""
+        from halyard.collectors.windsurf import read_payload, record_turn
+
+        raise typer.Exit(code=_run_hook(lambda: record_turn(read_payload(), is_start=True)))
+
+    @app.command(name="windsurf-session-stop", hidden=True)
+    def windsurf_session_stop() -> None:
+        """Record Windsurf turn stop (called by post_cascade_response hook)."""
+        from halyard.collectors.windsurf import read_payload, record_turn
+
+        raise typer.Exit(code=_run_hook(lambda: record_turn(read_payload(), is_start=False)))
+
     @app.command(name="install-hook-claude")
     def install_hook_claude(
         global_: bool = typer.Option(
@@ -715,6 +762,11 @@ def register(app: typer.Typer) -> None:
         """Install Cursor hooks to auto-capture AI sessions."""
         _run_installer(_do_install_hook_cursor)
 
+    @app.command(name="install-hook-windsurf")
+    def install_hook_windsurf() -> None:
+        """Install Windsurf hooks to auto-capture AI sessions."""
+        _run_installer(_do_install_hook_windsurf)
+
     @app.command(name="install-cursor-hook", hidden=True)
     def install_cursor_hook() -> None:
         """Deprecated alias for install-hook-cursor."""
@@ -734,6 +786,11 @@ def register(app: typer.Typer) -> None:
     def install_mcp_gemini() -> None:
         """Register the read-only Halyard MCP server with Gemini CLI."""
         _run_installer(lambda: _do_install_mcp("gemini"))
+
+    @app.command(name="install-mcp-windsurf")
+    def install_mcp_windsurf() -> None:
+        """Register the read-only Halyard MCP server with Windsurf."""
+        _run_installer(lambda: _do_install_mcp("windsurf"))
 
     @app.command(name="install-mcp", hidden=True)
     def install_mcp() -> None:

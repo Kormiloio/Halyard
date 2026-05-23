@@ -3,6 +3,11 @@
 File locking is cross-platform: ``fcntl.flock`` on POSIX,
 ``msvcrt.locking`` on Windows, and a thread-only fallback elsewhere
 (with a one-time warning). See ``_acquire_lock`` / ``_release_lock``.
+
+Serialization of optional AiSession fields (the key=value tail) is
+managed by a declarative registry (_FIELDS). To add a new field, add
+one FieldSpec to that registry; the writer and parser will stay
+automatically symmetric.
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import Enum, auto
 from pathlib import Path
 from typing import IO
 
@@ -82,6 +88,87 @@ _UNSAFE_FIELD_RE = re.compile(r"[\s=]")
 _EXTRA_KEY_RE = re.compile(r"\A[A-Za-z][A-Za-z0-9_.-]*\Z")
 _PATH_LOCKS_GUARD = threading.Lock()
 _PATH_LOCKS: dict[str, threading.RLock] = {}
+
+
+class FieldKind(Enum):
+    """Codec families for AiSession optional fields."""
+
+    SAFE_FIELD = auto()  # string with _safe_field sanitize
+    INT = auto()  # int | None
+    FLOAT_4 = auto()  # float | None, 4 decimal places
+    BOOL_LOWER = auto()  # bool | None -> "true"/"false"
+    TOKENS_AVAILABLE = auto()  # bool: false -> "tokens_available=false", true -> omitted
+    BILLING = auto()  # str: not "api" -> "billing=value", "api" -> omitted
+    TAGS = auto()  # list[str] -> "tags=a,b,c" (percent-encoded)
+    FREE_TEXT = auto()  # str -> "key=value" (percent-encoded)
+    BREAKDOWN = auto()  # str -> "model_breakdown=v" (special breakdown sanitize)
+
+
+@dataclass(frozen=True)
+class FieldSpec:
+    """Registry entry for one optional AiSession wire field."""
+
+    attr: str  # AiSession attribute name
+    key: str  # On-wire key name
+    kind: FieldKind
+
+
+_FIELDS = (
+    FieldSpec("project", "project", FieldKind.SAFE_FIELD),
+    FieldSpec("user", "user", FieldKind.SAFE_FIELD),
+    FieldSpec("cache_read", "cache_read", FieldKind.INT),
+    FieldSpec("cache_write", "cache_write", FieldKind.INT),
+    FieldSpec("tokens_available", "tokens_available", FieldKind.TOKENS_AVAILABLE),
+    FieldSpec("billing", "billing", FieldKind.BILLING),
+    FieldSpec("credits", "credits", FieldKind.FLOAT_4),
+    FieldSpec("job_id", "job_id", FieldKind.SAFE_FIELD),
+    FieldSpec("source", "source", FieldKind.SAFE_FIELD),
+    FieldSpec("attr_method", "attr_method", FieldKind.SAFE_FIELD),
+    FieldSpec("tags", "tags", FieldKind.TAGS),
+    FieldSpec("note", "note", FieldKind.FREE_TEXT),
+    FieldSpec("session_id", "session_id", FieldKind.SAFE_FIELD),
+    FieldSpec("tool_calls", "tool_calls", FieldKind.INT),
+    FieldSpec("tool_errors", "tool_errors", FieldKind.INT),
+    FieldSpec("wall_seconds", "wall_seconds", FieldKind.INT),
+    FieldSpec("agent_active_seconds", "agent_active_seconds", FieldKind.INT),
+    FieldSpec("api_seconds", "api_seconds", FieldKind.INT),
+    FieldSpec("tool_seconds", "tool_seconds", FieldKind.INT),
+    FieldSpec("code_added", "code_added", FieldKind.INT),
+    FieldSpec("code_removed", "code_removed", FieldKind.INT),
+    FieldSpec("model_breakdown", "model_breakdown", FieldKind.BREAKDOWN),
+    FieldSpec("resume_command", "resume_command", FieldKind.FREE_TEXT),
+    FieldSpec("branch", "branch", FieldKind.SAFE_FIELD),
+    FieldSpec("remote", "remote", FieldKind.SAFE_FIELD),
+    FieldSpec("client_surface", "client_surface", FieldKind.SAFE_FIELD),
+    FieldSpec("commit_count", "commit_count", FieldKind.INT),
+    FieldSpec("pr_ref", "pr_ref", FieldKind.SAFE_FIELD),
+    FieldSpec("pr_state", "pr_state", FieldKind.SAFE_FIELD),
+    FieldSpec("outcome_resolved_at", "outcome_resolved_at", FieldKind.SAFE_FIELD),
+    FieldSpec("review_comments", "review_comments", FieldKind.INT),
+    FieldSpec("review_rounds", "review_rounds", FieldKind.INT),
+    FieldSpec("time_to_merge_s", "time_to_merge_s", FieldKind.INT),
+    FieldSpec("review_decision", "review_decision", FieldKind.SAFE_FIELD),
+    FieldSpec("mcp_servers_used", "mcp_servers_used", FieldKind.INT),
+    FieldSpec("mcp_server_names", "mcp_server_names", FieldKind.SAFE_FIELD),
+    FieldSpec("interaction_count", "interaction_count", FieldKind.INT),
+    FieldSpec("user_message_count", "user_message_count", FieldKind.INT),
+    FieldSpec("assistant_message_count", "assistant_message_count", FieldKind.INT),
+    FieldSpec("prompt_count", "prompt_count", FieldKind.INT),
+    FieldSpec("accepted_suggestion_count", "accepted_suggestion_count", FieldKind.INT),
+    FieldSpec("rejected_suggestion_count", "rejected_suggestion_count", FieldKind.INT),
+    FieldSpec("files_touched_count", "files_touched_count", FieldKind.INT),
+    FieldSpec("test_run_count", "test_run_count", FieldKind.INT),
+    FieldSpec("test_status", "test_status", FieldKind.SAFE_FIELD),
+    FieldSpec("build_status", "build_status", FieldKind.SAFE_FIELD),
+    FieldSpec("human_active_seconds", "human_active_seconds", FieldKind.INT),
+    FieldSpec("idle_seconds", "idle_seconds", FieldKind.INT),
+    FieldSpec("interaction_data_available", "interaction_data_available", FieldKind.BOOL_LOWER),
+    FieldSpec("outcome_data_available", "outcome_data_available", FieldKind.BOOL_LOWER),
+    FieldSpec("telemetry_source", "telemetry_source", FieldKind.SAFE_FIELD),
+    FieldSpec("telemetry_trust", "telemetry_trust", FieldKind.SAFE_FIELD),
+)
+
+_FIELDS_BY_KEY = {f.key: f for f in _FIELDS}
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +375,7 @@ class AiSession:
     # v2.24 outcome metadata
     branch: str | None = None  # git branch at session close; trust: captured
     remote: str | None = None  # normalized git remote (host/owner/repo); trust: captured
+    client_surface: str | None = None  # cli | desktop | ide | unknown
     commit_count: int | None = None  # commits in session window; trust: captured
     pr_ref: str | None = None  # e.g. "owner/repo#42"; written by outcome sync
     pr_state: str | None = None  # merged | closed | open | none
@@ -400,108 +488,37 @@ class AiSession:
             f"{self.cost_usd:.4f}",
         ]
         kvs: list[str] = []
-        if self.project:
-            kvs.append(f"project={_safe_field(self.project)}")
-        if self.user:
-            kvs.append(f"user={_safe_field(self.user)}")
-        if self.cache_read is not None:
-            kvs.append(f"cache_read={self.cache_read}")
-        if self.cache_write is not None:
-            kvs.append(f"cache_write={self.cache_write}")
-        if not self.tokens_available:
-            kvs.append("tokens_available=false")
-        if self.billing != "api":
-            kvs.append(f"billing={_safe_field(self.billing)}")
-        if self.credits is not None:
-            kvs.append(f"credits={self.credits:.4f}")
-        if self.job_id:
-            kvs.append(f"job_id={_safe_field(self.job_id)}")
-        if self.source:
-            kvs.append(f"source={_safe_field(self.source)}")
-        if self.attr_method:
-            kvs.append(f"attr_method={_safe_field(self.attr_method)}")
-        if self.tags:
-            kvs.append(f"tags={','.join(_encode_free_text(t) for t in self.tags)}")
-        if self.note:
-            kvs.append(f"note={_encode_free_text(self.note)}")
-        if self.session_id:
-            kvs.append(f"session_id={_safe_field(self.session_id)}")
-        if self.tool_calls is not None:
-            kvs.append(f"tool_calls={self.tool_calls}")
-        if self.tool_errors is not None:
-            kvs.append(f"tool_errors={self.tool_errors}")
-        if self.wall_seconds is not None:
-            kvs.append(f"wall_seconds={self.wall_seconds}")
-        if self.agent_active_seconds is not None:
-            kvs.append(f"agent_active_seconds={self.agent_active_seconds}")
-        if self.api_seconds is not None:
-            kvs.append(f"api_seconds={self.api_seconds}")
-        if self.tool_seconds is not None:
-            kvs.append(f"tool_seconds={self.tool_seconds}")
-        if self.code_added is not None:
-            kvs.append(f"code_added={self.code_added}")
-        if self.code_removed is not None:
-            kvs.append(f"code_removed={self.code_removed}")
-        if self.model_breakdown:
-            kvs.append(f"model_breakdown={_safe_breakdown(self.model_breakdown)}")
-        if self.resume_command:
-            kvs.append(f"resume_command={_encode_free_text(self.resume_command)}")
-        if self.branch:
-            kvs.append(f"branch={_safe_field(self.branch)}")
-        if self.remote:
-            kvs.append(f"remote={_safe_field(self.remote)}")
-        if self.commit_count is not None:
-            kvs.append(f"commit_count={self.commit_count}")
-        if self.pr_ref:
-            kvs.append(f"pr_ref={_safe_field(self.pr_ref)}")
-        if self.pr_state:
-            kvs.append(f"pr_state={_safe_field(self.pr_state)}")
-        if self.outcome_resolved_at:
-            kvs.append(f"outcome_resolved_at={_safe_field(self.outcome_resolved_at)}")
-        if self.review_comments is not None:
-            kvs.append(f"review_comments={self.review_comments}")
-        if self.review_rounds is not None:
-            kvs.append(f"review_rounds={self.review_rounds}")
-        if self.time_to_merge_s is not None:
-            kvs.append(f"time_to_merge_s={self.time_to_merge_s}")
-        if self.review_decision:
-            kvs.append(f"review_decision={_safe_field(self.review_decision)}")
-        if self.mcp_servers_used is not None:
-            kvs.append(f"mcp_servers_used={self.mcp_servers_used}")
-        if self.mcp_server_names:
-            kvs.append(f"mcp_server_names={_safe_field(self.mcp_server_names)}")
-        if self.interaction_count is not None:
-            kvs.append(f"interaction_count={self.interaction_count}")
-        if self.user_message_count is not None:
-            kvs.append(f"user_message_count={self.user_message_count}")
-        if self.assistant_message_count is not None:
-            kvs.append(f"assistant_message_count={self.assistant_message_count}")
-        if self.prompt_count is not None:
-            kvs.append(f"prompt_count={self.prompt_count}")
-        if self.accepted_suggestion_count is not None:
-            kvs.append(f"accepted_suggestion_count={self.accepted_suggestion_count}")
-        if self.rejected_suggestion_count is not None:
-            kvs.append(f"rejected_suggestion_count={self.rejected_suggestion_count}")
-        if self.files_touched_count is not None:
-            kvs.append(f"files_touched_count={self.files_touched_count}")
-        if self.test_run_count is not None:
-            kvs.append(f"test_run_count={self.test_run_count}")
-        if self.test_status:
-            kvs.append(f"test_status={_safe_field(self.test_status)}")
-        if self.build_status:
-            kvs.append(f"build_status={_safe_field(self.build_status)}")
-        if self.human_active_seconds is not None:
-            kvs.append(f"human_active_seconds={self.human_active_seconds}")
-        if self.idle_seconds is not None:
-            kvs.append(f"idle_seconds={self.idle_seconds}")
-        if self.interaction_data_available is not None:
-            kvs.append(f"interaction_data_available={str(self.interaction_data_available).lower()}")
-        if self.outcome_data_available is not None:
-            kvs.append(f"outcome_data_available={str(self.outcome_data_available).lower()}")
-        if self.telemetry_source:
-            kvs.append(f"telemetry_source={_safe_field(self.telemetry_source)}")
-        if self.telemetry_trust:
-            kvs.append(f"telemetry_trust={_safe_field(self.telemetry_trust)}")
+        for spec in _FIELDS:
+            val = getattr(self, spec.attr)
+            if val is None:
+                continue
+
+            match spec.kind:
+                case FieldKind.SAFE_FIELD:
+                    if val:
+                        kvs.append(f"{spec.key}={_safe_field(val)}")
+                case FieldKind.INT:
+                    kvs.append(f"{spec.key}={val}")
+                case FieldKind.FLOAT_4:
+                    kvs.append(f"{spec.key}={val:.4f}")
+                case FieldKind.BOOL_LOWER:
+                    kvs.append(f"{spec.key}={str(val).lower()}")
+                case FieldKind.TOKENS_AVAILABLE:
+                    if not val:
+                        kvs.append(f"{spec.key}=false")
+                case FieldKind.BILLING:
+                    if val != "api":
+                        kvs.append(f"{spec.key}={_safe_field(val)}")
+                case FieldKind.TAGS:
+                    if val:
+                        kvs.append(f"{spec.key}={','.join(_encode_free_text(t) for t in val)}")
+                case FieldKind.FREE_TEXT:
+                    if val:
+                        kvs.append(f"{spec.key}={_encode_free_text(val)}")
+                case FieldKind.BREAKDOWN:
+                    if val:
+                        kvs.append(f"{spec.key}={_safe_breakdown(val)}")
+
         # v2.75: re-emit forward-compat passthrough tokens last,
         # sorted for byte-stable output, percent-encoded so a value
         # with spaces/`=`/`%` can never forge a record delimiter or a
@@ -749,145 +766,34 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
         if "=" not in kv:
             continue
         k, v = kv.split("=", 1)
-        match k:
-            case "project":
-                session.project = v
-            case "user":
-                session.user = v
-            case "cache_read":
-                with suppress(ValueError):
-                    session.cache_read = int(v)
-            case "cache_write":
-                with suppress(ValueError):
-                    session.cache_write = int(v)
-            case "tokens_available":
-                session.tokens_available = v.lower() != "false"
-            case "billing":
-                session.billing = v
-            case "credits":
-                with suppress(ValueError):
-                    session.credits = float(v)
-            case "job_id":
-                session.job_id = v
-            case "source":
-                session.source = v
-            case "attr_method":
-                session.attr_method = v
-            case "tags":
-                session.tags = [_decode_tag(t) for t in v.split(",") if t]
-            case "note":
-                session.note = _decode_free_text(v)
-            case "session_id":
-                session.session_id = v
-            case "tool_calls":
-                with suppress(ValueError):
-                    session.tool_calls = int(v)
-            case "tool_errors":
-                with suppress(ValueError):
-                    session.tool_errors = int(v)
-            case "wall_seconds":
-                with suppress(ValueError):
-                    session.wall_seconds = int(v)
-            case "agent_active_seconds":
-                with suppress(ValueError):
-                    session.agent_active_seconds = int(v)
-            case "api_seconds":
-                with suppress(ValueError):
-                    session.api_seconds = int(v)
-            case "tool_seconds":
-                with suppress(ValueError):
-                    session.tool_seconds = int(v)
-            case "code_added":
-                with suppress(ValueError):
-                    session.code_added = int(v)
-            case "code_removed":
-                with suppress(ValueError):
-                    session.code_removed = int(v)
-            case "model_breakdown":
-                session.model_breakdown = v
-            case "resume_command":
-                session.resume_command = _decode_free_text(v)
-            case "branch":
-                session.branch = v
-            case "remote":
-                session.remote = v
-            case "commit_count":
-                with suppress(ValueError):
-                    session.commit_count = int(v)
-            case "pr_ref":
-                session.pr_ref = v
-            case "pr_state":
-                session.pr_state = v
-            case "outcome_resolved_at":
-                session.outcome_resolved_at = v
-            case "review_comments":
-                with suppress(ValueError):
-                    session.review_comments = int(v)
-            case "review_rounds":
-                with suppress(ValueError):
-                    session.review_rounds = int(v)
-            case "time_to_merge_s":
-                with suppress(ValueError):
-                    session.time_to_merge_s = int(v)
-            case "review_decision":
-                session.review_decision = v
-            case "mcp_servers_used":
-                with suppress(ValueError):
-                    session.mcp_servers_used = int(v)
-            case "mcp_server_names":
-                session.mcp_server_names = v
-            case "interaction_count":
-                with suppress(ValueError):
-                    session.interaction_count = int(v)
-            case "user_message_count":
-                with suppress(ValueError):
-                    session.user_message_count = int(v)
-            case "assistant_message_count":
-                with suppress(ValueError):
-                    session.assistant_message_count = int(v)
-            case "prompt_count":
-                with suppress(ValueError):
-                    session.prompt_count = int(v)
-            case "accepted_suggestion_count":
-                with suppress(ValueError):
-                    session.accepted_suggestion_count = int(v)
-            case "rejected_suggestion_count":
-                with suppress(ValueError):
-                    session.rejected_suggestion_count = int(v)
-            case "files_touched_count":
-                with suppress(ValueError):
-                    session.files_touched_count = int(v)
-            case "test_run_count":
-                with suppress(ValueError):
-                    session.test_run_count = int(v)
-            case "test_status":
-                session.test_status = v
-            case "build_status":
-                session.build_status = v
-            case "human_active_seconds":
-                with suppress(ValueError):
-                    session.human_active_seconds = int(v)
-            case "idle_seconds":
-                with suppress(ValueError):
-                    session.idle_seconds = int(v)
-            case "interaction_data_available":
-                session.interaction_data_available = v.lower() == "true"
-            case "outcome_data_available":
-                session.outcome_data_available = v.lower() == "true"
-            case "telemetry_source":
-                session.telemetry_source = v
-            case "telemetry_trust":
-                session.telemetry_trust = v
-            case _:
-                # v2.75: forward-compat passthrough. An unrecognized
-                # token (newer Halyard / extending consumer) is
-                # preserved verbatim instead of silently dropped, so
-                # the line round-trips losslessly. Known keys are all
-                # matched above, so this can never shadow a real
-                # field. Only well-formed keys are kept so a corrupt
-                # line can't turn `extra` into a junk sink.
-                if _EXTRA_KEY_RE.match(k):
-                    session.extra[k] = _decode_free_text(v) if "%" in v else v
+        if spec := _FIELDS_BY_KEY.get(k):
+            match spec.kind:
+                case FieldKind.SAFE_FIELD | FieldKind.BILLING | FieldKind.BREAKDOWN:
+                    setattr(session, spec.attr, v)
+                case FieldKind.INT:
+                    with suppress(ValueError):
+                        setattr(session, spec.attr, int(v))
+                case FieldKind.FLOAT_4:
+                    with suppress(ValueError):
+                        setattr(session, spec.attr, float(v))
+                case FieldKind.BOOL_LOWER:
+                    setattr(session, spec.attr, v.lower() == "true")
+                case FieldKind.TOKENS_AVAILABLE:
+                    session.tokens_available = v.lower() != "false"
+                case FieldKind.TAGS:
+                    session.tags = [_decode_tag(t) for t in v.split(",") if t]
+                case FieldKind.FREE_TEXT:
+                    setattr(session, spec.attr, _decode_free_text(v))
+        else:
+            # v2.75: forward-compat passthrough. An unrecognized
+            # token (newer Halyard / extending consumer) is
+            # preserved verbatim instead of silently dropped, so
+            # the line round-trips losslessly. Known keys are all
+            # matched above, so this can never shadow a real
+            # field. Only well-formed keys are kept so a corrupt
+            # line can't turn `extra` into a junk sink.
+            if _EXTRA_KEY_RE.match(k):
+                session.extra[k] = _decode_free_text(v) if "%" in v else v
 
     # v2.24 backward-compat: promote legacy "branch:<name>" tag to branch field
     if session.branch is None and session.tags:

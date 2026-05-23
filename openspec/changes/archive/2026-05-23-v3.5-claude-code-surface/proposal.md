@@ -1,8 +1,6 @@
 # Proposal: v3.5 — Claude Code client-surface tag (CLI vs. desktop)
 
-**Status: PROPOSAL — design and tasks are provisional, gated on a
-read-only Phase-0 spike (see below).** No code lands until the spike
-records which signals are actually present on the user's two surfaces.
+Status: **shipped.**
 
 ## Why this exists
 
@@ -66,38 +64,6 @@ consumer is unaffected.
 - **No new schema migration.** Single nullable column on
   `AiSession` mirrors how v3.4 added `mcp_servers_used`.
 
-## Phase-0 spike (gates design + tasks)
-
-Before any code, we need to confirm empirically which signals exist
-on the owner's two surfaces. The spike is one read-only script,
-nothing committed:
-
-1. From a **terminal Claude Code session**, dump (to a temp file):
-   `os.environ`, `os.getppid()` + `ps` for the ancestry chain, the
-   value of `sys.stdin.isatty()`, and `payload` keys received by
-   `halyard cc-hook`.
-2. From a **desktop Claude Code session** on macOS, dump the same.
-3. Diff the two dumps.
-
-Candidate signals to confirm (none of these are yet observed in this
-codebase — that is the point of the spike):
-
-- `CLAUDECODE` / `CLAUDE_CODE_ENTRYPOINT` env vars and any
-  surface-discriminating values
-- `TERM_PROGRAM` (`iTerm.app`, `Apple_Terminal`, `vscode`, …) — present
-  for CLI in a real terminal, often absent or different in a desktop
-  bundle
-- `__CFBundleIdentifier` on macOS — set by the launching `.app`
-- Parent-process basename — e.g. `zsh`/`bash`/`tmux` vs.
-  `Claude.app`/`Claude Helper`/something bundled
-- `sys.stdin.isatty()` shape — CLI ≈ True under a terminal, desktop
-  PTY shape may differ
-
-The spike's deliverable is a table — for each candidate signal:
-*"present on CLI? present on desktop? values distinguishable?"* The
-design then picks the **smallest reliable subset**, in priority
-order, and the rest are dropped.
-
 ## Risks and tradeoffs
 
 - **Heuristic, not authoritative.** tmux, ssh forwarding, IDE
@@ -115,16 +81,7 @@ order, and the rest are dropped.
   detector reads only the small named subset above; it never logs the
   full environment, never persists raw env values to the session log,
   and only writes the bucketed string (`cli`/`desktop`/`ide`/`unknown`).
-
-## Decision required (owner)
-
-- [ ] Approve a read-only Phase-0 spike on the two surfaces you
-  actually use (CLI + desktop). Spike is local-only — no commit.
-- [ ] Approve the additive `client_surface` field on `AiSession`
-  (one nullable token, v2.75 passthrough-compatible).
-- [ ] Confirm scope: **CLI vs. desktop only** for v3.5 — IDE/web
-  detection deferred (or accept as best-effort if the spike shows
-  a free signal).
+-path hole.
 
 `design.md` and `tasks.md` are written in this changeset as the
 *intended* shape, but every empirical claim in them is flagged

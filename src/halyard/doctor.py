@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import sys
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -13,7 +14,7 @@ from typing import Literal
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, find_project_dir, parse_sessions
 from halyard.hub import find_hub
 
-ToolScope = Literal["claude", "cursor", "gemini", "all"]
+ToolScope = Literal["claude", "cursor", "gemini", "windsurf", "copilot", "all"]
 CheckStatus = Literal["ok", "warning", "error", "skipped"]
 ReportStatus = Literal["ok", "warning", "error"]
 
@@ -201,9 +202,11 @@ def _hub_checks(project_dir: Path | None, hub_dir: Path | None) -> list[DoctorCh
 
 
 def _hook_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
-    scopes = ("claude", "cursor", "gemini") if tool == "all" else (tool,)
+    scopes = ("claude", "cursor", "gemini", "windsurf") if tool == "all" else (tool,)
     checks: list[DoctorCheck] = []
     for scope in scopes:
+        if scope == "copilot":
+            continue
         required = tool != "all"
         if scope == "claude":
             checks.append(_claude_hook_check(current, required=required))
@@ -219,6 +222,8 @@ def _hook_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
                 tel = _gemini_telemetry_check()
                 if tel is not None:
                     checks.append(tel)
+        elif scope == "windsurf":
+            checks.append(_windsurf_hook_check(required=required))
     return checks
 
 
@@ -324,12 +329,31 @@ def _gemini_telemetry_check() -> DoctorCheck | None:
     )
 
 
+def _windsurf_hook_check(*, required: bool) -> DoctorCheck:
+    path = Path.home() / ".codeium" / "windsurf" / "hooks.json"
+    commands = _commands_from_windsurf_settings(path)
+    if _has_command(commands, "windsurf-session-start") and _has_command(
+        commands, "windsurf-session-stop"
+    ):
+        return DoctorCheck(
+            id="hook.windsurf", label="Windsurf", status="ok", detail="hooks installed"
+        )
+    return DoctorCheck(
+        id="hook.windsurf",
+        label="Windsurf",
+        status="error" if required else "warning",
+        detail="hooks missing",
+        fix="halyard install-hook-windsurf",
+    )
+
+
 # client -> mcpServers config file, relative to ~ (recomputed per call
 # so a relocated home in tests is honoured, matching the hook checks).
 _MCP_CONFIG_REL: dict[str, tuple[str, ...]] = {
     "claude": (".claude.json",),
     "cursor": (".cursor", "mcp.json"),
     "gemini": (".gemini", "settings.json"),
+    "windsurf": (".codeium", "windsurf", "mcp_config.json"),
 }
 
 
@@ -365,21 +389,32 @@ def _unwired_tool_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
     Always `warning`, never `error`, so the doctor exit code is
     unaffected.
     """
-    scopes = ("claude", "cursor", "gemini") if tool == "all" else (tool,)
-    hook_status = {
+    scopes = ("claude", "cursor", "gemini", "windsurf") if tool == "all" else (tool,)
+    hook_status: dict[str, Callable[[], CheckStatus]] = {
         "claude": lambda: _claude_hook_check(current, required=False).status,
         "cursor": lambda: _cursor_hook_check(required=False).status,
         "gemini": lambda: _gemini_hook_check(required=False).status,
+        "windsurf": lambda: _windsurf_hook_check(required=False).status,
+        "copilot": lambda: "skipped",  # Copilot has no hooks
     }
-    labels = {"claude": "Claude Code", "cursor": "Cursor", "gemini": "Gemini CLI"}
+    labels = {
+        "claude": "Claude Code",
+        "cursor": "Cursor",
+        "gemini": "Gemini CLI",
+        "windsurf": "Windsurf",
+        "copilot": "GitHub Copilot",
+    }
     install_hook = {
         "claude": "halyard install-hook-claude",
         "cursor": "halyard install-hook-cursor",
         "gemini": "halyard install-hook-gemini",
+        "windsurf": "halyard install-hook-windsurf",
     }
 
     checks: list[DoctorCheck] = []
     for scope in scopes:
+        if scope == "copilot":
+            continue
         on_path = shutil.which(scope) is not None
         has_hook = hook_status[scope]() == "ok"
         has_mcp = _mcp_registered(scope)
@@ -391,6 +426,20 @@ def _unwired_tool_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
                     status="warning",
                     detail="installed but no Halyard hooks or MCP server",
                     fix=f"halyard setup  (or {install_hook[scope]})",
+                )
+            )
+
+    if tool in ("all", "copilot"):
+        from halyard.collectors.copilot import copilot_history_present, copilot_imported_any
+
+        if copilot_history_present() and not copilot_imported_any():
+            checks.append(
+                DoctorCheck(
+                    id="unwired.copilot",
+                    label="Copilot (unwired)",
+                    status="warning",
+                    detail="GitHub Copilot history on disk but none imported",
+                    fix="halyard import-copilot",
                 )
             )
 
@@ -704,7 +753,11 @@ def _collector_state_checks(project_dir: Path | None, hub_dir: Path | None) -> l
 
     checks.append(_integrity_check(home_state, project_dir, hub_dir))
 
-    for name, filename in (("Gemini state", "gc-session"), ("Cursor state", "cursor-session")):
+    # Single-file state collectors
+    for name, filename in (
+        ("Gemini state", "gc-session"),
+        ("Cursor state", "cursor-session"),
+    ):
         path = home_state / filename
         checks.append(
             DoctorCheck(
@@ -714,6 +767,18 @@ def _collector_state_checks(project_dir: Path | None, hub_dir: Path | None) -> l
                 detail=_age_detail(path) if path.exists() else "none",
             )
         )
+
+    # Directory-based state collectors
+    ws_dir = home_state / "ws-sessions"
+    ws_count = len(list(ws_dir.glob("*.json"))) if ws_dir.exists() else 0
+    checks.append(
+        DoctorCheck(
+            id="state.windsurf",
+            label="Windsurf state",
+            status="ok" if ws_count else "skipped",
+            detail=f"{ws_count} active trajectory/ies" if ws_count else "none",
+        )
+    )
 
     return checks
 
@@ -835,6 +900,21 @@ def _commands_from_gemini_settings(path: Path) -> list[str]:
 
 
 def _commands_from_cursor_settings(path: Path) -> list[str]:
+    commands: list[str] = []
+    data = _read_json(path)
+    hooks = data.get("hooks") if isinstance(data, dict) else None
+    if not isinstance(hooks, dict):
+        return commands
+    for entries in hooks.values():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if isinstance(entry, dict) and isinstance(entry.get("command"), str):
+                commands.append(entry["command"])
+    return commands
+
+
+def _commands_from_windsurf_settings(path: Path) -> list[str]:
     commands: list[str] = []
     data = _read_json(path)
     hooks = data.get("hooks") if isinstance(data, dict) else None

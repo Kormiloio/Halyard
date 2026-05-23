@@ -33,6 +33,7 @@ from halyard.collectors import (
     session_is_implausible,
     session_is_synthetic_telemetry,
 )
+from halyard.collectors.claude_code_surface import detect_surface
 from halyard.git_context import (
     commits_in_window,
     current_branch,
@@ -157,6 +158,7 @@ def handle_stop_hook() -> int:
     user_message_count: int | None = None
     tool_calls: int | None = None
     tool_errors: int | None = None
+    rejections: int | None = None
     mcp_servers_used: int | None = None
     mcp_server_names: str | None = None
     wall_seconds: int | None = None
@@ -169,12 +171,11 @@ def handle_stop_hook() -> int:
     transcript_path = payload.get("transcript_path", "")
     if transcript_path:
         ts = _read_from_transcript(transcript_path, since=start)
+        assistant_message_count = ts.assistant_count
+        interaction_count = ts.interaction_count
         if not (input_tokens or output_tokens) and (ts.input_tokens or ts.output_tokens):
             input_tokens, output_tokens = ts.input_tokens, ts.output_tokens
             cache_read, cache_write = ts.cache_read, ts.cache_write
-        if ts.assistant_count:
-            assistant_message_count = ts.assistant_count
-            interaction_count = ts.assistant_count
         if not model and ts.model:
             model = ts.model
         if not branch and ts.branch:
@@ -184,6 +185,7 @@ def handle_stop_hook() -> int:
         user_message_count = ts.user_count
         tool_calls = ts.tool_calls
         tool_errors = ts.tool_errors
+        rejections = ts.rejected_suggestion_count
         mcp_servers_used = ts.mcp_servers_used
         mcp_server_names = ts.mcp_server_names
         wall_seconds = ts.wall_seconds
@@ -233,6 +235,7 @@ def handle_stop_hook() -> int:
         _extra_tags = ["attribution:inferred"] if _project else []
 
     _remote = current_remote(cwd)
+    client_surface = detect_surface()
 
     session = AiSession(
         start=start,
@@ -251,6 +254,7 @@ def handle_stop_hook() -> int:
         tags=_extra_tags,
         branch=branch,
         remote=_remote,
+        client_surface=client_surface,
         commit_count=commit_count,
         code_added=code_added,
         code_removed=code_removed,
@@ -258,6 +262,7 @@ def handle_stop_hook() -> int:
         user_message_count=user_message_count,
         tool_calls=tool_calls,
         tool_errors=tool_errors,
+        rejected_suggestion_count=rejections,
         mcp_servers_used=mcp_servers_used,
         mcp_server_names=mcp_server_names,
         wall_seconds=wall_seconds,
@@ -423,6 +428,8 @@ class _TranscriptStats:
     user_count: int | None = None
     tool_calls: int | None = None
     tool_errors: int | None = None
+    rejected_suggestion_count: int | None = None
+    interaction_count: int | None = None
     # v3.4 MCP-usage inventory (privacy-bounded via mcp_inventory.py).
     mcp_servers_used: int | None = None
     mcp_server_names: str | None = None
@@ -489,6 +496,7 @@ def _read_from_transcript(
         user_count = 0
         tool_calls = 0
         tool_errors = 0
+        rejections = 0
         mcp_servers: set[str] = set()
         first_ts: datetime | None = None
         last_ts: datetime | None = None
@@ -565,15 +573,25 @@ def _read_from_transcript(
                         b for b in blocks if isinstance(b, dict) and b.get("type") == "tool_result"
                     ]
                     if results:
-                        tool_errors += sum(1 for b in results if bool(b.get("is_error")))
+                        for b in results:
+                            if bool(b.get("is_error")):
+                                tool_errors += 1
+                                # v3.3: distinguish explicit user rejection from tool failure
+                                content_str = str(b.get("content", "")).lower()
+                                if "user doesn't want to proceed" in content_str:
+                                    rejections += 1
                     else:
                         user_count += 1
 
-        had_transcript = stats.assistant_count > 0 or user_count > 0
+        had_transcript = (
+            stats.assistant_count > 0 or user_count > 0 or tool_calls > 0 or tool_errors > 0
+        )
         if had_transcript:
             stats.user_count = user_count
             stats.tool_calls = tool_calls
             stats.tool_errors = tool_errors
+            stats.rejected_suggestion_count = rejections
+            stats.interaction_count = stats.assistant_count + user_count
             stats.mcp_servers_used, stats.mcp_server_names = reduce_mcp(mcp_servers)
             if first_ts is not None and last_ts is not None and last_ts >= first_ts:
                 stats.wall_seconds = int((last_ts - first_ts).total_seconds())

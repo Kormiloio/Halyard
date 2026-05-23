@@ -1,9 +1,7 @@
-# v3.5 — Claude Code client-surface tag: Design (provisional)
+# v3.5 — Claude Code client-surface tag: Design
 
-**Provisional** — every "uses signal X" claim below is replaced by
-the Phase-0 spike output before code lands. The shape of the design
-(where the detector lives, how it serialises, how it renders) is not
-provisional.
+The design for advisory client-surface detection, confirmed by Phase-0
+spike results.
 
 ## Where
 
@@ -13,11 +11,11 @@ provisional.
   the heuristic stays testable and swappable when upstream offers a
   real signal.
 - **Call site:** `handle_stop_hook()` in
-  [src/halyard/collectors/claude_code.py:120](src/halyard/collectors/claude_code.py:120),
+  [src/halyard/collectors/claude_code.py:237](src/halyard/collectors/claude_code.py:237),
   one call right before constructing `AiSession`. The value is passed
   into the dataclass as `client_surface`.
 - **Schema:** one new optional field on `AiSession`
-  ([src/halyard/ai_log.py:250](src/halyard/ai_log.py:250)) —
+  ([src/halyard/ai_log.py:291](src/halyard/ai_log.py:291)) —
   `client_surface: str | None = None`. Serialisation is automatic via
   the existing key=value contract; no parser change beyond the field
   declaration.
@@ -25,28 +23,28 @@ provisional.
   `tool="claude-code"` row. Same pattern as `mcp_server_names` in
   v3.4 — additive column when data exists, silent when it doesn't.
 
-## Detection rules (pending Phase-0)
+## Detection rules
 
 The detector is a short ordered cascade. First match wins; if none
 match, return `None` (or `"unknown"` — see Open question below).
 
 ```
 1. If __CFBundleIdentifier env var indicates Anthropic's desktop
-   bundle (e.g. "com.anthropic.claudecode" — exact id confirmed by
-   spike) → "desktop".
-2. If TERM_PROGRAM is a real terminal emulator (iTerm.app,
-   Apple_Terminal, WezTerm, Alacritty, kitty, tmux, screen) and the
-   parent-process chain does NOT include the desktop bundle → "cli".
-3. If TERM_PROGRAM is "vscode" or the parent chain shows a JetBrains
-   helper → "ide".
-4. Otherwise → "unknown" (the explicit string), so dashboards can
+   bundle (startswith "com.anthropic.claude" or "com.anthropic.Claude")
+   → "desktop".
+2. If TERM_PROGRAM is "vscode" → "ide".
+3. If TERM_PROGRAM is a real terminal emulator (iTerm.app,
+   Apple_Terminal, WezTerm, Alacritty, kitty, tmux, screen, etc.)
+   and the parent-process chain does NOT include "claude" or
+   "anthropic" markers → "cli".
+4. If stdin is a TTY → "cli".
+5. Otherwise → "unknown" (the explicit string), so dashboards can
    show the bucket honestly rather than blank.
 ```
 
-Every step gates on a signal the Phase-0 spike has confirmed is (a)
-present, (b) stable, (c) different between surfaces. If a step's
-signal turns out to be absent or identical across surfaces on the
-owner's machine, that step is removed before merge.
+The parent-process chain walk is a last-resort to distinguish a
+terminal launched *by* the desktop app (which inherits terminal-like
+env vars) from a standalone terminal.
 
 ## Semantics
 

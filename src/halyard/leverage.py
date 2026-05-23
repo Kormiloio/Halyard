@@ -91,6 +91,7 @@ class StruggleSummary:
     rejection_rate: float | None
     rejection_covered: int  # sessions with interaction_data_available
     rejection_total_sessions: int  # all sessions in the window
+    rejection_overlaps_errors: bool = False  # v3.3: rejections are a subset of tool_errors
 
 
 def struggle_signals(sessions: list[AiSession]) -> StruggleSummary:
@@ -110,9 +111,13 @@ def struggle_signals(sessions: list[AiSession]) -> StruggleSummary:
     if captured:
         rejection_total: int | None = rej
         rejection_rate = (rej / (rej + acc)) if (rej + acc) else None
+        # v3.3: for Claude Code and Codex, rejections are counted inside tool_errors.
+        # Cursor rejections are distinct from tool_errors.
+        overlaps = any(s.tool in {"claude-code", "codex"} for s in captured)
     else:
         rejection_total = None
         rejection_rate = None
+        overlaps = False
 
     return StruggleSummary(
         tool_error_total=tool_error_total,
@@ -121,6 +126,7 @@ def struggle_signals(sessions: list[AiSession]) -> StruggleSummary:
         rejection_rate=rejection_rate,
         rejection_covered=len(captured),
         rejection_total_sessions=len(sessions),
+        rejection_overlaps_errors=overlaps,
     )
 
 
@@ -173,8 +179,9 @@ def render_rejection_phrase(s: StruggleSummary) -> str:
     if s.rejection_covered == 0 or s.rejection_total is None:
         return "rejections: not captured"
     pct = "" if s.rejection_rate is None else f" ({s.rejection_rate:.0%})"
+    overlap = " (overlaps tool_errors)" if s.rejection_overlaps_errors else ""
     return (
-        f"rejections {s.rejection_total}{pct} "
+        f"rejections {s.rejection_total}{pct}{overlap} "
         f"(over {s.rejection_covered} of {s.rejection_total_sessions} sessions; "
         f"rest: not captured)"
     )

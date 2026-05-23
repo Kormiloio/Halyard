@@ -924,6 +924,8 @@ def _render_state(
         {_tool_table(report.by_tool_usage)}
       </article>
 
+      {_surface_panel(report.by_tool_surface) if report.by_tool_surface else ""}
+
       <article class="panel span-4" data-panel="budget">
         <div class="panel-head">
           <div>
@@ -1886,6 +1888,20 @@ def _tool_table(buckets: Iterable[ToolUsageBucket]) -> str:
     return (
         _stbl("tools", "t,n,n,n,n") + "<thead><tr><th>Tool</th><th>Sessions</th><th>Tokens</th>"
         "<th>Cost</th><th>Share</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+    )
+
+
+def _surface_panel(buckets: Iterable[ToolUsageBucket]) -> str:
+    return (
+        '<article class="panel span-4" data-panel="surface">'
+        '<div class="panel-head">'
+        "<div>"
+        '<p class="eyebrow">Capture</p>'
+        "<h2>Surfaces</h2>"
+        "</div>"
+        "</div>"
+        f"{_tool_table(buckets)}"
+        "</article>"
     )
 
 

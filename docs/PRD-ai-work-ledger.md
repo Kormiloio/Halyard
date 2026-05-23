@@ -110,6 +110,12 @@ A bounded unit of AI tool activity: a Claude Code session, Codex session, API
 proxy window, Cursor operation, Gemini CLI turn, VS Code/Copilot manual entry,
 or agentic job segment. Stored in `ai-sessions.log`.
 
+Since v3.5, Claude Code sessions include an advisory **client surface** tag
+(`cli`, `desktop`, `ide`, or `unknown`) to distinguish between different tool
+launchers. This is a heuristic derived from the local environment, labeled as
+such in all reports, and is used to provide deeper visibility into how
+multi-interface tools are lean on for different types of work.
+
 ### AI work unit
 
 A higher-level aggregation of one or more AI sessions that belong to a task,

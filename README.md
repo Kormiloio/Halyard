@@ -58,12 +58,15 @@ design-partner pull, and will not change what local files mean.
 Halyard has three layers:
 
 **Collection** — Lightweight hooks that run where AI work happens. Claude Code,
-Cursor, and Gemini CLI hooks capture sessions automatically; a VS Code extension
-captures editing time, branch, and code delta — token counts unavailable until
-VS Code/Copilot exposes a public session hook. Captured fields include time, tokens when available, model, cost,
-project, and branch. Written to a plain-text log you own. New sessions are
-appended, and the current hardening track is making corrections explicit and
-auditable. Nothing is lost silently.
+Cursor, Windsurf, and Gemini CLI hooks capture sessions automatically; a VS Code
+extension captures editing time, branch, and code delta — token counts
+unavailable until VS Code/Copilot exposes a public session hook. Since v3.5,
+Claude Code sessions are tagged with an advisory **client surface**
+(`cli` / `desktop` / `ide`) detected from the local environment. Captured fields
+include time, tokens when available, model, cost, project, and branch. Written
+to a plain-text log you own. New sessions are appended, and the current
+hardening track is making corrections explicit and auditable. Nothing is lost
+silently.
 
 **Intelligence** — Analytics built on that log. Local CLI reports, cost-by-project breakdowns, per-model spend, budget alerts, and trust-labeled totals (captured vs. calculated vs. allocated). Works offline, no account required.
 
@@ -402,12 +405,14 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 
 | Change | Description |
 |--------|-------------|
-| [`v3.5-claude-code-surface`](./openspec/changes/v3.5-claude-code-surface/) | Feasibility-gated client surface for Claude Code evidence |
+| - | No active focus; all current changes shipped. |
 
 ### Shipped
 
 | Change | Description |
 |--------|-------------|
+| [`v3.6-windsurf-collector`](./openspec/changes/v3.6-windsurf-collector/) | Native collector for Windsurf IDE (Codeium) |
+| [`v3.5-claude-code-surface`](./openspec/changes/v3.5-claude-code-surface/) | Advisory client-surface tag (CLI vs. desktop) for Claude Code sessions |
 | [`v0-time-and-invoice`](./openspec/changes/v0-time-and-invoice/) | Project skeleton, `halyard init`, human time tracking, invoice generation |
 | [`v0.1-log-and-invoice`](./openspec/changes/archive/2026-05-08-v0.1-log-and-invoice/) | `halyard log` natural-language query + `halyard invoice` |
 | [`v0.2-ai-agent-loop`](./openspec/changes/archive/2026-05-08-v0.2-ai-agent-loop/) | Structured-output AI agent loop for `halyard log` |
@@ -456,7 +461,8 @@ This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-dr
 
 - **Shipped** — OSS launch (v0.2.1), honors and achievements (`halyard honors`),
   Passport stamps, Friends of the Sea voyage stages (`halyard voyage`), outcome
-  metadata v2.24: branch field, commit count, code delta, `halyard outcome sync`.
+  metadata v2.24: branch field, commit count, code delta, `halyard outcome sync`,
+  and Claude Code client-surface detection (v3.5).
 - **Then** — Attestable AI work appendix (v2.19): signed, client-safe proof of
   AI-assisted work, enriched with commit and PR signals.
 - **Later, if design partners ask** — Outcome graph (v3.0): connect sessions to

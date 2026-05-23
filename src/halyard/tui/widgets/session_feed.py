@@ -37,6 +37,7 @@ class SessionFeed(Static):
             marker = "▶" if index == selected_index else ("+" if is_new else " ")
             err_badge = f" ⚠{session.tool_errors}e" if session.tool_errors else ""
             branch_badge = f" [{escape(session.branch)}]" if session.branch else ""
+            surface_badge = f" [{escape(session.client_surface)}]" if session.client_surface else ""
             meta_badge = _metadata_badge(session)
             outcome_badge = _outcome_badge(session)
             line = (
@@ -46,7 +47,7 @@ class SessionFeed(Static):
                 f"{duration_str(session.end - session.start):>7} "
                 f"{tokens:>8} tok "
                 f"{cost_str(session.cost_usd):>9}"
-                f"{err_badge}{meta_badge}{branch_badge}{outcome_badge}"
+                f"{err_badge}{meta_badge}{surface_badge}{branch_badge}{outcome_badge}"
             )
             lines.append(line)
         self.last_rendered_text = "\n".join(lines)

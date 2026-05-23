@@ -1,8 +1,6 @@
 # v2.72 — Declarative field registry for AiSession serialization
 
-> Spec only — proposed, not started. A deliberate refactor, not
-> hardening. Architecture is stable; this is optional simplification
-> whose value must clear its churn cost before any code moves.
+Status: **shipped.**
 
 ## Why
 

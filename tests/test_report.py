@@ -23,6 +23,7 @@ def _s(
     model: str = "claude-sonnet-4-6",
     cost: float = 1.00,
     month: datetime = _THIS_MONTH,
+    client_surface: str | None = None,
 ) -> AiSession:
     return AiSession(
         start=month.replace(day=1, hour=10),
@@ -33,6 +34,7 @@ def _s(
         output_tokens=2000,
         cost_usd=cost,
         project=project,
+        client_surface=client_surface,
     )
 
 
@@ -83,6 +85,19 @@ def test_report_groups_by_model(tmp_path: Path) -> None:
         result = runner.invoke(app, ["report"])
     assert "claude-opus-4-7" in result.output
     assert "claude-sonnet-4-6" in result.output
+
+
+def test_report_groups_by_surface(tmp_path: Path) -> None:
+    _init(tmp_path)
+    append_session(tmp_path, _s(cost=3.00, client_surface="cli"))
+    append_session(tmp_path, _s(cost=1.00, client_surface="desktop"))
+
+    with patch("halyard.ai_log.Path.cwd", return_value=tmp_path):
+        result = runner.invoke(app, ["report", "--by-surface"])
+
+    assert result.exit_code == 0
+    assert "cli" in result.output
+    assert "desktop" in result.output
 
 
 def test_report_filters_to_current_month(tmp_path: Path) -> None:

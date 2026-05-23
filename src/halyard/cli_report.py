@@ -141,6 +141,11 @@ def register(app: typer.Typer) -> None:
             False, "--ledger", help="Include allocated seat/credits costs from ai-plans.toml."
         ),
         outcomes: bool = typer.Option(False, "--outcomes", help="Show outcome bucket totals."),
+        by_surface: bool = typer.Option(
+            False,
+            "--by-surface",
+            help="Group Claude Code sessions by detected client surface.",
+        ),
         json_: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
         json_sessions: bool = typer.Option(
             False, "--json-sessions", help="With --json, include the per-session array."
@@ -220,6 +225,7 @@ def register(app: typer.Typer) -> None:
                 "by_project": ai_report.by_project,
                 "by_model": ai_report.by_model,
                 "by_tool": ai_report.by_tool,
+                "by_tool_surface": ai_report.by_tool_surface,
                 "by_tool_usage": ai_report.by_tool_usage,
                 "attribution": attribution_mix(ai_report.sessions),
                 "unattributed_count": ai_report.unattributed_count,
@@ -276,6 +282,18 @@ def register(app: typer.Typer) -> None:
                     f"  {bucket.label:<32} [green]${bucket.cost_usd:.2f}[/]"
                     f"  {bucket.sessions} sessions"
                 )
+
+        if ai_report.by_tool_surface and by_surface:
+            console.print("\n[bold]By surface[/]")
+            for sbucket in ai_report.by_tool_surface:
+                tok_label = f"{sbucket.tokens:,} tokens  " if sbucket.tokens else ""
+                console.print(
+                    f"  {sbucket.tool:<32} [green]${sbucket.cost_usd:.2f}[/]"
+                    f"  {sbucket.sessions} sessions  {tok_label}"
+                )
+        elif by_surface:
+            console.print("\n[bold]By surface[/]")
+            console.print("  [dim]No surface labels captured yet.[/]")
 
         if ai_report.by_tool_usage:
             console.print("\n[bold]By tool[/]")

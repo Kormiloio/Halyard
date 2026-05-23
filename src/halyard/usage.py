@@ -20,8 +20,8 @@ def round_money(value: float, places: int = 2) -> float:
 def sum_spend(
     sessions: list[AiSession],
     *,
-    period_start: datetime,
-    period_end: datetime,
+    period_start: datetime | None = None,
+    period_end: datetime | None = None,
     api_only: bool = True,
     accounts: set[str] | None = None,
     places: int = 4,
@@ -29,8 +29,9 @@ def sum_spend(
     """Single spend-summing convention shared by budget and invoicing.
 
     Window is half-open on session *end* (period_start <= end < period_end)
-    so a session is billed in the period it completed. Result is quantized
-    with ROUND_HALF_UP so totals are deterministic across views.
+    so a session is billed in the period it completed. If periods are None,
+    all sessions are summed. Result is quantized with ROUND_HALF_UP so
+    totals are deterministic across views.
     """
     total = Decimal(0)
     for s in sessions:
@@ -38,8 +39,11 @@ def sum_spend(
             continue
         if accounts is not None and s.project not in accounts:
             continue
-        if period_start <= s.end < period_end:
-            total += Decimal(str(s.cost_usd))
+        if period_start is not None and s.end < period_start:
+            continue
+        if period_end is not None and s.end >= period_end:
+            continue
+        total += Decimal(str(s.cost_usd))
     quant = Decimal(1).scaleb(-places)  # e.g. places=2 -> Decimal("0.01")
     return float(total.quantize(quant, rounding=ROUND_HALF_UP))
 
@@ -344,7 +348,7 @@ def _daily_bucket(day: date, by_day: dict[date, list[AiSession]]) -> DailyUsageB
         output_tokens=sum(_known_output(s) for s in sessions),
         cache_read_tokens=sum(s.cache_read or 0 for s in sessions if s.tokens_available),
         cache_write_tokens=sum(s.cache_write or 0 for s in sessions if s.tokens_available),
-        cost_usd=sum(s.cost_usd for s in sessions),
+        cost_usd=sum_spend(sessions),
         has_missing_token_data=any(not s.tokens_available for s in sessions),
         model_tokens=dict(model_tokens),
         model_io={m: (io[0], io[1]) for m, io in model_io.items()},
@@ -352,68 +356,75 @@ def _daily_bucket(day: date, by_day: dict[date, list[AiSession]]) -> DailyUsageB
 
 
 def _model_buckets(sessions: list[AiSession]) -> list[ModelUsageBucket]:
-    rows: dict[str, dict[str, float | int]] = defaultdict(
+    from halyard.model_breakdown import iter_model_usage
+    from halyard.model_breakdown import parse as _parse_breakdown
+
+    # model -> {field: sum}
+    rows: dict[str, dict[str, int]] = defaultdict(
         lambda: {
             "sessions": 0,
             "input": 0,
             "output": 0,
             "cache_read": 0,
             "cache_write": 0,
-            "cost": 0.0,
         }
     )
-    from halyard.model_breakdown import iter_model_usage
-    from halyard.model_breakdown import parse as _parse_breakdown
+    # model -> list[AiSession] (for sum_spend)
+    model_sessions: dict[str, list[AiSession]] = defaultdict(list)
+    # model -> sum of cost segments (for multi-model sessions)
+    multi_model_costs: dict[str, Decimal] = defaultdict(Decimal)
 
     for session in sessions:
         if _parse_breakdown(session.model_breakdown) is not None:
             # Multi-model: attribute each model its own tokens + cost.
             for model, m_in, m_out, m_cr, m_cw, m_cost in iter_model_usage(session):
                 row = rows[model]
-                row["sessions"] = int(row["sessions"]) + 1
-                row["input"] = int(row["input"]) + m_in
-                row["output"] = int(row["output"]) + m_out
-                row["cache_read"] = int(row["cache_read"]) + m_cr
-                row["cache_write"] = int(row["cache_write"]) + m_cw
-                row["cost"] = float(row["cost"]) + m_cost
+                row["sessions"] += 1
+                row["input"] += m_in
+                row["output"] += m_out
+                row["cache_read"] += m_cr
+                row["cache_write"] += m_cw
+                multi_model_costs[model] += Decimal(str(m_cost))
             continue
+
         # Single-model: byte-identical to pre-v2.61 behaviour.
         row = rows[session.model]
-        row["sessions"] = int(row["sessions"]) + 1
-        row["input"] = int(row["input"]) + _known_input(session)
-        row["output"] = int(row["output"]) + _known_output(session)
-        row["cache_read"] = int(row["cache_read"]) + (
-            (session.cache_read or 0) if session.tokens_available else 0
-        )
-        row["cache_write"] = int(row["cache_write"]) + (
-            (session.cache_write or 0) if session.tokens_available else 0
-        )
-        row["cost"] = float(row["cost"]) + session.cost_usd
+        row["sessions"] += 1
+        row["input"] += _known_input(session)
+        row["output"] += _known_output(session)
+        row["cache_read"] += (session.cache_read or 0) if session.tokens_available else 0
+        row["cache_write"] += (session.cache_write or 0) if session.tokens_available else 0
+        model_sessions[session.model].append(session)
+
+    # Calculate final costs per model
+    final_costs: dict[str, float] = {}
+    for model in rows:
+        cost = multi_model_costs[model]
+        if model in model_sessions:
+            cost += Decimal(str(sum_spend(model_sessions[model])))
+        final_costs[model] = float(cost.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
     total_tokens = sum(
-        int(row["input"]) + int(row["output"]) + int(row["cache_read"]) + int(row["cache_write"])
+        row["input"] + row["output"] + row["cache_read"] + row["cache_write"]
         for row in rows.values()
     )
-    total_cost = sum(float(row["cost"]) for row in rows.values())
-    total_sessions = sum(int(row["sessions"]) for row in rows.values())
+    total_cost = sum(final_costs.values())
+    total_sessions = sum(row["sessions"] for row in rows.values())
     buckets = [
         ModelUsageBucket(
             model=model,
-            sessions=int(row["sessions"]),
-            input_tokens=int(row["input"]),
-            output_tokens=int(row["output"]),
-            cache_read_tokens=int(row["cache_read"]),
-            cache_write_tokens=int(row["cache_write"]),
-            cost_usd=float(row["cost"]),
+            sessions=row["sessions"],
+            input_tokens=row["input"],
+            output_tokens=row["output"],
+            cache_read_tokens=row["cache_read"],
+            cache_write_tokens=row["cache_write"],
+            cost_usd=final_costs[model],
             token_share=_share(
-                int(row["input"])
-                + int(row["output"])
-                + int(row["cache_read"])
-                + int(row["cache_write"]),
+                row["input"] + row["output"] + row["cache_read"] + row["cache_write"],
                 total_tokens,
             ),
-            cost_share=_share(float(row["cost"]), total_cost),
-            session_share=_share(int(row["sessions"]), total_sessions),
+            cost_share=_share(final_costs[model], total_cost),
+            session_share=_share(row["sessions"], total_sessions),
         )
         for model, row in rows.items()
     ]
@@ -421,22 +432,25 @@ def _model_buckets(sessions: list[AiSession]) -> list[ModelUsageBucket]:
 
 
 def _tool_buckets(sessions: list[AiSession]) -> list[ToolUsageBucket]:
-    rows: dict[str, dict[str, float | int]] = defaultdict(
-        lambda: {"sessions": 0, "tokens": 0, "cost": 0.0}
-    )
+    # tool -> {field: sum}
+    rows: dict[str, dict[str, int]] = defaultdict(lambda: {"sessions": 0, "tokens": 0})
+    # tool -> list[AiSession] (for sum_spend)
+    tool_sessions: dict[str, list[AiSession]] = defaultdict(list)
+
     for session in sessions:
         row = rows[session.tool]
-        row["sessions"] = int(row["sessions"]) + 1
-        row["tokens"] = int(row["tokens"]) + _tokens(session)
-        row["cost"] = float(row["cost"]) + session.cost_usd
-    total_sessions = sum(int(row["sessions"]) for row in rows.values())
+        row["sessions"] += 1
+        row["tokens"] += _tokens(session)
+        tool_sessions[session.tool].append(session)
+
+    total_sessions = sum(row["sessions"] for row in rows.values())
     buckets = [
         ToolUsageBucket(
             tool=tool,
-            sessions=int(row["sessions"]),
-            tokens=int(row["tokens"]),
-            cost_usd=float(row["cost"]),
-            session_share=_share(int(row["sessions"]), total_sessions),
+            sessions=row["sessions"],
+            tokens=row["tokens"],
+            cost_usd=sum_spend(tool_sessions[tool]),
+            session_share=_share(row["sessions"], total_sessions),
         )
         for tool, row in rows.items()
     ]

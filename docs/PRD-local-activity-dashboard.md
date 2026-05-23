@@ -78,9 +78,9 @@ into one scannable surface.
 It should use:
 
 - compact metric tiles for human time, AI sessions, tokens, and cost;
-- a live session stream for recent AI work;
+- a live session stream for recent AI work, including surface badges;
 - status indicators for hooks, logs, pricing, and attribution health;
-- restrained charts for model/tool mix and cost over time;
+- restrained charts for model/tool mix (now surface-aware) and cost over time;
 - clear visual labels for captured, calculated, allocated, inferred, and
   missing values;
 - a layout that works during real work, not just in a demo.
@@ -98,7 +98,9 @@ and invoice readiness.
 ### Sessions
 
 Shows the raw AI session stream from `ai-sessions.log`, with filters for date,
-project, tool, model, source, and attribution state.
+project, tool, model, source, and attribution state. Since v3.5, Claude Code
+sessions are badged with their **client surface** (`cli`, `desktop`, or `ide`)
+to help developers audit their interface lean.
 
 ### Costs
 

@@ -28,6 +28,7 @@ def _session(
     input_tokens: int = 100,
     output_tokens: int = 50,
     tokens_available: bool = True,
+    client_surface: str | None = None,
 ) -> AiSession:
     start_time = start or datetime(2026, 5, 7, 10)
     return AiSession(
@@ -41,6 +42,7 @@ def _session(
         project=project,
         tokens_available=tokens_available,
         tags=tags or [],
+        client_surface=client_surface,
     )
 
 
@@ -949,3 +951,20 @@ def test_session_feed_shows_metadata_badges() -> None:
     assert "4i" in feed.last_rendered_text
     assert "3f" in feed.last_rendered_text
     assert "test:pass" in feed.last_rendered_text
+
+
+def test_session_feed_shows_client_surface_badge() -> None:
+    from halyard.tui.widgets.session_feed import SessionFeed
+
+    session = _session(
+        tool="claude-code",
+        model="claude-sonnet-4-6",
+        input_tokens=0,
+        output_tokens=0,
+        client_surface="desktop",
+    )
+    feed = SessionFeed()
+
+    feed.render_sessions([session])
+
+    assert "desktop" in feed.last_rendered_text

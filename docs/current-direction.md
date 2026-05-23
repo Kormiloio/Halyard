@@ -207,6 +207,16 @@ through `v2.59-…` plus roadmap items in `openspec/project.md`.
     validation, collector schema-drift canary). See the "Agent Access
     (MCP)" section above and `openspec/project.md` items 29–36.
     1150 tests + 19 vscode.
+18. **v3.5** — Claude Code client-surface tag — **shipped**: advisory
+    `client_surface` tag (`cli`/`desktop`/`ide`/`unknown`) detected from
+    the hook's local environment. 1298 tests.
+19. **v2.72** — Declarative field registry — **shipped**: refactor
+    `ai_log.py` to use a single source of truth for 45+ optional session
+    fields, eliminating writer/parser drift. Byte-identical output
+    verified by property tests. 1306 tests.
+20. **v3.6** — Windsurf native collector — **shipped**: autonomous
+    capture for Codeium Windsurf via `hooks.json`. TTL-based
+    finalization (30m). 1368 tests.
 
 ---
 

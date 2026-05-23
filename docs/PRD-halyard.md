@@ -218,10 +218,21 @@ always takes precedence — the auto-timer silently skips when one is running.
 
 ### AI session
 A bounded unit of AI tool activity: a Claude Code session, a Cursor stop event,
-a Gemini CLI turn, a Codex Desktop session, a VS Code/Copilot manual capture, or
-a direct API call. Stored as one line in `ai-sessions.log`. Fields: start, end,
-tool, model, input tokens, output tokens, cost, and optional key=value pairs for
-project, branch, cache, billing model, and more.
+a Gemini CLI turn, a Codex Desktop session, a Windsurf Cascade session,
+a VS Code/Copilot manual capture, or a direct API call. Stored as one line in
+`ai-sessions.log`. Fields: start, end, tool, model, input tokens, output
+tokens, cost, and optional key=value pairs for project, branch, cache,
+billing model, and more.
+...
+- **Windsurf** (v3.6): Captures session timing and interaction counts
+  autonomously via `hooks.json`. Finalizes sessions after 30 minutes of
+  inactivity.
+
+Since v3.5, Claude Code sessions are tagged with a **client surface** heuristic
+(`cli`, `desktop`, `ide`, or `unknown`). This allows developers who use both the
+Claude Code CLI and the desktop app to see how their usage breaks down across
+different interfaces. Like attribution and cost, this tag is advisory and
+labeled as a heuristic in all reporting surfaces.
 
 ### Ambient capture
 Sessions are captured automatically wherever the developer is working — not only

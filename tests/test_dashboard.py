@@ -54,6 +54,29 @@ def test_render_dashboard_shows_cockpit_and_session(tmp_path: Path) -> None:
     assert "claude-sonnet-4-6" in html
 
 
+def test_render_dashboard_shows_surface_panel(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 7, 10, 0),
+            end=datetime(2026, 5, 7, 10, 30),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=1000,
+            output_tokens=500,
+            cost_usd=0.01,
+            project="acme:auth",
+            client_surface="ide",
+        ),
+    )
+
+    html = render_dashboard(tmp_path)
+
+    assert "Surfaces" in html
+    assert "claude-code · ide" in html
+
+
 def test_render_dashboard_shows_human_time(tmp_path: Path) -> None:
     _init_project(tmp_path)
     (tmp_path / "time.timeclock").write_text(

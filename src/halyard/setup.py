@@ -10,7 +10,7 @@ from halyard.hub import find_hub
 
 ToolName = str
 
-SUPPORTED_TOOLS: tuple[ToolName, ...] = ("claude", "cursor", "gemini")
+SUPPORTED_TOOLS: tuple[ToolName, ...] = ("claude", "cursor", "gemini", "windsurf")
 
 
 @dataclass(frozen=True)
@@ -34,11 +34,12 @@ def resolve_selection(
     claude: bool,
     cursor: bool,
     gemini: bool,
+    windsurf: bool,
     yes: bool,
 ) -> SetupSelection:
     """Resolve setup flags into a deterministic list of tool slugs."""
     selected: list[ToolName] = []
-    if all_tools or (yes and not any((claude, cursor, gemini))):
+    if all_tools or (yes and not any((claude, cursor, gemini, windsurf))):
         selected.extend(SUPPORTED_TOOLS)
     else:
         if claude:
@@ -47,6 +48,8 @@ def resolve_selection(
             selected.append("cursor")
         if gemini:
             selected.append("gemini")
+        if windsurf:
+            selected.append("windsurf")
     return SetupSelection(tools=tuple(selected))
 
 
@@ -59,6 +62,7 @@ def tool_label(tool: ToolName) -> str:
         "claude": "Claude Code",
         "cursor": "Cursor",
         "gemini": "Gemini CLI",
+        "windsurf": "Windsurf",
     }.get(tool, tool)
 
 

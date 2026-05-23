@@ -195,6 +195,21 @@ def test_stop_hook_captures_cache_tokens(tmp_path: Path) -> None:
     assert s.cache_write == 2000
 
 
+def test_stop_hook_records_client_surface_if_detected(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    with patch("halyard.collectors.claude_code.detect_surface", return_value="cli"):
+        _run_stop_hook(
+            tmp_path,
+            {
+                "model": "claude-opus-4-7",
+                "usage": {"input_tokens": 1000, "output_tokens": 200},
+            },
+        )
+
+    s = parse_sessions(tmp_path)[0]
+    assert s.client_surface == "cli"
+
+
 # ---------------------------------------------------------------------------
 # install-hook
 # ---------------------------------------------------------------------------

@@ -186,3 +186,46 @@ def register(app: typer.Typer) -> None:
             f"{len(imported)} Gemini session(s). "
             f"({skipped} already imported, skipped.)"
         )
+
+    @app.command(name="import-copilot")
+    def import_copilot(
+        dry_run: bool = typer.Option(
+            False, "--dry-run", help="Show what would be imported without writing anything."
+        ),
+        all_projects: bool = typer.Option(
+            False,
+            "--all",
+            help="Import sessions for all Halyard projects, not just the current one.",
+        ),
+    ) -> None:
+        """Import GitHub Copilot session history into ai-sessions.log."""
+        from halyard.ai_log import find_project_dir
+        from halyard.collectors.copilot import import_copilot_sessions
+
+        project_dir = find_project_dir()
+        if project_dir is None and not all_projects:
+            console.print(
+                "[bold red]Error:[/] No Halyard project found. "
+                "Run [bold]halyard init[/] first or use [bold]--all[/]."
+            )
+            raise typer.Exit(code=1)
+
+        sessions = import_copilot_sessions(
+            project_dir=project_dir,
+            dry_run=dry_run,
+            all_projects=all_projects,
+        )
+
+        if not sessions:
+            console.print("[yellow]No new Copilot sessions to import.[/]")
+            return
+
+        label = "[dim](dry run)[/dim] " if dry_run else ""
+        console.print(f"{label}[bold green]Imported[/] {len(sessions)} Copilot session(s).")
+        for s in sessions:
+            proj = s.project or "(unattributed)"
+            console.print(
+                f"  {s.start:%Y-%m-%d %H:%M} → {s.end:%H:%M}  "
+                f"[cyan]{s.model}[/]  out={s.output_tokens}  "
+                f"[dim]{proj}[/dim]"
+            )

@@ -99,6 +99,29 @@ def test_report_json_totals_match_text(tmp_path: Path, monkeypatch: pytest.Monke
     assert round(totals["cost_usd"], 4) == round(0.0123 * 2, 4)
 
 
+def test_report_json_includes_surface_buckets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init(tmp_path)
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 7, 10, 0),
+            end=datetime(2026, 5, 7, 10, 30),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=1000,
+            output_tokens=500,
+            cost_usd=0.0123,
+            project="acme:auth",
+            client_surface="cli",
+        ),
+    )
+    rep = _json_out(["report", "--all", "--json"], tmp_path, monkeypatch)
+    assert isinstance(rep.get("by_tool_surface"), list)
+    assert any(bucket["tool"].endswith("cli") for bucket in rep["by_tool_surface"])
+
+
 # 3. --json-sessions gating -------------------------------------------------
 
 

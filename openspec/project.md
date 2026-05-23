@@ -701,20 +701,15 @@ layers must read from this local source of truth; they do not replace it.
    `openspec/changes/v2.71-review-hardening/`.
    **Status: complete (1260 tests passing).**
 
-50. **v2.72 — Declarative field registry (optional refactor):**
-   `ai_log.py` declares each optional `AiSession` field's wire
-   handling in two hand-synced places (45 `kvs.append` writers + 45
-   parser `case` arms) — the v2.71 `tags` bug was exactly that
-   writer/parser asymmetry. Replace the tail with one ordered
-   `FieldSpec` registry both sides iterate, so the asymmetry class is
-   structurally impossible. NOT Pydantic (it serializes JSON, not the
-   plain-text contract; would not replace the codec). Behaviour-
-   pinned: property + golden-corpus round-trip test written first,
-   byte-identical output required, explicitly **cancellable** at a
-   decision gate if it doesn't net fewer lines + single edit-site +
-   zero behaviour diff. Spec in
+50. **v2.72 — Declarative field registry (stability/refactor):**
+   `ai_log.py` defines 45+ optional `AiSession` fields. Previously,
+   their wire handling was duplicated in `to_log_line` (manual `if`
+   checks) and `_parse_line_result` (manual `match` arms). v2.72
+   introduces a single `_FIELDS` registry; both writer and parser
+   iterate it, ensuring byte-for-byte symmetry and eliminating the
+   writer/parser drift bug class. Positional fields are unchanged.
+   **Status: complete (1306 tests passing).** Spec in
    `openspec/changes/v2.72-field-registry/`.
-   **Status: proposed (spec only).**
 
 51. **v2.73 — Sortable dashboard tables (UX):** every web table is
    server-rendered with a single fixed sort. Add progressive-
@@ -879,10 +874,9 @@ layers must read from this local source of truth; they do not replace it.
    **Status: complete (1352 tests passing; +19, ≥15 required).** Spec
    in `openspec/changes/v3.4-mcp-inventory/`. **v3.0-deferred trio
    status:** review-friction shipped (v3.1); struggle shipped (v3.2);
-   MCP *usage* shipped (v3.4); still open — cross-collector rejection
-   (v3.3 feasibility-gated, awaiting the owner's Claude-Code
-   reclassification decision) and MCP *availability* (deferred,
-   config-reading privacy surface).
+   MCP *usage* shipped (v3.4); cross-collector rejection shipped
+   (v3.3 — detected for Claude Code and Codex, Gemini N/A); still
+   open — MCP *availability* (deferred, config-reading privacy surface).
 
 58. **v3.5 — Claude Code client-surface tag (CLI vs. desktop):** the
    Claude Code collector tags every session `tool="claude-code"`
@@ -893,14 +887,40 @@ layers must read from this local source of truth; they do not replace it.
    adds an optional advisory `client_surface` sub-tag
    (`cli`/`desktop`/`ide`/`unknown`) on `AiSession`, detected from the
    hook process's own environment (env vars + parent-process
-   ancestry) — the Stop payload and transcript are byte-identical
-   across surfaces, so the signal *must* come from the hook's local
-   context. `tool="claude-code"` is unchanged; the tag is purely
+   ancestry). `tool="claude-code"` is unchanged; the tag is purely
    additive and rendered with honest "(heuristic)" labelling.
-   **Status: proposed, feasibility-gated** on a Phase-0 spike that
-   confirms which env signals actually differ between the owner's
-   CLI and desktop surfaces. Spec in
+   **Status: complete (1298 tests passing).** Spec in
    `openspec/changes/v3.5-claude-code-surface/`.
+
+59. **v3.3 — Cross-collector rejection capture (UX):** struggle
+   signals (v3.2) surfaced rejections but only Cursor *captured*
+   them. v3.3 closes the gap for Claude Code (detected from
+   transcript error markers) and Codex Desktop (detected from
+   rollout log statuses). These are counted as a subset of
+   `tool_errors` for these tools, labeled with honest "(overlaps
+   tool_errors)" metadata. Gemini CLI is confirmed N/A due to
+   lack of approval markers.
+   **Status: complete (1366 tests passing).** Spec in
+   `openspec/changes/v3.3-cross-collector-rejection/`.
+
+60. **v3.6 — Windsurf native collector (onboarding):** Windsurf
+   (Codeium) IDE produces agentic Cascade sessions. v3.6 adds an
+   autonomous collector (`src/halyard/collectors/windsurf.py`) that
+   hooks into Windsurf's `hooks.json` to capture session timing
+   and interaction counts. Uses `trajectory_id` as the session key
+   and a TTL-based finalization strategy (30-min inactivity).
+   **Status: complete (1374 tests passing).** Spec in
+   `openspec/changes/v3.6-windsurf-collector/`.
+
+61. **v3.7 — GitHub Copilot Importer (automated capture):**
+   v3.7 introduces a native importer for the VS Code GitHub
+   Copilot extension. Discovered internal VS Code workspace
+   storage JSONL logs enable retroactive metadata capture
+   (timestamps, output tokens, user/assistant counts, tool
+   calls) and outcome tracking (files touched manifest).
+   Brings Copilot out of manual-task mode.
+   **Status: complete (1377 tests passing).** Spec in
+   `openspec/changes/v3.7-copilot-importer/`.
 
 ## Deferred or gated
 
