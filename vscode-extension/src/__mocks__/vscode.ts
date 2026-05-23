@@ -66,6 +66,7 @@ export const window = {
   }),
   showInformationMessage: async (): Promise<undefined> => undefined,
   showWarningMessage: async (): Promise<undefined> => undefined,
+  showInputBox: async (): Promise<string | undefined> => undefined,
   onDidChangeActiveTextEditor: (_listener: unknown): Disposable => ({
     dispose: () => {},
   }),

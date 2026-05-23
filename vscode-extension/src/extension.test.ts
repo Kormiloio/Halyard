@@ -6,8 +6,8 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { execFile, spawn } from "node:child_process";
-import { buildRecordArgs, numericPart, splitExecutable, readGitStats, startAIWork, stopAndRecordAIWork, markActivity, openDashboard, showCurrentScope } from "./extension.js";
-import { resetVscodeMocks, setConfiguration } from "./__mocks__/vscode";
+import { activate, buildRecordArgs, numericPart, splitExecutable, readGitStats, startAIWork, stopAndRecordAIWork, recordAISession, markActivity, openDashboard, showCurrentScope } from "./extension.js";
+import { resetVscodeMocks, setConfiguration, window } from "./__mocks__/vscode";
 
 const execFileMock = execFile as unknown as ReturnType<typeof vi.fn>;
 const spawnMock = spawn as unknown as ReturnType<typeof vi.fn>;
@@ -313,5 +313,106 @@ describe("extension lifecycle and git stats", () => {
     });
 
     await showCurrentScope({ workspaceState: { get: () => undefined }, subscriptions: [] } as any);
+  });
+
+  it("recordAISession prompts for minutes/note and records a session", async () => {
+    window.showInputBox = vi
+      .fn()
+      .mockResolvedValueOnce("12")
+      .mockResolvedValueOnce("manual session note");
+
+    const context = makeContext();
+    execFileMock.mockImplementation((command, args, _options, callback) => {
+      if (command === "git") {
+        if (args[0] === "branch") callback(null, "main\n", "");
+        else callback(null, "3\t1\tsrc/extension.ts\n", "");
+      } else if (command === "halyard") {
+        callback(null, "", "");
+      } else {
+        callback(null, "", "");
+      }
+    });
+
+    await recordAISession(context as any);
+
+    expect(execFileMock).toHaveBeenLastCalledWith(
+      "halyard",
+      expect.arrayContaining([
+        "record-session",
+        "--tool",
+        "vscode",
+        "--minutes",
+        "12",
+        "--note",
+        "manual session note",
+      ]),
+      expect.anything(),
+      expect.any(Function),
+    );
+  });
+
+  it("activate prompts to recover an unfinished VS Code session and discards when requested", async () => {
+    const state = {
+      startedAt: Date.now() - 5 * 60 * 1000,
+      activeSeconds: 0,
+      idleSeconds: 0,
+      lastActivityAt: Date.now() - 60 * 1000,
+    };
+    const context = makeContext();
+    await context.workspaceState.update(SESSION_KEY, state);
+
+    window.showWarningMessage = vi.fn().mockResolvedValue("Discard");
+    window.showInputBox = vi.fn();
+    execFileMock.mockImplementation((command, args, _options, callback) => {
+      if (command === "git") {
+        if (args[0] === "branch") callback(null, "main\n", "");
+        else callback(null, "", "");
+      } else {
+        callback(null, "", "");
+      }
+    });
+
+    activate(context as any);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(context.workspaceState.get(SESSION_KEY)).toBeUndefined();
+    expect(window.showWarningMessage).toHaveBeenCalled();
+  });
+
+  it("activate prompts to recover an unfinished VS Code session and records when requested", async () => {
+    const state = {
+      startedAt: Date.now() - 5 * 60 * 1000,
+      activeSeconds: 0,
+      idleSeconds: 0,
+      lastActivityAt: Date.now() - 60 * 1000,
+    };
+    const context = makeContext();
+    await context.workspaceState.update(SESSION_KEY, state);
+
+    window.showWarningMessage = vi.fn().mockResolvedValue("Record it");
+    window.showInputBox = vi.fn();
+    execFileMock.mockImplementation((command, args, _options, callback) => {
+      if (command === "git") {
+        if (args[0] === "branch") callback(null, "main\n", "");
+        else callback(null, "1\t0\tsrc/extension.ts\n", "");
+      } else if (command === "halyard") {
+        callback(null, "", "");
+      } else {
+        callback(null, "", "");
+      }
+    });
+
+    activate(context as any);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(execFileMock).toHaveBeenCalledWith(
+      "halyard",
+      expect.arrayContaining(["record-session", "--tool", "vscode"]),
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(context.workspaceState.get(SESSION_KEY)).toBeUndefined();
   });
 });
