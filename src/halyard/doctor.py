@@ -56,6 +56,7 @@ def build_doctor_report(
     checks.extend(_hook_checks(tool, current))
     checks.extend(_unwired_tool_checks(tool, current))
     checks.extend(_collector_drift_checks(project_dir, hub_dir))
+    checks.extend(_capture_coverage_checks(project_dir, hub_dir, now=now))
     checks.extend(_attribution_quality_checks(project_dir, hub_dir))
     checks.extend(_collector_state_checks(project_dir, hub_dir))
     if first_capture:
@@ -621,6 +622,104 @@ def _collector_drift_checks(project_dir: Path | None, hub_dir: Path | None) -> l
                         f"check the {tool} hook/output and the tool's version; "
                         "`halyard doctor --tool <claude|cursor|gemini>` for hook health"
                     ),
+                )
+            )
+    return checks
+
+
+# Capture-coverage canary. The 2026-05 Gemini outage went unnoticed for 16
+# days because doctor only checked "hooks installed", and the drift canary
+# (which keys on recent rows) can't see a tool that produces *no* rows. This
+# canary compares each live-capture tool's newest on-disk session file against
+# its last captured row: if the tool keeps writing sessions while the ledger
+# stalls, capture silently broke. Grace days absorb normal lag (an in-flight
+# turn, an idle gap) without false positives.
+_COVERAGE_LAG_DAYS = 2
+
+_COVERAGE_FIX = {
+    "claude-code": (
+        "recent turns may be unrecorded — check the Stop hook "
+        "(`halyard doctor --tool claude`) and upgrade the installed halyard binary"
+    ),
+    "gemini-cli": (
+        "recover with `halyard import-gemini`, then check the AfterAgent hook "
+        "(`halyard doctor --tool gemini`)"
+    ),
+}
+
+
+def _newest_disk_activity(tool: str) -> datetime | None:
+    """Newest mtime among a live-capture tool's on-disk session files.
+
+    Only tools with a cheap on-disk source the collector reads are probed;
+    importer tools (codex/copilot) are covered by the unwired-import nudge.
+    Returns None for an un-probed tool or when no files exist.
+    """
+    paths: list[Path] = []
+    try:
+        if tool == "claude-code":
+            root = Path.home() / ".claude" / "projects"
+            if root.exists():
+                paths = list(root.glob("*/*.jsonl"))
+        elif tool == "gemini-cli":
+            from halyard.collectors.gemini_history import find_all_session_files
+
+            paths = find_all_session_files()
+        else:
+            return None
+    except OSError:
+        return None
+    newest: float | None = None
+    for p in paths:
+        try:
+            m = p.stat().st_mtime
+        except OSError:
+            continue
+        if newest is None or m > newest:
+            newest = m
+    return datetime.fromtimestamp(newest) if newest is not None else None
+
+
+def _capture_coverage_checks(
+    project_dir: Path | None, hub_dir: Path | None, *, now: datetime | None = None
+) -> list[DoctorCheck]:
+    """Warn when a live-capture tool's ledger lags fresh on-disk activity.
+
+    For each probed tool with a capture baseline (≥1 recorded row — so a
+    never-used tool can't false-positive), if its on-disk session files are
+    more than ``_COVERAGE_LAG_DAYS`` newer than the last captured row, capture
+    is likely broken. Detection only; ``warning``, never ``error`` (the
+    exit-code contract is preserved).
+    """
+    del now  # reserved for symmetry with other check builders; disk drives timing
+    sessions = _sessions_for(project_dir, hub_dir)
+    last_end: dict[str, datetime] = {}
+    for s in sessions:
+        cur = last_end.get(s.tool)
+        if cur is None or s.end > cur:
+            last_end[s.tool] = s.end
+
+    checks: list[DoctorCheck] = []
+    for tool in ("claude-code", "gemini-cli"):
+        captured = last_end.get(tool)
+        if captured is None:
+            continue  # no baseline — never captured, not a regression
+        disk = _newest_disk_activity(tool)
+        if disk is None:
+            continue
+        lag_days = (disk - captured).total_seconds() / 86400
+        if lag_days > _COVERAGE_LAG_DAYS:
+            checks.append(
+                DoctorCheck(
+                    id=f"coverage.{tool}",
+                    label=f"{tool} (capture lagging)",
+                    status="warning",
+                    detail=(
+                        f"last captured {captured:%Y-%m-%d %H:%M}, but {tool} session "
+                        f"files are as recent as {disk:%Y-%m-%d %H:%M} "
+                        f"(~{lag_days:.0f}d uncaptured) — collector may be broken"
+                    ),
+                    fix=_COVERAGE_FIX.get(tool),
                 )
             )
     return checks

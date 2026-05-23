@@ -4,6 +4,56 @@ All notable changes to Halyard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Gemini CLI sessions silently not captured (v3.8):** Gemini CLI switched
+  its on-disk session history from a single-object `session-*.json`
+  checkpoint to a line-delimited `session-*.jsonl` rollout, which the
+  collector did not understand — no Gemini session had been recorded since
+  2026-05-07. The history parser (`gemini_history.py`, used by both
+  `halyard import-gemini` and the live hook) now detects `.jsonl` and parses
+  it as a bounded stream. Because the rollout re-emits the same assistant
+  message many times as it streams, events are deduped by `id` before
+  aggregation, so token/tool totals match Gemini's own `/quit` summary
+  instead of being inflated ~30×. Discovery now finds `.jsonl` files; the
+  legacy `.json` path is unchanged.
+- **Gemini live-hook recorded nothing (tz-aware crash, v3.8):** the same
+  outage had a second cause on the live-hook side. Gemini's SessionStart
+  payload timestamp is now tz-aware (trailing `Z`), so `handle_agent_stop`
+  parsed an aware `turn_start` and subtracted naive `datetime.now()`,
+  raising `TypeError` that the hook crash-backstop swallowed — every
+  `AfterAgent` fire silently recorded nothing and never reset state
+  (`AfterModel` was unaffected, so token state still accumulated). The hook
+  now normalises the timestamp to local-naive.
+- **Claude Code silent under-capture (v3.9):** the Stop hook recorded only the
+  current turn (`since = this turn's start`) and relied on `UserPromptSubmit`
+  and `Stop` firing in lockstep. When `Stop` was missed for a stretch (common
+  in the desktop app), those turns were dropped permanently — an audit found
+  one session capturing ~35% of its real tokens. `handle_stop_hook` now anchors
+  the transcript read to the last recorded end for the session, so a single
+  Stop after a gap back-fills everything since the last row.
+- **Importer dedup was working-directory-dependent (v3.11):** the Gemini
+  importer built its "already imported" set from the current project + hub but
+  writes per-slug, so a run from any other directory (e.g. a scheduled job)
+  re-imported everything and created duplicates. It now dedups against the dir
+  each session actually routes to, so repeated/scheduled runs are idempotent
+  regardless of cwd.
+
+### Added
+
+- **`halyard doctor` capture-coverage canary (v3.10):** flags a live-capture
+  tool (Claude Code, Gemini) whose on-disk session files are newer than its
+  last captured ledger row — i.e. the tool ran but capture didn't record it.
+  This is the check that was missing when Gemini broke: "hooks installed" was
+  green and the drift canary couldn't see a tool producing zero rows. Warning
+  only; baseline-gated; 2-day grace.
+- **`halyard import-all` + scheduled importer (v3.11):** one idempotent command
+  runs the Codex, Copilot, and Gemini importers. `halyard install-import-timer`
+  / `uninstall-import-timer` schedule it via a macOS LaunchAgent (default
+  30 min) so import-based tools stay current. Opt-in — never auto-activated.
+
 ## [0.2.1] — 2026-05-22
 
 ### Fixed

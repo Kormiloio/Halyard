@@ -922,6 +922,77 @@ layers must read from this local source of truth; they do not replace it.
    **Status: complete (1377 tests passing).** Spec in
    `openspec/changes/v3.7-copilot-importer/`.
 
+62. **v3.8 — Gemini CLI `.jsonl` rollout capture (bugfix):** the Gemini
+   collector silently stopped recording — the last Gemini ledger row was
+   2026-05-07. Gemini CLI changed its on-disk history from a single-object
+   `session-*.json` checkpoint to a line-delimited `session-*.jsonl` rollout
+   (one header line, then one event per line, `$set` patches for
+   `lastUpdated`). `gemini_history.py` only understood `.json`, and three
+   guards rejected the new files (glob misses `.jsonl`; the 25 MB whole-file
+   cap vs. an 825 MB rollout; whole-file `json.loads` on a non-document).
+   Both the importer and the live hook route through `gemini_history`, so the
+   parser fix repairs both. `parse_session_file` now dispatches on suffix and
+   streams `.jsonl` line-by-line (memory bounded by the longest line; per-line
+   + total-byte caps; the hook passes a tight budget and falls back to the
+   `gc-session` accumulator on huge files). The load-bearing correctness
+   detail: the rollout **re-emits the same `gemini` message many times** as it
+   streams (one id seen 53×), so events are **deduped by `id`** (final
+   emission wins) — summing every emission inflated tokens ~30×. After dedup,
+   per-model totals match Gemini's own `/quit` report (pro-preview exact;
+   flash-preview within ~3%, the residual being API sub-requests the rollout
+   folds into one message id). Discovery globs (`find_all_session_files`,
+   `find_session_file`, `import-gemini`) now include `.jsonl`. The legacy
+   `.json` path is byte-for-byte unchanged. Session `9d3f7d6b-…` (825 MB)
+   backfilled into the ledger. **Second defect fixed in the same pass (the
+   live-hook half of the outage):** `handle_agent_stop` parsed the now
+   tz-aware `gc-session` `turn_start` (trailing `Z`) with
+   `datetime.fromisoformat` and subtracted naive `datetime.now()`, raising
+   `TypeError` that the hook crash-backstop swallowed — so every `AfterAgent`
+   fire silently recorded nothing and never reset state (`AfterModel` survived
+   because it does no datetime math). Same tz-aware/naive class as v2.56 P1-a;
+   `start` is now normalised to local-naive (v2.29 convention) with a
+   regression test. Spec in `openspec/changes/v3.8-gemini-jsonl-rollout/`.
+   **Status: complete (1399 tests passing; +22).**
+
+63. **v3.9 — Claude Code Stop-hook catch-up (silent under-capture):** a
+   ground-truth audit (ledger vs. transcript) found the *primary* tool
+   capturing only ~35% of output tokens — a completed session had 33 turns
+   but 15 rows, with a ~6-hour stretch of work and zero rows. Root cause:
+   capture needs `UserPromptSubmit`+`Stop` in lockstep, with the turn start in
+   a single `cc-session` file cleared on every `Stop`; a missed `Stop` (common
+   in the desktop app) dropped those turns with no recovery. Fix:
+   `handle_stop_hook` anchors the transcript read to a high-water mark
+   (`_last_recorded_end` — the latest recorded end for the session) instead of
+   this turn's start, so one `Stop` after a gap back-fills everything since the
+   last row. Windows stay contiguous (no double-count); first turn unchanged.
+   Spec in `openspec/changes/v3.9-claude-code-catchup/`.
+   **Status: complete (+2 tests).**
+
+64. **v3.10 — doctor capture-coverage canary:** the systemic gap that hid both
+   outages — `doctor` only checked "hooks installed", and the v2.59 drift
+   canary keys on recent *rows* so a tool with *no* rows is invisible. New
+   `_capture_coverage_checks` compares each live-capture tool's newest on-disk
+   session file against its last captured row; if the tool keeps writing
+   sessions while the ledger stalls, capture broke. Probes `claude-code` +
+   `gemini-cli`; baseline-gated (no false-positive on never-used tools);
+   `_COVERAGE_LAG_DAYS = 2` grace; `warning`-only; flows through
+   `DoctorReport`. Would have flagged Gemini in ~2 days instead of 16. Spec in
+   `openspec/changes/v3.10-coverage-canary/`.
+   **Status: complete (+4 tests).**
+
+65. **v3.11 — `import-all` + scheduled importer:** import-based collectors
+   (Codex/Copilot/Gemini) only reach the ledger when an importer runs. New
+   `halyard import-all` runs all three idempotently (Gemini body extracted to
+   `run_gemini_import`); `halyard install-import-timer`/`uninstall-import-timer`
+   schedule it via a macOS LaunchAgent (`import_timer.py`, default 30 min).
+   Opt-in (autonomous writer — never auto-activated); first run bulk-imports
+   on-disk history (a few 2026-05-07 Gemini hook rows would double-count, so a
+   clean reconcile should precede enabling). Also under this investigation: the
+   Halyard VS Code extension was fixed to use an absolute `halyard.executable`
+   (the bare `"halyard"` default isn't on a Finder-launched VS Code's PATH).
+   Spec in `openspec/changes/v3.11-scheduled-import/`.
+   **Status: complete (1407 tests passing; +2).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

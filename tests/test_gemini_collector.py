@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -287,6 +287,49 @@ def test_handle_agent_stop_skips_evidence_free_fire(
     from halyard.ai_log import parse_sessions as read_sessions
 
     assert read_sessions(project) == []
+
+
+def test_handle_agent_stop_tz_aware_turn_start_records(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: real Gemini writes a tz-aware SessionStart timestamp (trailing
+    'Z'). datetime.fromisoformat parses it to an aware datetime; `now - start`
+    then raised TypeError — swallowed by the hook crash backstop — so every
+    AfterAgent fire silently recorded nothing and never reset state (the cause of
+    zero Gemini ledger rows since 2026-05-07)."""
+    project = _halyard_project(tmp_path / "project")
+    state_file = tmp_path / "gc-session"
+    # tz-aware, ~30 min ago, Z-suffixed — exactly what current Gemini writes.
+    tz_aware_ts = (datetime.now(UTC) - timedelta(minutes=30)).isoformat().replace("+00:00", "Z")
+    assert tz_aware_ts.endswith("Z")
+    state_file.write_text(
+        json.dumps(
+            {
+                "turn_start": tz_aware_ts,
+                "cwd": str(project),
+                "model": "gemini-3-flash-preview",
+                "prompt_tokens": 2000,
+                "output_tokens": 400,
+            }
+        )
+    )
+    monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
+    monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)
+
+    with _patch_stdin(_after_agent_payload(cwd=str(project))):
+        result = handle_agent_stop()  # must not raise TypeError
+
+    assert result == 0
+    from halyard.ai_log import parse_sessions
+
+    sessions = parse_sessions(project)
+    assert len(sessions) == 1
+    assert sessions[0].model == "gemini-3-flash-preview"
+    assert sessions[0].output_tokens == 400
+    # state reset, and turn_start is now naive so subsequent turns never regress
+    state = json.loads(state_file.read_text())
+    assert state["prompt_tokens"] == 0
+    assert "Z" not in state["turn_start"] and "+" not in state["turn_start"]
 
 
 def test_full_turn_sequence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

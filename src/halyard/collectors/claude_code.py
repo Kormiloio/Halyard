@@ -25,6 +25,7 @@ from halyard.ai_log import (
     find_project_dir,
     maybe_emit_milestones,
     maybe_show_dashboard_hint,
+    parse_sessions,
     read_active_project,
     write_unattributed_session,
 )
@@ -135,6 +136,19 @@ def handle_stop_hook() -> int:
     start = session_state.get("start_dt") or now
     sha_at_start: str | None = session_state.get("sha")
     _clear_session_start()
+
+    # Catch-up high-water mark. The live hooks (UserPromptSubmit + Stop) only
+    # capture a turn when they fire in lockstep; in practice Stop is missed for
+    # stretches (notably the desktop app). The old design read the transcript
+    # only since *this* turn's start, so every turn in a gap was dropped with no
+    # recovery. Anchor the read to the latest end already recorded for this
+    # session instead — one Stop after a gap then back-fills everything since
+    # the last row.
+    payload_session_id = payload.get("session_id") or payload.get("sessionId")
+    if payload_session_id and project_dir is not None:
+        watermark = _last_recorded_end(project_dir, str(payload_session_id))
+        if watermark is not None:
+            start = watermark
 
     # Try usage from payload first (older Claude Code format)
     usage = payload.get("usage") or payload.get("message", {}).get("usage", {}) or {}
@@ -320,6 +334,25 @@ def _read_payload() -> dict:  # type: ignore[type-arg]
         return json.loads(raw) if raw.strip() else {}
     except (json.JSONDecodeError, ValueError):
         return {}
+
+
+def _last_recorded_end(project_dir: Path, session_id: str) -> datetime | None:
+    """Latest end already recorded for this Claude Code session in the ledger.
+
+    Serves as a catch-up high-water mark: each Stop captures everything since
+    the last recorded row, so a missed Stop is recovered by the next one
+    instead of dropping the turns in between. Returns None if nothing recorded
+    yet (first turn of the session) or on any read error.
+    """
+    try:
+        ends = [
+            s.end
+            for s in parse_sessions(project_dir)
+            if s.tool == "claude-code" and s.session_id == session_id
+        ]
+    except Exception:
+        return None
+    return max(ends) if ends else None
 
 
 def _read_session_state() -> dict[str, Any]:

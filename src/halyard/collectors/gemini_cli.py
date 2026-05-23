@@ -46,6 +46,7 @@ from halyard.collectors import (
     session_is_synthetic_telemetry,
 )
 from halyard.collectors.gemini_history import (
+    _HOOK_ROLLOUT_BYTES,
     GeminiModelStats,
     find_session_file,
     parse_session_file,
@@ -157,6 +158,14 @@ def handle_agent_stop() -> int:
         start = datetime.fromisoformat(turn_start_str) if turn_start_str else now
     except (ValueError, TypeError):
         start = now
+    # Gemini's SessionStart payload timestamp can be tz-aware (trailing 'Z'),
+    # which datetime.fromisoformat parses into an aware datetime. `now` is
+    # naive-local, and `now - start` then raises TypeError — swallowed by the
+    # hook crash backstop, so every AfterAgent fire silently records nothing
+    # and never resets state. Normalise to local-naive (the v2.29 collector
+    # convention) so the session is captured.
+    if start.tzinfo is not None:
+        start = start.astimezone().replace(tzinfo=None)
 
     # Stale state guard: a gc-session older than 12 hours cannot be a real session.
     # Delete it silently rather than writing a phantom multi-day record.
@@ -190,7 +199,10 @@ def handle_agent_stop() -> int:
     if session_id:
         history_path = find_session_file(session_id)
         if history_path:
-            history_summary = parse_session_file(history_path)
+            # Tight budget: the hook fires every turn and the rollout grows
+            # without bound, so a huge file degrades to the gc-session
+            # accumulator rather than stalling the host tool.
+            history_summary = parse_session_file(history_path, max_bytes=_HOOK_ROLLOUT_BYTES)
 
     rich_session_id: str | None = session_id or None
     rich_tool_calls: int | None = None
