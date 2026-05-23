@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Capture monitoring blind spot for Cursor and Windsurf (v3.15):** the
+  `halyard doctor` capture-coverage canary — which warns when a tool runs but
+  Halyard stops recording it — only watched Claude Code, Gemini, Copilot, and
+  Codex. Cursor and Windsurf could silently stop capturing with no warning (the
+  same failure class as the Gemini outage). The canary now covers them too, using
+  a coarse storage-mtime signal (never parsing their internal SQLite/leveldb
+  stores, which would just be more fragile scraping) with a wider grace and an
+  honestly-qualified, best-effort warning. Baseline-gated and warning-only, so a
+  never-used or merely-unused tool does not false-alarm.
 - **Gemini sessions counted multiple times (v3.14):** a multi-turn Gemini CLI
   session was over-counted (one observed session counted ~2.5×). The Gemini
   history file is the whole-session record, and both capture paths read all of

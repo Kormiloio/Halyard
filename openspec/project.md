@@ -1048,6 +1048,24 @@ layers must read from this local source of truth; they do not replace it.
    fabricated. Spec in `openspec/changes/v3.14-gemini-session-dedup/`.
    **Status: complete (1439 tests passing; +7).**
 
+69. **v3.15 — Coverage canary for Cursor and Windsurf:** the capture-coverage
+   canary (v3.10/v3.13) — the safety net that turns a *silent* capture break into
+   a visible `halyard doctor` warning — only watched 4 of 7 tools; Cursor and
+   Windsurf were blind spots (same silent-failure class as the Gemini outage, for
+   the two tools it didn't cover). They have no enumerable per-session files
+   (Cursor → `state.vscdb` SQLite; Windsurf → `~/.codeium/windsurf` store), and
+   parsing those would re-introduce the fragile vendor-format scraping v3.12 was
+   built to escape. So the canary is extended using **coarse storage mtimes only**
+   (Cursor `…/User/**/state.vscdb`; Windsurf `cascade/`), never reading contents,
+   with a wider grace (`_COVERAGE_LAG_DAYS_COARSE = 4`, vs 2 for the file-precise
+   tools) and a best-effort, honestly-worded warning that names the uncertainty.
+   Baseline-gated, `warning`-only, flows through `DoctorReport`. Verified on the
+   real machine: Cursor (storage older than its last capture) correctly produces
+   no warning — "unused, not broken," not a false alarm. Honest limit: coarse, not
+   a precise per-session reconciliation. Spec in
+   `openspec/changes/v3.15-cursor-windsurf-coverage/`.
+   **Status: complete (1445 tests passing; +6).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

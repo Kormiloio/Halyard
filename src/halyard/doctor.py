@@ -667,6 +667,14 @@ def _collector_drift_checks(project_dir: Path | None, hub_dir: Path | None) -> l
 # turn, an idle gap) without false positives.
 _COVERAGE_LAG_DAYS = 2
 
+# Cursor and Windsurf keep chat/agent state in SQLite/leveldb stores, not
+# enumerable per-session files (v3.15). Parsing those would re-introduce the
+# fragile vendor-format scraping v3.12 escaped, so the canary uses only their
+# storage *mtime* — a coarser "the app was active" signal that can move for
+# incidental reasons (opening a workspace, indexing). These tools therefore get
+# a wider grace and a best-effort, honestly-qualified warning.
+_COVERAGE_LAG_DAYS_COARSE = 4
+
 _COVERAGE_FIX = {
     "claude-code": (
         "recent turns may be unrecorded — check the Stop hook "
@@ -681,6 +689,14 @@ _COVERAGE_FIX = {
         "storage format may have changed (see collectors/copilot.py)"
     ),
     "codex": "run `halyard import-codex` (or enable the scheduled importer)",
+    "cursor": (
+        "if you used Cursor's AI features recently the hook may not be firing — "
+        "reinstall with `halyard install-hook-cursor`; ignore if you only browsed code"
+    ),
+    "windsurf": (
+        "if you used Windsurf's Cascade recently the hook may not be firing — "
+        "reinstall with `halyard install-hook-windsurf`; ignore if you only browsed code"
+    ),
 }
 
 # Live-capture tools read an on-disk source continuously; importer tools only
@@ -689,6 +705,9 @@ _COVERAGE_FIX = {
 # broken importer is the failure this caught for Copilot (format drift made
 # every session silently skip).
 _COVERAGE_TOOLS = ("claude-code", "gemini-cli", "github-copilot", "codex")
+# Hook-only tools with no enumerable session files — probed via coarse storage
+# mtime with a wider grace (v3.15). See `_COVERAGE_LAG_DAYS_COARSE`.
+_COVERAGE_TOOLS_COARSE = ("cursor", "windsurf")
 
 
 def _newest_disk_activity(tool: str) -> datetime | None:
@@ -716,6 +735,18 @@ def _newest_disk_activity(tool: str) -> datetime | None:
 
             if _CODEX_SESSIONS_DIR.exists():
                 paths = list(_CODEX_SESSIONS_DIR.rglob("rollout-*.jsonl"))
+        elif tool == "cursor":
+            # Coarse signal (v3.15): mtime of Cursor's chat/composer SQLite
+            # stores. Never read their contents — a schema change must not break
+            # this; an mtime shift is exactly the activity signal we want.
+            cursor_user = Path.home() / "Library" / "Application Support" / "Cursor" / "User"
+            if cursor_user.exists():
+                paths = [cursor_user / "globalStorage" / "state.vscdb"]
+                paths.extend(cursor_user.glob("workspaceStorage/*/state.vscdb"))
+        elif tool == "windsurf":
+            cascade = Path.home() / ".codeium" / "windsurf" / "cascade"
+            if cascade.exists():
+                paths = [p for p in cascade.rglob("*") if p.is_file()]
         else:
             return None
     except OSError:
@@ -751,25 +782,40 @@ def _capture_coverage_checks(
             last_end[s.tool] = s.end
 
     checks: list[DoctorCheck] = []
-    for tool in _COVERAGE_TOOLS:
-        captured = last_end.get(tool)
-        if captured is None:
-            continue  # no baseline — never captured, not a regression
-        disk = _newest_disk_activity(tool)
-        if disk is None:
-            continue
-        lag_days = (disk - captured).total_seconds() / 86400
-        if lag_days > _COVERAGE_LAG_DAYS:
+    for tools, grace, coarse in (
+        (_COVERAGE_TOOLS, _COVERAGE_LAG_DAYS, False),
+        (_COVERAGE_TOOLS_COARSE, _COVERAGE_LAG_DAYS_COARSE, True),
+    ):
+        for tool in tools:
+            captured = last_end.get(tool)
+            if captured is None:
+                continue  # no baseline — never captured, not a regression
+            disk = _newest_disk_activity(tool)
+            if disk is None:
+                continue
+            lag_days = (disk - captured).total_seconds() / 86400
+            if lag_days <= grace:
+                continue
+            if coarse:
+                # Coarse storage-mtime signal: name the uncertainty honestly.
+                detail = (
+                    f"last captured {captured:%Y-%m-%d %H:%M}, but {tool} storage was "
+                    f"modified as recently as {disk:%Y-%m-%d %H:%M} (~{lag_days:.0f}d) — "
+                    f"if you used its AI features the hook may not be firing "
+                    f"(best-effort signal; ignore if you only browsed code)"
+                )
+            else:
+                detail = (
+                    f"last captured {captured:%Y-%m-%d %H:%M}, but {tool} session "
+                    f"files are as recent as {disk:%Y-%m-%d %H:%M} "
+                    f"(~{lag_days:.0f}d uncaptured) — collector may be broken"
+                )
             checks.append(
                 DoctorCheck(
                     id=f"coverage.{tool}",
                     label=f"{tool} (capture lagging)",
                     status="warning",
-                    detail=(
-                        f"last captured {captured:%Y-%m-%d %H:%M}, but {tool} session "
-                        f"files are as recent as {disk:%Y-%m-%d %H:%M} "
-                        f"(~{lag_days:.0f}d uncaptured) — collector may be broken"
-                    ),
+                    detail=detail,
                     fix=_COVERAGE_FIX.get(tool),
                 )
             )

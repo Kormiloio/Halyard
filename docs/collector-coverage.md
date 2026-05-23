@@ -67,6 +67,14 @@ are detected from transcript error messages; these counts overlap with
 `prompt_count` is derived from the hook payload's session metadata. Rejections
 are reported directly by Cursor and do not overlap with tool errors.
 
+*Coverage monitoring (v3.15):* Cursor stores chat/composer state in SQLite
+(`state.vscdb`), not enumerable per-session files, so `halyard doctor` monitors
+it with a **best-effort coarse signal** — the mtime of those stores, never their
+contents (parsing the schema would be fragile) — with a wider grace than the
+file-based tools. It can therefore tell "the app was active recently but nothing
+was captured" only approximately; treat its warning as a prompt to check the
+hook, not a precise per-session reconciliation.
+
 **gemini-cli:** Rich telemetry depends on the local Gemini history file. Rejection
 capture is N/A because the tool lacks an inline approval UX or history markers.
 
@@ -93,7 +101,9 @@ counts overlap with `tool_errors`.
 **windsurf:** Native collector for Codeium Windsurf IDE. Captures session
 timing and interaction counts (turns) autonomously via `hooks.json`. Token
 counts are currently unavailable in hook payloads. Sessions are finalized
-after 30 minutes of inactivity.
+after 30 minutes of inactivity. Like Cursor, coverage monitoring (v3.15) is a
+best-effort coarse signal based on the mtime of `~/.codeium/windsurf/cascade`
+(never parsed), with a wider grace.
 
 **vscode:** Manual capture tool via the VS Code extension. The extension observes
 active editing time via VS Code workspace events. It does not have access to
