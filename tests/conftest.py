@@ -8,6 +8,7 @@ touch the user's real registry regardless of how it's invoked.
 
 from __future__ import annotations
 
+import os
 import sys
 
 import pytest
@@ -47,3 +48,34 @@ def _isolate_registry(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pyt
     reg = tmp_path_factory.mktemp("halyard-registry") / "projects"
     monkeypatch.setattr(registry, "REGISTRY_PATH", reg)
     return reg
+
+
+@pytest.fixture(autouse=True)
+def _no_real_hub(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the suite hermetic against a Hub running on the dev machine.
+
+    Every ``hub_client`` call funnels through ``_request``. A real Bridge on the
+    default port (:4318) would intercept session appends, timer/presence writes,
+    and collision checks, silently breaking tests that then read local state
+    (observed: append_session is Hub-first, so the local log stays empty).
+
+    Clear any inherited Hub env, then make ``_request`` report "unreachable"
+    unless a test has provisioned its own in-process Hub — signalled by setting
+    ``HALYARD_HUB_PORT`` (as the v4.2 state tests do). Those pass straight
+    through to their own server; every other test falls back to local writes,
+    exactly as in CI where no Hub runs. Leaves the configured URL/port intact
+    so URL-rendering assertions (realtime dashboard) are unaffected.
+    """
+    from halyard import hub_client
+
+    for var in ("HALYARD_HUB_PORT", "HALYARD_HUB_HOST", "HALYARD_DISABLE_HUB"):
+        monkeypatch.delenv(var, raising=False)
+
+    real_request = hub_client._request
+
+    def _guarded_request(*args, **kwargs):  # type: ignore[no-untyped-def]
+        if "HALYARD_HUB_PORT" not in os.environ:
+            return None  # no test-provisioned Hub → treat as unreachable
+        return real_request(*args, **kwargs)
+
+    monkeypatch.setattr(hub_client, "_request", _guarded_request)

@@ -36,6 +36,7 @@ strategy/
 # Halyard runtime
 .halyard-cache/
 .halyard/active
+cache.db
 ai-sessions.log
 ai-sessions.log.bak*
 ai-sessions.removed-*.log

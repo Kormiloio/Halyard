@@ -87,12 +87,11 @@ def _project(tmp_path: Path) -> Path:
 
 @pytest.fixture(autouse=True)
 def _isolate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Point the importer at tmp paths and write locally, never to a live Hub."""
+    """Point the importer at tmp paths. (Hub isolation is handled in conftest.)"""
     import halyard.collectors.codex_app as mod
 
     monkeypatch.setattr(mod, "_CODEX_SESSIONS_DIR", tmp_path / "codex")
     monkeypatch.setattr(mod, "_IMPORTED_STATE_FILE", tmp_path / "codex-imported")
-    monkeypatch.setenv("HALYARD_DISABLE_HUB", "1")
 
 
 def _codex_lines(project: Path) -> list[str]:
