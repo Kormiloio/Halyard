@@ -678,6 +678,7 @@ def parse_sessions(project_dir: Path, *, now: datetime | None = None) -> list[Ai
 
 
 _GEMINI_JOB_PREFIX = "gemini:"
+_CODEX_JOB_PREFIX = "codex:"
 
 
 def _gemini_session_key(session: AiSession) -> str | None:
@@ -695,6 +696,36 @@ def _gemini_session_key(session: AiSession) -> str | None:
         return session.session_id
     if session.job_id and session.job_id.startswith(_GEMINI_JOB_PREFIX):
         return session.job_id[len(_GEMINI_JOB_PREFIX) :]
+    return None
+
+
+def _codex_session_key(session: AiSession) -> str | None:
+    """A stable id for the Codex session a row belongs to, else None.
+
+    The Codex importer tags each row with ``job_id=codex:<uuid>``. A session
+    still being written is imported more than once (once per importer run while
+    its rollout file grows), so those rows must collapse to one. Returns None
+    for non-Codex rows and Codex rows with no resolvable id.
+    """
+    if session.tool != "codex":
+        return None
+    if session.job_id and session.job_id.startswith(_CODEX_JOB_PREFIX):
+        return session.job_id[len(_CODEX_JOB_PREFIX) :]
+    return None
+
+
+def _redundant_session_key(session: AiSession) -> str | None:
+    """Namespaced collapse key spanning every tool with multi-row sessions.
+
+    Returns ``"<tool>:<id>"`` so keys never collide across tools, or None when
+    the row is not part of a known multi-row family (left untouched).
+    """
+    gemini = _gemini_session_key(session)
+    if gemini is not None:
+        return f"{_GEMINI_JOB_PREFIX}{gemini}"
+    codex = _codex_session_key(session)
+    if codex is not None:
+        return f"{_CODEX_JOB_PREFIX}{codex}"
     return None
 
 
@@ -722,20 +753,21 @@ def _canonical_gemini_row(rows: list[AiSession]) -> AiSession:
 
 
 def collapse_gemini_sessions(sessions: list[AiSession]) -> list[AiSession]:
-    """Collapse rows that redundantly describe the same Gemini session.
+    """Collapse rows that redundantly describe the same imported session.
 
-    One Gemini CLI session = one ledger session. An N-turn session today
-    yields up to N+1 rows because the whole-session history file is read by
-    both the per-turn hook (cumulative each turn) and the importer. Keep
-    exactly one canonical row per resolvable Gemini session id; pass
-    everything else (non-Gemini rows, Gemini rows without an id, distinct
-    sessions) through untouched and in order. Idempotent. Read-time only —
-    callers must not write the result back to the log.
+    Some tools yield more than one row for a single session: a Gemini CLI
+    session is read by both the per-turn hook (cumulative each turn) and the
+    importer; a Codex session still being written is re-imported once per run
+    as its rollout file grows (v5.2). Keep exactly one canonical row per
+    resolvable session id (Gemini or Codex); pass everything else (other tools,
+    rows without an id, distinct sessions) through untouched and in order.
+    Idempotent. Read-time only — callers must not write the result back to the
+    log. (Name retained for its existing callers; now tool-agnostic.)
     """
     groups: dict[str, list[AiSession]] = {}
     order: list[tuple[str | None, AiSession]] = []
     for s in sessions:
-        key = _gemini_session_key(s)
+        key = _redundant_session_key(s)
         if key is None:
             order.append((None, s))
             continue

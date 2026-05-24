@@ -43,18 +43,32 @@ def import_codex_sessions(
     session_files = sorted(_CODEX_SESSIONS_DIR.rglob("rollout-*.jsonl"))
 
     imported: list[AiSession] = []
-    newly_imported_ids: list[str] = []
+    newly_imported: dict[str, int] = {}
 
     for path in session_files:
         session_id = _extract_uuid(path)
-        if session_id is None or session_id in already_imported:
+        if session_id is None:
             continue
+
+        # v5.2: re-import a session whose rollout file has grown since the last
+        # import. The old importer skipped any UUID it had seen once, which
+        # froze sessions captured mid-write at a partial snapshot. Skip only
+        # when the UUID is known and its recorded size matches the file now; a
+        # grown file, an unknown UUID, or a legacy size-less entry re-imports.
+        current_size = _file_size(path)
+        if session_id in already_imported:
+            prior_size = already_imported[session_id]
+            if prior_size is not None and prior_size == current_size:
+                continue
 
         parsed = _parse_session_file(path)
         if parsed is None:
             continue
 
         session, cwd = parsed
+        # Tag the row so redundant re-imports of a growing session collapse to
+        # one canonical row at read time (see ai_log.collapse_gemini_sessions).
+        session.job_id = f"codex:{session_id}"
 
         # Resolve project directory
         target_dir = project_dir
@@ -82,19 +96,21 @@ def import_codex_sessions(
             append_session(target_dir, session)
 
         imported.append(session)
-        newly_imported_ids.append(session_id)
+        newly_imported[session_id] = current_size
 
-    if not dry_run and newly_imported_ids:
+    if not dry_run and newly_imported:
         # Prune ids whose rollout file no longer exists: codex rotates old
         # rollouts away, so a missing file can never be re-imported. This
         # bounds the dedup state to the rollouts actually on disk instead
-        # of growing forever.
+        # of growing forever. Carry forward the recorded size for unchanged
+        # sessions; update it for the ones (re)imported this run.
         present_ids = {
             uuid for uuid in (_extract_uuid(p) for p in session_files) if uuid is not None
         }
-        updated = (already_imported | set(newly_imported_ids)) & (
-            present_ids | set(newly_imported_ids)
-        )
+        updated: dict[str, int | None] = {
+            uuid: size for uuid, size in already_imported.items() if uuid in present_ids
+        }
+        updated.update(newly_imported)
         _save_imported_state(updated)
 
     return imported
@@ -267,15 +283,45 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
 # ---------------------------------------------------------------------------
 
 
-def _load_imported_state() -> set[str]:
+def _load_imported_state() -> dict[str, int | None]:
+    """Map each imported rollout UUID to the file size recorded at import.
+
+    Lines are ``"<uuid>\\t<size>"`` (v5.2). Legacy bare-UUID lines parse to
+    ``None``, which forces a one-time re-check so any session frozen mid-write
+    under the old importer gets backfilled.
+    """
     if not _IMPORTED_STATE_FILE.exists():
-        return set()
-    return {line.strip() for line in _IMPORTED_STATE_FILE.read_text().splitlines() if line.strip()}
+        return {}
+    state: dict[str, int | None] = {}
+    for raw in _IMPORTED_STATE_FILE.read_text().splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        uuid, _, size_str = line.partition("\t")
+        uuid = uuid.strip()
+        if not uuid:
+            continue
+        try:
+            state[uuid] = int(size_str) if size_str else None
+        except ValueError:
+            state[uuid] = None
+    return state
 
 
-def _save_imported_state(ids: set[str]) -> None:
+def _save_imported_state(state: dict[str, int | None]) -> None:
     _IMPORTED_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _IMPORTED_STATE_FILE.write_text("\n".join(sorted(ids)) + "\n")
+    lines = [
+        f"{uuid}\t{size}" if size is not None else uuid for uuid, size in sorted(state.items())
+    ]
+    _IMPORTED_STATE_FILE.write_text("\n".join(lines) + "\n")
+
+
+def _file_size(path: Path) -> int:
+    """Current byte size of ``path``, or -1 if it can't be stat'd."""
+    try:
+        return path.stat().st_size
+    except OSError:
+        return -1
 
 
 def codex_history_present() -> bool:

@@ -1099,6 +1099,14 @@ layers must read from this local source of truth; they do not replace it.
     Spec in `openspec/changes/v5.1-dashboard-trio-row/`.
     **Status: complete (1483 tests passing).**
 
+76. **v5.2 — Codex importer re-imports in-progress sessions:** The importer
+    skipped any rollout UUID seen once, freezing sessions captured mid-write at
+    a partial snapshot. Now it re-imports when the rollout file has grown
+    (size-fingerprinted dedup state) and collapses the redundant rows at read
+    time by session UUID — mirroring the Gemini collapse.
+    Spec in `openspec/changes/v5.2-codex-growth-reimport/`.
+    **Status: complete (1488 tests passing).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
