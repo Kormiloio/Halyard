@@ -1066,6 +1066,32 @@ layers must read from this local source of truth; they do not replace it.
    `openspec/changes/v3.15-cursor-windsurf-coverage/`.
    **Status: complete (1445 tests passing; +6).**
 
+70. **v4.0 — Halyard Hub Architecture:** Transition to a Daemon-Broker model
+    to eliminate I/O latency in tools and enable cross-platform service
+    management (Linux/Windows). Primary ingestion via local OTLP/HTTP.
+    Spec in `openspec/changes/v4.0-halyard-hub/`.
+    **Status: complete (full suite green: 1483 tests passing).**
+
+71. **v4.1 — Polyglot Proof & Public Spec:** Stabilize the `/v1/ingest` API and
+    publish the `ai-sessions.log` data format specification. Invite community
+    emitters. Spec in `openspec/changes/v4.1-polyglot-proof/`.
+    **Status: complete (full suite green: 1483 tests passing).**
+72. **v4.2 — Hub-Managed Active State:** Consolidate `~/.halyard/active` and
+    timer logic into Hub memory to eliminate filesystem polling latency and
+    fragmentation. Spec in `openspec/changes/v4.2-hub-managed-state/`.
+    **Status: complete (full suite green: 1483 tests passing).**
+73. **v4.3 — Real-Time Dashboard:** Enable push-based UI updates using SSE from
+    the Hub. Sessions appear in the Bridge dashboard instantly.
+    Spec in `openspec/changes/v4.3-realtime-dashboard/`.
+    **Status: complete (full suite green: 1483 tests passing).**
+74. **v5.0 — Duplicate-Effort Detection:** Identify when multiple AI sessions
+    overlap on the same branch or task using git metadata. Provide real-time
+    collision alerts in CLI and Dashboard.
+    Spec in `openspec/changes/v5.0-duplicate-effort/`.
+    **Status: complete — engine, CLI warning, and dashboard Collisions panel all
+    shipped and test-covered (1483 tests passing). A richer per-session Gantt
+    visualization is deferred (see design §4).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

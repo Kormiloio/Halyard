@@ -529,15 +529,28 @@ class AiSession:
         return " ".join(parts + kvs)
 
 
-def append_session(project_dir: Path, session: AiSession) -> None:
-    # v2.17 task 4.1: use locked_file so concurrent appenders never interleave.
-    # NOTE: milestone easter eggs are intentionally NOT evaluated here — that
-    # required a full parse_sessions() on every append (O(n²) over a bulk
-    # import). Interactive collectors call maybe_emit_milestones() once after
-    # the append; bulk importers skip it entirely.
+def append_session(project_dir: Path, session: AiSession, *, direct: bool = False) -> None:
+    # v4.0: Hub-first ingestion. If the Halyard Hub is running on localhost,
+    # emit the session as a JSON payload instead of writing directly. This
+    # eliminates file-locking latency in the tool's execution path.
+    if not direct and _try_append_to_hub(session):
+        return
+
+    # Fallback to direct local write (v1-v3 behavior)
     log_path = project_dir / AI_LOG_FILENAME
     with locked_file(log_path, "a") as f:
         f.write(session.to_log_line() + "\n")
+
+
+def _try_append_to_hub(session: AiSession) -> bool:
+    """Attempt to send the session to the Hub; return True on success.
+
+    Routes through hub_client so HALYARD_DISABLE_HUB and the configured
+    host/port are honored consistently with the rest of the codebase.
+    """
+    from halyard.hub_client import ingest_line
+
+    return ingest_line(session.to_log_line())
 
 
 def maybe_emit_milestones(project_dir: Path) -> None:
@@ -1001,7 +1014,7 @@ def _is_assignable_session_line(line: str) -> bool:
 
 
 def read_active_project() -> str | None:
-    """Return the active project slug from ~/.halyard/active, or None if not set.
+    """Return the active project slug from the Hub or ~/.halyard/active.
 
     This is the single canonical implementation.  All three collectors import
     this function so that the read logic is never duplicated.  The file is
@@ -1016,6 +1029,16 @@ def read_active_project() -> str | None:
     hook.
     """
     from halyard.state_integrity import IntegrityError, read_global_trusted_state
+
+    try:
+        from halyard.hub_client import read_state
+
+        state = read_state()
+        if state is not None:
+            project = state.get("project")
+            return project if isinstance(project, str) and project else None
+    except Exception as exc:
+        _log_error("read_active_project: hub state read failed", exc)
 
     active = Path.home() / ".halyard" / "active"
     try:

@@ -13,6 +13,10 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from halyard.ai_log import AiSession
 
 
 class DbError(RuntimeError):
@@ -27,7 +31,7 @@ class DbError(RuntimeError):
 _DB_PATH = Path.home() / ".halyard" / "cache.db"
 
 # Schema version this code expects. Bump whenever a migration is added.
-_CURRENT_VERSION = 6
+_CURRENT_VERSION = 7
 
 # Initial schema for a fresh database — always reflects _CURRENT_VERSION.
 _CREATE_SCHEMA_V1 = """
@@ -54,7 +58,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     pr_state            TEXT,
     outcome_resolved_at TEXT,
     mcp_servers_used    INTEGER,
-    mcp_server_names    TEXT
+    mcp_server_names    TEXT,
+    remote              TEXT
 );
 
 CREATE TABLE IF NOT EXISTS timeclock (
@@ -143,6 +148,11 @@ ALTER TABLE outcomes ADD COLUMN review_decision TEXT;
 ALTER TABLE sessions ADD COLUMN mcp_servers_used INTEGER;
 ALTER TABLE sessions ADD COLUMN mcp_server_names TEXT;
 """,
+    ),
+    # v6 → v7: v5.0 Duplicate-Effort detection — remote repository tracking.
+    (
+        6,
+        "ALTER TABLE sessions ADD COLUMN remote TEXT;",
     ),
 ]
 
@@ -318,6 +328,46 @@ def sync_all() -> SyncResult:
     )
 
 
+def sync_source(project_dir: Path) -> SyncResult:
+    """Sync a single source's log + timeclock into the cache.
+
+    Unlike ``sync_all`` (which discovers sources via the registry, hub, and
+    CWD), this targets one known directory. The Hub uses it to sync exactly
+    the directory it just wrote to, so freshly ingested sessions land in the
+    cache without depending on global discovery.
+    """
+    from halyard.ai_log import AI_LOG_FILENAME
+
+    conn = get_db()
+    sessions_added = timeclock_added = files_read = 0
+
+    try:
+        log_path = project_dir / AI_LOG_FILENAME
+        if log_path.exists():
+            files_read += 1
+            sessions_added += _sync_sessions(conn, log_path)
+
+        tc_path = project_dir / "time.timeclock"
+        if tc_path.exists():
+            files_read += 1
+            timeclock_added += _sync_timeclock(conn, tc_path)
+
+        conn.execute(
+            "INSERT INTO sync_log (synced_at, files_read, rows_added) VALUES (?, ?, ?)",
+            (datetime.now().isoformat(), files_read, sessions_added + timeclock_added),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return SyncResult(
+        sessions_added=sessions_added,
+        timeclock_added=timeclock_added,
+        files_read=files_read,
+        synced_at=datetime.now(),
+    )
+
+
 def last_sync() -> dict[str, object] | None:
     """Return the most recent sync_log row as a dict, or None if never synced."""
     if not _DB_PATH.exists():
@@ -381,13 +431,13 @@ def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
         conn.execute(
             """
             INSERT OR REPLACE INTO sessions
-                (id, project, tool, model, started_at, ended_at,
-                 input_tok, output_tok, cache_read, cache_write,
-                 cost_usd, tool_calls, tool_errors, source_file,
-                 branch, commit_count, code_added, code_removed,
-                 pr_ref, pr_state, outcome_resolved_at,
-                 mcp_servers_used, mcp_server_names)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               (id, project, tool, model, started_at, ended_at,
+                input_tok, output_tok, cache_read, cache_write,
+                cost_usd, tool_calls, tool_errors, source_file,
+                branch, commit_count, code_added, code_removed,
+                pr_ref, pr_state, outcome_resolved_at,
+                mcp_servers_used, mcp_server_names, remote)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 sid,
@@ -413,8 +463,10 @@ def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
                 session.outcome_resolved_at,
                 session.mcp_servers_used,
                 ",".join(session.mcp_server_names) if session.mcp_server_names else None,
+                session.remote,
             ),
         )
+
         if is_new:
             upserted += 1
 
@@ -476,3 +528,55 @@ def _parse_closed_timeclock(tc_path: Path) -> list[tuple[datetime, datetime, str
             open_entry = None
 
     return entries
+
+
+def get_recent_branch_activity(
+    remote: str,
+    branch: str,
+    *,
+    limit: int = 10,
+) -> list[AiSession]:
+    """Return recent sessions on a specific remote/branch from the cache."""
+    from halyard.ai_log import AiSession
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """
+            SELECT project, tool, model, started_at, ended_at,
+                   input_tok, output_tok, cache_read, cache_write,
+                   cost_usd, tool_calls, tool_errors,
+                   branch, remote, mcp_servers_used, mcp_server_names
+            FROM sessions
+            WHERE remote = ? AND branch = ?
+            ORDER BY ended_at DESC
+            LIMIT ?
+            """,
+            (remote, branch, limit),
+        ).fetchall()
+
+        out = []
+        for r in rows:
+            out.append(
+                AiSession(
+                    start=datetime.fromisoformat(r["started_at"]),
+                    end=datetime.fromisoformat(r["ended_at"]),
+                    tool=r["tool"],
+                    model=r["model"],
+                    input_tokens=r["input_tok"],
+                    output_tokens=r["output_tok"],
+                    cost_usd=r["cost_usd"],
+                    project=r["project"],
+                    cache_read=r["cache_read"],
+                    cache_write=r["cache_write"],
+                    tool_calls=r["tool_calls"],
+                    tool_errors=r["tool_errors"],
+                    branch=r["branch"],
+                    remote=r["remote"],
+                    mcp_servers_used=r["mcp_servers_used"],
+                    mcp_server_names=r["mcp_server_names"],
+                )
+            )
+        return out
+    finally:
+        conn.close()

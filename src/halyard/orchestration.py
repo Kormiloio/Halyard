@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import re
 import subprocess
 import tomllib
@@ -44,6 +45,15 @@ class TimerAlreadyRunning(Exception):  # noqa: N818
         self.slug = slug
 
 
+class HubStateError(RuntimeError):
+    """Raised when the Hub is reachable but rejects a state-mutating call.
+
+    Distinct from the Hub being down (which falls back to a local write): a live
+    Hub is the single authority for timer state, so we surface the error instead
+    of writing divergent local state behind its back.
+    """
+
+
 @dataclass(frozen=True)
 class StopResult:
     """Return value of stop_timer."""
@@ -74,7 +84,7 @@ def write_active_timer(timeclock: Path, slug: str, started: str) -> None:
     write_trusted_state(_reports_mod._HALYARD_ACTIVE, content, mode=mode)
 
 
-def start_timer(project_dir: Path, slug: str) -> ActiveTimer:
+def start_timer(project_dir: Path, slug: str, *, direct: bool = False) -> ActiveTimer:
     """Start the timeclock for *slug* and write the active-timer state file.
 
     Raises TimerAlreadyRunning if a timer is already active.
@@ -86,13 +96,21 @@ def start_timer(project_dir: Path, slug: str) -> ActiveTimer:
     the first acquires the lock when no timer is active; the rest find the
     active file already present and raise TimerAlreadyRunning.
     """
+    if not direct:
+        hub_timer = _try_start_timer_via_hub(project_dir, slug)
+        if hub_timer is not None:
+            return hub_timer
+    return _start_timer_local(project_dir, slug)
+
+
+def _start_timer_local(project_dir: Path, slug: str) -> ActiveTimer:
     timeclock = project_dir / "time.timeclock"
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     with locked_file(timeclock, "a") as f:
         # Re-check inside the lock so two concurrent callers cannot both pass
         # the "no active timer" check and both write a clock-in entry.
-        active = _reports_mod.read_active_timer()
+        active = _reports_mod.read_active_timer(prefer_hub=False)
         if active is not None:
             raise TimerAlreadyRunning(active.slug)
 
@@ -103,7 +121,7 @@ def start_timer(project_dir: Path, slug: str) -> ActiveTimer:
     return ActiveTimer(slug=slug, timeclock=timeclock, started=ts, elapsed_minutes=0)
 
 
-def stop_timer(project_dir: Path) -> StopResult:
+def stop_timer(project_dir: Path, *, direct: bool = False) -> StopResult:
     """Stop the active timer and invoke backfill_window.
 
     Writes the clock-out entry to the timeclock under flock.
@@ -111,7 +129,15 @@ def stop_timer(project_dir: Path) -> StopResult:
     Invokes backfill_window on the window just closed.
     Returns StopResult(was_running=False) if no timer was active.
     """
-    active = _reports_mod.read_active_timer()
+    if not direct:
+        hub_result = _try_stop_timer_via_hub(project_dir)
+        if hub_result is not None:
+            return hub_result
+    return _stop_timer_local(project_dir)
+
+
+def _stop_timer_local(project_dir: Path) -> StopResult:
+    active = _reports_mod.read_active_timer(prefer_hub=False)
     if active is None:
         return StopResult(was_running=False)
 
@@ -157,6 +183,66 @@ def stop_timer(project_dir: Path) -> StopResult:
             )
 
     return StopResult(was_running=True, slug=slug, elapsed_seconds=elapsed, backfill_count=count)
+
+
+def _try_start_timer_via_hub(project_dir: Path, slug: str) -> ActiveTimer | None:
+    from halyard.hub_client import start_timer as hub_start_timer
+
+    result = hub_start_timer(project_dir, slug)
+    if result is None:
+        return None
+    if result.get("error") == "already_running":
+        project = result.get("project")
+        raise TimerAlreadyRunning(str(project or slug))
+    if "_hub_error" in result:
+        # Hub is up but rejected the start; surface it rather than starting a
+        # divergent local timer the Hub doesn't know about.
+        raise HubStateError(f"Hub rejected timer start: {_hub_error_detail(result)}")
+
+    started_raw = result.get("started_at")
+    started = _started_label(started_raw) if isinstance(started_raw, str) else None
+    timeclock_raw = result.get("timeclock")
+    timeclock = Path(timeclock_raw) if isinstance(timeclock_raw, str) and timeclock_raw else None
+    return ActiveTimer(slug=slug, timeclock=timeclock, started=started, elapsed_minutes=0)
+
+
+def _try_stop_timer_via_hub(project_dir: Path) -> StopResult | None:
+    from halyard.hub_client import stop_timer as hub_stop_timer
+
+    result = hub_stop_timer(project_dir)
+    if result is None:
+        return None
+    if "_hub_error" in result:
+        # Hub is up but rejected the stop; degrade to a no-op (report nothing
+        # was stopped) instead of writing a local clock-out behind its back.
+        from halyard.ai_log import _log_error
+
+        _log_error(
+            "hub stop_timer rejected; skipping local fallback",
+            HubStateError(f"Hub rejected timer stop: {_hub_error_detail(result)}"),
+        )
+        return StopResult(was_running=False)
+    return StopResult(
+        was_running=bool(result.get("was_running")),
+        slug=result.get("project") if isinstance(result.get("project"), str) else None,
+        elapsed_seconds=(
+            float(result["elapsed_seconds"]) if result.get("elapsed_seconds") is not None else None
+        ),
+        backfill_count=int(result.get("backfill_count") or 0),
+    )
+
+
+def _hub_error_detail(result: dict[str, object]) -> str:
+    detail = result.get("detail")
+    if isinstance(detail, str) and detail:
+        return detail
+    return f"HTTP {result.get('_hub_error')}"
+
+
+def _started_label(value: str) -> str | None:
+    with contextlib.suppress(ValueError):
+        return datetime.fromisoformat(value).strftime("%Y-%m-%d %H:%M:%S")
+    return None
 
 
 # ---------------------------------------------------------------------------

@@ -134,7 +134,20 @@ def test_migration_v5_to_v6_additive_idempotent() -> None:
     db._apply_migration(c, sql)  # idempotent self-heal must not raise
     cols = {row[1] for row in c.execute("PRAGMA table_info(sessions)")}
     assert {"mcp_servers_used", "mcp_server_names"} <= cols
-    assert db._CURRENT_VERSION == 6
+
+
+def test_migration_v6_to_v7_additive_idempotent() -> None:
+    # v5.0 Duplicate-Effort detection added the `remote` column (v6 → v7).
+    c = sqlite3.connect(":memory:")
+    c.row_factory = sqlite3.Row
+    c.executescript("CREATE TABLE sessions(id TEXT); PRAGMA user_version=6;")
+    c.commit()
+    sql = dict(db._MIGRATIONS)[6]
+    db._apply_migration(c, sql)
+    db._apply_migration(c, sql)  # idempotent self-heal must not raise
+    cols = {row[1] for row in c.execute("PRAGMA table_info(sessions)")}
+    assert "remote" in cols
+    assert db._CURRENT_VERSION == 7
 
 
 # --- §3 collector wiring (Claude Code) ------------------------------------

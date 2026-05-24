@@ -8,7 +8,13 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from halyard.service import _plist
+from halyard.service import PLIST_LABEL
+from halyard.service_providers.launchd import LaunchdProvider
+
+
+def _plist(halyard_exe: str, project_dir: Path, port: int) -> str:
+    """Generate a launchd plist via the macOS provider (formerly service._plist)."""
+    return LaunchdProvider(PLIST_LABEL)._plist(halyard_exe, project_dir, port)
 
 
 def _parse_xml(text: str) -> ET.Element:

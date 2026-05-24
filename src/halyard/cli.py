@@ -73,11 +73,13 @@ def default(
 
 from halyard import (  # noqa: E402
     cli_hooks,
+    cli_hub,
     cli_importers,
     cli_mcp,
     cli_report,
     cli_session,
     cli_setup,
+    cli_spec,
 )
 
 cli_hooks.register(app)
@@ -86,6 +88,8 @@ cli_session.register(app)
 cli_importers.register(app)
 cli_report.register(app)
 cli_mcp.register(app)
+cli_hub.register(app)
+cli_spec.register(app)
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +174,7 @@ def signal(
             console.print("[yellow]⚓ START signal received.[/] Provide a slug to begin:")
             console.print(f"   [bold]halyard signal {MORSE_START} client/project[/]")
             return
-        from halyard.orchestration import TimerAlreadyRunning, start_timer
+        from halyard.orchestration import HubStateError, TimerAlreadyRunning, start_timer
 
         timeclock_candidate = Path.cwd() / "time.timeclock"
         if not timeclock_candidate.exists():
@@ -181,6 +185,9 @@ def signal(
             timer = start_timer(Path.cwd(), account)
         except TimerAlreadyRunning as e:
             console.print(f"[red]Timer already running for [bold]{e.slug}[/].[/]")
+            return
+        except HubStateError as e:
+            console.print(f"[red]{e}[/]")
             return
         console.print(f"[green]Started[/] [bold]{timer.slug}[/] at {timer.started}.")
 

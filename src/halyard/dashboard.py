@@ -79,12 +79,21 @@ def run_dashboard(
     if open_browser:
         webbrowser.open(url)
 
-    # v3.12: ride a localhost OTLP receiver inside this long-lived service
-    # process — but only when the user opted into VS Code OTel capture, so
-    # a default install gets no new listener. Best-effort: never fatal.
-    from halyard.collectors.otel_receiver import start_receiver
+    # v4.0: Halyard Hub. The Hub acts as a central telemetry broker and
+    # exclusive writer for the ledger. It includes the OTLP/HTTP receiver
+    # (v3.12) and the direct-ingest endpoint (v4.0).
+    # Bind the configured port so the embedded Hub and hub_client agree. NOTE:
+    # the OTLP/HTTP default is 4318; if HALYARD_HUB_PORT moves the Hub off 4318,
+    # external OTLP emitters (e.g. VS Code) must be pointed at the new port too.
+    from halyard.hub_client import hub_port
+    from halyard.hub_server import HubServer
 
-    otel_receiver = start_receiver(project_dir)
+    hub: HubServer | None = HubServer(project_dir, port=hub_port())
+    try:
+        if hub is not None:
+            hub.start()
+    except OSError:
+        hub = None  # best-effort: don't crash if port is taken
 
     try:
         server.serve_forever()
@@ -92,8 +101,8 @@ def run_dashboard(
         pass
     finally:
         server.server_close()
-        if otel_receiver is not None:
-            otel_receiver.stop()
+        if hub is not None:
+            hub.stop()
 
     return url
 
@@ -220,10 +229,14 @@ def _handler_for(
                 if is_valid_timer_slug(slug):
                     # v2.17 task 5.5: delegate to shared start_timer; ignores
                     # TimerAlreadyRunning (dashboard silently no-ops on duplicate start)
-                    from halyard.orchestration import TimerAlreadyRunning, start_timer
+                    from halyard.orchestration import (
+                        HubStateError,
+                        TimerAlreadyRunning,
+                        start_timer,
+                    )
 
                     account = slug.replace("/", ":", 1)
-                    with suppress(TimerAlreadyRunning):
+                    with suppress(TimerAlreadyRunning, HubStateError):
                         start_timer(_action_dir(), account)
 
             elif self.path == "/api/stop":
@@ -686,6 +699,15 @@ def _render_state(
         else ""
     )
 
+    collision_count = len(state.collisions)
+    collisions_pill = (
+        _panel_status_pill(
+            f"{collision_count} branch{'es' if collision_count != 1 else ''}", "warning"
+        )
+        if collision_count
+        else _panel_status_pill("no overlap", "healthy")
+    )
+
     tool_count = len(list(report.by_tool))
     tools_pill = (
         _panel_status_pill(f"{tool_count} tool{'s' if tool_count != 1 else ''}", "muted")
@@ -766,7 +788,7 @@ def _render_state(
     {_health_popup(state.health)}
 
     <section class="metrics" aria-label="Today summary">
-      {_timer_metric(state.active_timer)}
+      {_timer_metric(state.active_timer, state.timer_collision)}
       {
         _metric(
             "Human Time",
@@ -842,7 +864,7 @@ def _render_state(
         {_leverage_panel(state.all_sessions, state.generated_at)}
       </article>
 
-      <article class="panel span-7" data-panel="sessions">
+      <article class="panel span-7" data-panel="sessions" data-hub-fragment="sessions">
         <div class="panel-head">
           <div>
             <p class="eyebrow">{_morse("LOG")}</p>
@@ -878,6 +900,19 @@ def _render_state(
         {_unattributed_table(report.unattributed_sessions)}
       </article>
 
+      <article class="panel span-12 attention-{
+        _e("on" if state.collisions else "off")
+    }" data-panel="collisions" data-hub-fragment="collisions">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Overlap</p>
+            <h2>Collisions</h2>
+          </div>
+          {collisions_pill}
+        </div>
+        {_collisions_panel(state.collisions)}
+      </article>
+
       <article class="panel span-12" data-panel="wake">
         <div class="panel-head">
           <div>
@@ -900,7 +935,7 @@ def _render_state(
         {_time_table(human_time.by_project)}
       </article>
 
-      <article class="panel span-6" data-panel="projects">
+      <article class="panel span-6" data-panel="projects" data-hub-fragment="projects">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Attribution</p>
@@ -946,7 +981,7 @@ def _render_state(
         {_budget_panel(budgets)}
       </article>
 
-      <article class="panel span-12" data-panel="costs">
+      <article class="panel span-12" data-panel="costs" data-hub-fragment="costs">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Cost Allocation</p>
@@ -972,8 +1007,66 @@ def _render_state(
   {_celebration_script()}
   {_easter_egg_script()}
   {_table_sort_script()}
+  {_hub_events_script()}
 </body>
 </html>"""
+
+
+def _hub_events_script() -> str:
+    """v4.3: Reactive Hub event listener."""
+    import json
+
+    from halyard.hub_client import hub_url
+
+    events_url = json.dumps(f"{hub_url()}/v1/events")
+    return """<script>
+(function(){
+  try {
+    var pending = false;
+    var wanted = {
+      session_ingested: ['sessions', 'ai-sessions', 'ai-cost', 'projects', 'costs', 'collisions'],
+      collision_detected: ['timer', 'collisions'],
+      timer_started: ['timer'],
+      timer_stopped: ['timer'],
+      timer_updated: ['timer']
+    };
+    function patch(names) {
+      if (pending) return;
+      pending = true;
+      fetch(window.location.href, {
+        cache: 'no-store',
+        credentials: 'same-origin',
+        headers: {'X-Halyard-Fragment': '1'}
+      }).then(function(resp) {
+        if (!resp.ok) throw new Error('dashboard refresh failed');
+        return resp.text();
+      }).then(function(html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        names.forEach(function(name) {
+          var current = document.querySelector('[data-hub-fragment="' + name + '"]');
+          var next = doc.querySelector('[data-hub-fragment="' + name + '"]');
+          if (current && next) current.replaceWith(next);
+        });
+        if (window.HalyardBootTables) window.HalyardBootTables();
+      }).catch(function(err) {
+        if (window.console) console.debug('Halyard realtime refresh skipped:', err);
+      }).finally(function() {
+        pending = false;
+      });
+    }
+    var source = new EventSource(__HUB_EVENTS_URL__);
+    source.onmessage = function(event) {
+      var msg = JSON.parse(event.data);
+      var fragments = wanted[msg.type];
+      if (fragments) patch(fragments);
+    };
+    source.onerror = function() {
+      // Best effort, don't spam errors if Hub is down
+      source.close();
+    };
+  } catch (e) {}
+})();
+</script>""".replace("__HUB_EVENTS_URL__", events_url)
 
 
 def _captains_quarters_panel(project_dir: Path, sessions: list[AiSession]) -> str:
@@ -1241,7 +1334,7 @@ def _health_popup_script() -> str:
 
 def _metric(label: str, value: str, detail: str, tone: str, panel_id: str) -> str:
     return f"""
-      <article class="metric metric-{tone}" data-panel="{panel_id}">
+      <article class="metric metric-{tone}" data-panel="{panel_id}" data-hub-fragment="{panel_id}">
         <span>{_e(label)}</span>
         <strong>{_e(value)}</strong>
         <small>{_e(detail)}</small>
@@ -1249,10 +1342,22 @@ def _metric(label: str, value: str, detail: str, tone: str, panel_id: str) -> st
     """
 
 
-def _timer_metric(active_timer: object) -> str:
-    from halyard.reports import ActiveTimer
+def _timer_metric(active_timer: object, collision: object = None) -> str:
+    from halyard.reports import ActiveTimer, TimerCollision
 
     timer = active_timer if isinstance(active_timer, ActiveTimer) else None
+    coll = collision if isinstance(collision, TimerCollision) else None
+    collision_html = ""
+    if coll:
+        m = coll.seconds_ago // 60
+        time_str = f"{m}m ago" if m > 0 else "just now"
+        collision_html = f"""
+            <div class="collision-alert">
+                <span>⚠️ Collision</span>
+                <small>Branch '{_e(coll.branch)}' busy ({_e(coll.tool)}) {time_str}</small>
+            </div>
+            """
+
     if timer:
         controls = (
             f'<form class="timer-form" method="post" action="/api/stop">'
@@ -1272,10 +1377,11 @@ def _timer_metric(active_timer: object) -> str:
         detail = ""
 
     return f"""
-      <article class="metric metric-focus" data-panel="timer">
+      <article class="metric metric-focus" data-panel="timer" data-hub-fragment="timer">
         <span>Active Project</span>
         <strong>{value}</strong>
         <small>{detail}</small>
+        {collision_html}
         {controls}
       </article>
     """
@@ -1298,11 +1404,14 @@ def _sessions_table(sessions: Iterable[AiSession]) -> str:
         css_key, emoji = _tool_icon(session.tool)
         dur = _duration_str(session.end - session.start)
         health = _health_badge(session)
+        branch_tag = (
+            f"<br><small class='muted'>{_e(session.branch)}</small>" if session.branch else ""
+        )
         rows.append(
             "<tr>"
             f"<td>{_e(session.end.strftime('%H:%M'))}</td>"
             f"<td><span class='tool-icon tool-{_e(css_key)}'>{emoji}</span></td>"
-            f"<td>{_e(session.project or '(unattributed)')}</td>"
+            f"<td>{_e(session.project or '(unattributed)')}{branch_tag}</td>"
             f"<td>{_e(session.model)}</td>"
             f"<td class='num'>{_e(dur)}</td>"
             f"<td class='num' data-sort-val='{session.input_tokens + session.output_tokens}'>"
@@ -1914,6 +2023,39 @@ def _surface_panel(buckets: Iterable[ToolUsageBucket]) -> str:
     )
 
 
+def _collisions_panel(collisions: Iterable[object]) -> str:
+    """v5.0: per-branch duplicate-effort overlaps with a magnitude bar."""
+    from halyard.reports import BranchCollision
+
+    items = [c for c in collisions if isinstance(c, BranchCollision)]
+    if not items:
+        return '<p class="empty">No overlapping AI effort detected.</p>'
+
+    now = datetime.now()
+    max_count = max(c.count for c in items)
+    rows = []
+    for c in items:
+        pct = round(100 * c.count / max_count) if max_count else 0
+        mins = int((now - c.latest_end).total_seconds() // 60)
+        when = f"{mins}m ago" if mins > 0 else "just now"
+        proj = f"{_e(c.project)} · " if c.project else ""
+        rows.append(
+            "<tr>"
+            f"<td>{proj}<strong>{_e(c.branch)}</strong>"
+            f"<div class='bar-wrap'><div class='bar bar-collision' "
+            f"style='width:{pct}%'></div></div></td>"
+            f"<td class='num'>{c.count}</td>"
+            f"<td>{_e(', '.join(c.tools))}</td>"
+            f"<td class='num'>{_e(when)}</td>"
+            "</tr>"
+        )
+    return (
+        _stbl("collisions", "t,n,t,n")
+        + "<thead><tr><th>Branch</th><th>Overlaps</th><th>Tools</th><th>Last</th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+    )
+
+
 def _bucket_table(buckets: Iterable[CostBucket], label: str) -> str:
     rows = []
     for bucket in buckets:
@@ -2300,6 +2442,7 @@ def _table_sort_script() -> str:
       var tbls=document.querySelectorAll('table[data-sortable]');
       for(var i=0;i<tbls.length;i++) init(tbls[i]);
     };
+    window.HalyardBootTables = boot;
     if(document.readyState!=='loading') boot();
     else document.addEventListener('DOMContentLoaded', boot);
   } catch(e){}
@@ -2907,6 +3050,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .bar-wrap { width: 100%; background: var(--line); border-radius: 99px; height: 4px; overflow: hidden; }
 .bar { height: 100%; border-radius: 99px; background: var(--cyan); transition: width .3s; }
 .bar-ok { background: var(--green); }
+.bar-collision { background: var(--amber); }
 .bar-warn { background: var(--amber); }
 .bar-high { background: var(--amber); opacity: .85; }
 .bar-over { background: var(--red); }
@@ -3191,4 +3335,19 @@ body.night-watch .night-watch-toast { display: flex !important; }
   padding: .6rem 1.2rem; border-radius: 8px; font-size: .85rem;
   align-items: center; gap: .5rem;
 }
+
+/* ── v5.0 collision alert ── */
+.collision-alert {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: rgba(243, 191, 91, 0.1);
+  border: 1px solid rgba(243, 191, 91, 0.3);
+  border-radius: 6px;
+  color: var(--amber);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.collision-alert span { font-weight: 800; font-size: 11px; text-transform: uppercase; }
+.collision-alert small { font-size: 11px; opacity: 0.9; line-height: 1.3; }
 """

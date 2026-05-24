@@ -24,7 +24,8 @@ from datetime import datetime
 from pathlib import Path
 
 _AUTO_TIMER_FILE = Path.home() / ".halyard" / "auto-timer"
-_INACTIVITY_MINUTES = 30
+# Canonical auto-timer idle policy; the Hub derives its timedelta from this.
+INACTIVITY_MINUTES = 30
 _TS_FMT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -67,6 +68,10 @@ def auto_timer_close_if_stale(now: datetime | None = None) -> bool:
 
     Returns True if a timer was closed, False otherwise.
     """
+    hub_result = _try_hub_presence("close_stale", now=now)
+    if hub_result is not None:
+        return bool(hub_result.get("closed"))
+
     state = _read_state()
     if not state:
         return False
@@ -84,7 +89,7 @@ def auto_timer_close_if_stale(now: datetime | None = None) -> bool:
 
     clock = now or datetime.now()
     elapsed = (clock - last).total_seconds() / 60
-    if elapsed >= _INACTIVITY_MINUTES:
+    if elapsed >= INACTIVITY_MINUTES:
         tc_str = state.get("timeclock", "")
         if tc_str:
             tc = Path(tc_str)
@@ -116,6 +121,9 @@ def auto_timer_activity(project: str, timeclock: Path, now: datetime | None = No
 
     clock = now or datetime.now()
     ts = clock.strftime(_TS_FMT)
+    if _try_hub_presence("activity", project=project, timeclock=timeclock, now=clock) is not None:
+        return
+
     state = _read_state()
 
     if not state:
@@ -141,6 +149,9 @@ def auto_timer_activity(project: str, timeclock: Path, now: datetime | None = No
 
 def auto_timer_update_activity(now: datetime | None = None) -> None:
     """Update last_activity without opening a new timer (called on Stop hook)."""
+    if _try_hub_presence("update", now=now) is not None:
+        return
+
     state = _read_state()
     if not state:
         return
@@ -154,6 +165,10 @@ def auto_timer_close_now(now: datetime | None = None) -> bool:
 
     Returns True if a timer was closed, False if nothing was open.
     """
+    hub_result = _try_hub_presence("close_now", now=now)
+    if hub_result is not None:
+        return bool(hub_result.get("closed"))
+
     state = _read_state()
     if not state:
         return False
@@ -182,3 +197,20 @@ def safe_auto_timer_close() -> None:
         from halyard.ai_log import _log_error
 
         _log_error("auto-timer close failed", exc)
+
+
+def _try_hub_presence(
+    action: str,
+    *,
+    project: str | None = None,
+    timeclock: Path | None = None,
+    now: datetime | None = None,
+) -> dict[str, object] | None:
+    from halyard.hub_client import update_presence
+
+    return update_presence(
+        action,
+        project=project,
+        timeclock=timeclock,
+        now=now.isoformat() if now else None,
+    )

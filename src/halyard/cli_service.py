@@ -1,4 +1,4 @@
-"""halyard service — macOS LaunchAgent management sub-commands."""
+"""halyard service — platform-agnostic background service management."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from rich.console import Console
 console = Console()
 
 app = typer.Typer(
-    name="service", help="Manage the Halyard background dashboard service (The Bridge)."
+    name="service", help="Manage the Halyard background services (The Hub / Dashboard)."
 )
 
 
@@ -16,13 +16,7 @@ app = typer.Typer(
 def service_install(
     port: int = typer.Option(7432, "--port", help="Port for the background dashboard."),
 ) -> None:
-    """Install Halyard as a macOS login service (auto-starts The Bridge)."""
-    import platform
-
-    if platform.system() != "Darwin":
-        console.print("[bold red]Error:[/] Service management is only supported on macOS.")
-        raise typer.Exit(code=1)
-
+    """Install Halyard as a login service."""
     from halyard.ai_log import find_project_dir
     from halyard.hub import find_hub
     from halyard.service import install_service
@@ -41,44 +35,39 @@ def service_install(
         console.print(f"[bold red]Error:[/] {exc}")
         raise typer.Exit(code=1) from exc
 
-    console.print("[bold green]Service installed.[/] The Bridge will start at login.")
+    console.print("[bold green]Service installed.[/] Halyard will start at login.")
     console.print(f"  Dashboard: [bold cyan]{url}[/]")
-    console.print("  Logs:      ~/Library/Logs/halyard-dashboard.log")
     console.print("\nTo uninstall: [bold]halyard service uninstall[/]")
 
 
 @app.command(name="uninstall")
 def service_uninstall() -> None:
     """Uninstall the Halyard background service."""
-    import platform
+    from halyard.service import uninstall_service
 
-    if platform.system() != "Darwin":
-        console.print("[bold red]Error:[/] Service management is only supported on macOS.")
-        raise typer.Exit(code=1)
+    try:
+        removed = uninstall_service()
+    except Exception as exc:
+        console.print(f"[bold red]Error:[/] {exc}")
+        raise typer.Exit(code=1) from exc
 
-    from halyard.service import PLIST_PATH, uninstall_service
-
-    if not PLIST_PATH.exists():
+    if removed:
+        console.print("[bold green]Service uninstalled.[/]")
+    else:
         console.print("[yellow]Service is not installed.[/]")
-        return
-
-    uninstall_service()
-    console.print("[bold green]Service uninstalled.[/]")
 
 
 @app.command(name="status")
 def service_status_cmd() -> None:
-    """Show whether the Halyard background service is running."""
-    import platform
-
-    if platform.system() != "Darwin":
-        console.print("[bold red]Error:[/] Service management is only supported on macOS.")
-        raise typer.Exit(code=1)
-
+    """Show background service status."""
     from halyard.service import service_status
 
-    running, info = service_status()
-    if running:
-        console.print(f"[bold green]Running[/]  {info}")
-    else:
-        console.print(f"[yellow]Stopped[/]  {info}")
+    try:
+        running, info = service_status()
+        if running:
+            console.print(f"[bold green]Running[/]  {info}")
+        else:
+            console.print(f"[yellow]Stopped[/]  {info}")
+    except Exception as exc:
+        console.print(f"[bold red]Error:[/] {exc}")
+        raise typer.Exit(code=1) from exc

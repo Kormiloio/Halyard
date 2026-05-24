@@ -294,6 +294,30 @@ Gemini CLI sessions include per-model token breakdowns (flash vs. pro vs. thinki
 
 ---
 
+## Polyglot ingestion
+
+Tools that are not written in Python can emit sessions directly to the local
+Hub:
+
+```bash
+halyard spec
+samples/emit-session.sh
+```
+
+The Hub accepts `POST http://127.0.0.1:4318/v1/ingest` with either a raw
+canonical `ai-sessions.log` line or a structured `fields` object. Structured
+payloads must include `start`, `end`, `tool`, `model`, `input_tokens`,
+`output_tokens`, and `cost_usd`; optional metadata keys are the same keys shown
+by `halyard spec`.
+
+```bash
+curl -X POST http://127.0.0.1:4318/v1/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"fields":{"start":"2026-05-23T10:00:00","end":"2026-05-23T10:05:00","tool":"custom-tool","model":"model-x","input_tokens":100,"output_tokens":50,"cost_usd":0.01}}'
+```
+
+---
+
 ## What gets captured
 
 Per session (one line in `ai-sessions.log`):

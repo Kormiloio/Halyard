@@ -1,24 +1,36 @@
-"""Test backfill for v2.12 — service install/uninstall/status (v2.18 tasks 5.1-5.4)."""
+"""Service install/uninstall/status + plist escaping (LaunchdProvider architecture)."""
 
 from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from halyard.service import (
     PLIST_LABEL,
-    _plist,
     install_service,
     service_status,
     uninstall_service,
 )
+from halyard.service_providers.launchd import LaunchdProvider
 
 
-def _fake_plist_path(tmp_path: Path) -> Path:
-    return tmp_path / f"{PLIST_LABEL}.plist"
+@pytest.fixture()
+def provider(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> LaunchdProvider:
+    p = LaunchdProvider(PLIST_LABEL)
+    p.plist_path = tmp_path / f"{PLIST_LABEL}.plist"
+    p.log_path = tmp_path / "halyard-dashboard.log"
+    monkeypatch.setattr("halyard.service.get_provider", lambda label: p)
+    return p
+
+
+def _plist(halyard_exe: str, project_dir: Path, port: int) -> str:
+    return LaunchdProvider(PLIST_LABEL)._plist(halyard_exe, project_dir, port)
+
+
+def _ok_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
 
 
 # ---------------------------------------------------------------------------
@@ -26,35 +38,36 @@ def _fake_plist_path(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def test_install_service_writes_plist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    fake_plist = _fake_plist_path(tmp_path)
-    monkeypatch.setattr("halyard.service.PLIST_PATH", fake_plist)
+def test_install_service_writes_plist(
+    provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(subprocess, "run", _ok_run)
+    monkeypatch.setattr("halyard.cli_hooks._halyard_exe", lambda: "/usr/local/bin/halyard")
 
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
-        with patch("shutil.which", return_value="/usr/local/bin/halyard"):
-            url = install_service(tmp_path, port=7432)
+    url = install_service(tmp_path, port=7432)
 
-    assert fake_plist.exists()
-    assert "halyard" in fake_plist.read_text()
+    assert provider.plist_path.exists()
+    assert "halyard" in provider.plist_path.read_text()
     assert url == "http://127.0.0.1:7432/"
 
 
 def test_install_service_calls_launchctl_load(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    fake_plist = _fake_plist_path(tmp_path)
-    monkeypatch.setattr("halyard.service.PLIST_PATH", fake_plist)
+    calls: list[list[str]] = []
 
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
-        with patch("shutil.which", return_value="/usr/local/bin/halyard"):
-            install_service(tmp_path, port=7432)
+    def _record(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return _ok_run(cmd, **kwargs)
 
-    assert mock_run.called
-    call_args = mock_run.call_args[0][0]
-    assert "launchctl" in call_args
-    assert "load" in call_args
+    monkeypatch.setattr(subprocess, "run", _record)
+    monkeypatch.setattr("halyard.cli_hooks._halyard_exe", lambda: "/usr/local/bin/halyard")
+
+    install_service(tmp_path, port=7432)
+
+    assert calls
+    assert "launchctl" in calls[0]
+    assert "load" in calls[0]
 
 
 # ---------------------------------------------------------------------------
@@ -62,32 +75,35 @@ def test_install_service_calls_launchctl_load(
 # ---------------------------------------------------------------------------
 
 
-def test_uninstall_removes_plist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    fake_plist = _fake_plist_path(tmp_path)
-    fake_plist.write_text("<plist/>")
-    monkeypatch.setattr("halyard.service.PLIST_PATH", fake_plist)
+def test_uninstall_removes_plist(
+    provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    provider.plist_path.write_text("<plist/>")
+    calls: list[list[str]] = []
 
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
-        uninstall_service()
+    def _record(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return _ok_run(cmd, **kwargs)
 
-    assert not fake_plist.exists()
-    assert mock_run.called
-    call_args = mock_run.call_args[0][0]
-    assert "launchctl" in call_args
-    assert "unload" in call_args
+    monkeypatch.setattr(subprocess, "run", _record)
+
+    removed = uninstall_service()
+
+    assert removed is True
+    assert not provider.plist_path.exists()
+    assert calls
+    assert "launchctl" in calls[0]
+    assert "unload" in calls[0]
 
 
-def test_uninstall_no_plist_is_safe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    fake_plist = _fake_plist_path(tmp_path)
-    assert not fake_plist.exists()
-    monkeypatch.setattr("halyard.service.PLIST_PATH", fake_plist)
+def test_uninstall_no_plist_is_safe(
+    provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert not provider.plist_path.exists()
+    monkeypatch.setattr(subprocess, "run", _ok_run)
 
     # Should not raise even when the plist doesn't exist
-    with patch("subprocess.run"):
-        uninstall_service()
+    assert uninstall_service() is False
 
 
 # ---------------------------------------------------------------------------
@@ -95,44 +111,39 @@ def test_uninstall_no_plist_is_safe(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 # ---------------------------------------------------------------------------
 
 
-def test_service_status_not_installed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    fake_plist = _fake_plist_path(tmp_path)
-    monkeypatch.setattr("halyard.service.PLIST_PATH", fake_plist)
-
+def test_service_status_not_installed(provider: LaunchdProvider) -> None:
     running, msg = service_status()
     assert not running
     assert "not installed" in msg
 
 
 def test_service_status_installed_and_running(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake_plist = _fake_plist_path(tmp_path)
-    fake_plist.write_text("<plist/>")
-    monkeypatch.setattr("halyard.service.PLIST_PATH", fake_plist)
+    provider.plist_path.write_text("<plist/>")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **kw: subprocess.CompletedProcess(args=a[0], returncode=0, stdout="{}"),
+    )
 
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="{}", stderr=""
-        )
-        running, msg = service_status()
+    running, msg = service_status()
 
     assert running
     assert "127.0.0.1" in msg
 
 
 def test_service_status_installed_not_running(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake_plist = _fake_plist_path(tmp_path)
-    fake_plist.write_text("<plist/>")
-    monkeypatch.setattr("halyard.service.PLIST_PATH", fake_plist)
+    provider.plist_path.write_text("<plist/>")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **kw: subprocess.CompletedProcess(args=a[0], returncode=1, stdout=""),
+    )
 
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=1, stdout="", stderr=""
-        )
-        running, msg = service_status()
+    running, msg = service_status()
 
     assert not running
     assert "not running" in msg

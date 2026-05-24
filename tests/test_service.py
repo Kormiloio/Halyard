@@ -1,4 +1,4 @@
-"""Tests for halyard.service — macOS LaunchAgent management."""
+"""Tests for halyard service management (macOS LaunchAgent via LaunchdProvider)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,24 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from halyard.service import install_service, uninstall_service
+from halyard.service import PLIST_LABEL, install_service, service_status, uninstall_service
+from halyard.service_providers.launchd import LaunchdProvider
+
+
+@pytest.fixture()
+def provider(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> LaunchdProvider:
+    """A LaunchdProvider redirected at a temp plist, wired into the service shim.
+
+    Patching ``halyard.service.get_provider`` makes install_service /
+    uninstall_service / service_status delegate to this instance, so the real
+    ~/Library/LaunchAgents plist is never touched.
+    """
+    p = LaunchdProvider(PLIST_LABEL)
+    p.plist_path = tmp_path / f"{PLIST_LABEL}.plist"
+    p.log_path = tmp_path / "halyard-dashboard.log"
+    monkeypatch.setattr("halyard.service.get_provider", lambda label: p)
+    return p
+
 
 # ---------------------------------------------------------------------------
 # L-2: launchctl unload must warn on non-zero exit code (not silently fail)
@@ -16,15 +33,13 @@ from halyard.service import install_service, uninstall_service
 
 
 def test_uninstall_service_warns_on_launchctl_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    provider: LaunchdProvider,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """If launchctl unload fails, a warning must be printed to stderr."""
-    # Redirect PLIST_PATH to a temp location so the real plist is never touched
-    fake_plist = tmp_path / "io.kormilo.halyard.plist"
-    fake_plist.write_text("<plist/>")
-    monkeypatch.setattr("halyard.service.PLIST_PATH", fake_plist)
+    provider.plist_path.write_text("<plist/>")
 
-    # Simulate launchctl returning non-zero (service already stopped)
     def _failing_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
             args=cmd,
@@ -43,12 +58,10 @@ def test_uninstall_service_warns_on_launchctl_failure(
 
 
 def test_uninstall_service_still_removes_plist_on_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Even when launchctl fails, the plist file must still be removed."""
-    fake_plist = tmp_path / "io.kormilo.halyard.plist"
-    fake_plist.write_text("<plist/>")
-    monkeypatch.setattr("halyard.service.PLIST_PATH", fake_plist)
+    provider.plist_path.write_text("<plist/>")
 
     def _failing_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(args=cmd, returncode=1, stdout="", stderr="error")
@@ -57,16 +70,16 @@ def test_uninstall_service_still_removes_plist_on_failure(
 
     uninstall_service()
 
-    assert not fake_plist.exists()
+    assert not provider.plist_path.exists()
 
 
 def test_uninstall_service_no_warning_on_success(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    provider: LaunchdProvider,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A successful launchctl unload must not print any warning."""
-    fake_plist = tmp_path / "io.kormilo.halyard.plist"
-    fake_plist.write_text("<plist/>")
-    monkeypatch.setattr("halyard.service.PLIST_PATH", fake_plist)
+    provider.plist_path.write_text("<plist/>")
 
     def _ok_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
@@ -80,85 +93,68 @@ def test_uninstall_service_no_warning_on_success(
 
 
 def test_uninstall_service_noop_when_plist_absent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """If the plist doesn't exist, uninstall_service must be a no-op."""
-    fake_plist = tmp_path / "io.kormilo.halyard.plist"
-    monkeypatch.setattr("halyard.service.PLIST_PATH", fake_plist)
-
+    """If the plist doesn't exist, uninstall_service must be a no-op returning False."""
     mock_run = MagicMock()
     monkeypatch.setattr(subprocess, "run", mock_run)
 
-    uninstall_service()
+    removed = uninstall_service()
 
+    assert removed is False
     mock_run.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
-# v2.16 §3 — service_status reports the actual installed port
+# service_status reports the actual installed port
 # ---------------------------------------------------------------------------
 
 
 def test_service_status_reports_custom_port(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A plist installed with a non-default port surfaces in service_status."""
-    import halyard.service as svc
-
-    fake_plist = tmp_path / "io.kormilo.halyard.plist"
-    monkeypatch.setattr(svc, "PLIST_PATH", fake_plist)
-
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
-    fake_plist.write_text(svc._plist("halyard", project_dir, 7777))
+    provider.plist_path.write_text(provider._plist("halyard", project_dir, 7777))
 
     # Simulate launchctl reporting the service as loaded.
     monkeypatch.setattr(
-        "halyard.service.subprocess.run",
+        subprocess,
+        "run",
         lambda *a, **kw: subprocess.CompletedProcess(args=a[0], returncode=0, stdout=""),
     )
 
-    is_running, msg = svc.service_status()
+    is_running, msg = service_status()
     assert is_running
     assert "http://127.0.0.1:7777/" in msg
 
 
 def test_installed_port_falls_back_on_malformed_plist(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    provider: LaunchdProvider, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Malformed plist → warning + DASHBOARD_PORT fallback, not a crash."""
-    import halyard.service as svc
     from halyard.dashboard import DASHBOARD_PORT
 
-    fake_plist = tmp_path / "io.kormilo.halyard.plist"
-    fake_plist.write_text("<not valid xml")  # garbage
-    monkeypatch.setattr(svc, "PLIST_PATH", fake_plist)
+    provider.plist_path.write_text("<not valid xml")  # garbage
 
-    port = svc._installed_port()
+    port = provider.get_port()
     assert port == DASHBOARD_PORT
     captured = capsys.readouterr()
     assert "Warning" in captured.err
 
 
-def test_installed_port_returns_default_when_plist_absent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """If the plist doesn't exist, _installed_port returns the default constant."""
-    import halyard.service as svc
+def test_installed_port_returns_default_when_plist_absent(provider: LaunchdProvider) -> None:
+    """If the plist doesn't exist, get_port returns the default constant."""
     from halyard.dashboard import DASHBOARD_PORT
 
-    fake_plist = tmp_path / "missing.plist"
-    monkeypatch.setattr(svc, "PLIST_PATH", fake_plist)
-    assert svc._installed_port() == DASHBOARD_PORT
+    assert provider.get_port() == DASHBOARD_PORT
 
 
 def test_install_service_uses_trusted_halyard_resolver(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """LaunchAgent install must not persist an arbitrary PATH hit."""
-    import halyard.service as svc
-
-    fake_plist = tmp_path / "io.kormilo.halyard.plist"
     trusted_exe = tmp_path / ".venv" / "bin" / "halyard"
     trusted_exe.parent.mkdir(parents=True)
     trusted_exe.write_text("#!/bin/sh\n")
@@ -171,15 +167,14 @@ def test_install_service_uses_trusted_halyard_resolver(
         calls.append(cmd)
         return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(svc, "PLIST_PATH", fake_plist)
     monkeypatch.setattr("halyard.cli_hooks._halyard_exe", lambda: str(trusted_exe))
     monkeypatch.setattr(subprocess, "run", _ok_run)
 
     url = install_service(project_dir, port=7777)
 
     assert url == "http://127.0.0.1:7777/"
-    assert calls == [["launchctl", "load", "-w", str(fake_plist)]]
-    assert f"<string>{trusted_exe}</string>" in fake_plist.read_text()
+    assert calls == [["launchctl", "load", "-w", str(provider.plist_path)]]
+    assert f"<string>{trusted_exe}</string>" in provider.plist_path.read_text()
 
 
 # ---------------------------------------------------------------------------

@@ -217,6 +217,23 @@ through `v2.59-…` plus roadmap items in `openspec/project.md`.
 20. **v3.6** — Windsurf native collector — **shipped**: autonomous
     capture for Codeium Windsurf via `hooks.json`. TTL-based
     finalization (30m). 1368 tests.
+21. **v4.0** — Halyard Hub Architecture — **shipped**: Transition to a
+    Daemon-Broker model to eliminate I/O latency and enable
+    cross-platform service management. 1451 tests passing.
+22. **v4.1** — Polyglot Proof & Public Spec — **shipped**:
+    Stable `/v1/ingest` validation, generated `halyard spec`, and a
+    curl-based reference emitter. Focused v4.1 validation: 9 tests.
+23. **v4.2** — Hub-Managed Active State — **shipped**:
+    Hub-first active timer reads, token-gated timer mutation, and
+    Hub-driven auto-timer presence with file fallback. Focused related
+    validation: 36 tests.
+24. **v4.3** — Real-Time Dashboard — **shipped**:
+    SSE event fanout and fragment-patched The Bridge dashboard updates
+    for session ingestion and timer changes. Focused related validation:
+    58 tests.
+25. **v5.0** — Duplicate-Effort Detection — **Spec phase complete**:
+    Identifying redundant AI work via git metadata overlap and real-time
+    alerts.
 
 ---
 

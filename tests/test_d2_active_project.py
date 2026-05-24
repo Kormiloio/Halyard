@@ -198,7 +198,7 @@ def test_dashboard_stop_removes_active_file(
 
     # Return a real ActiveTimer so the stop handler's guard passes
     fake_timer = ActiveTimer(slug="acme:auth", timeclock=timeclock, started="2026-05-06 10:00:00")
-    monkeypatch.setattr("halyard.reports.read_active_timer", lambda: fake_timer)
+    monkeypatch.setattr("halyard.reports.read_active_timer", lambda **_kwargs: fake_timer)
 
     assert active.exists()
     _post(tmp_path, "/api/stop", b"")

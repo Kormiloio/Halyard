@@ -55,6 +55,8 @@ class ActiveTimer:
     timeclock: Path | None
     started: str | None
     elapsed_minutes: int = 0
+    branch: str | None = None
+    remote: str | None = None
 
     @property
     def elapsed_label(self) -> str:
@@ -78,6 +80,27 @@ class HealthCheck:
 
 
 @dataclass(frozen=True)
+class TimerCollision:
+    """Most-recent overlapping AI session on the active timer's branch."""
+
+    tool: str
+    branch: str
+    seconds_ago: int
+
+
+@dataclass(frozen=True)
+class BranchCollision:
+    """Aggregated overlapping AI effort on one remote/branch (dashboard panel)."""
+
+    branch: str
+    remote: str
+    count: int
+    tools: list[str]
+    latest_end: datetime
+    project: str | None = None
+
+
+@dataclass(frozen=True)
 class DashboardState:
     project_dir: Path
     report: AiReport
@@ -90,6 +113,8 @@ class DashboardState:
     # >0 when this state aggregates multiple project logs (number of
     # source dirs); 0 for a single-project view.
     aggregate_count: int = 0
+    timer_collision: TimerCollision | None = None
+    collisions: list[BranchCollision] = field(default_factory=list)
 
 
 def build_ai_report(
@@ -192,8 +217,25 @@ def summarize_ai_sessions(sessions: list[AiSession], *, period_label: str) -> Ai
     )
 
 
-def read_active_timer(active_path: Path | None = None) -> ActiveTimer | None:
-    """Read the current active timer state, if any."""
+def read_active_timer(
+    active_path: Path | None = None,
+    *,
+    prefer_hub: bool = False,
+    resolve_git: bool = False,
+) -> ActiveTimer | None:
+    """Read the current active timer state, if any.
+
+    ``resolve_git`` resolves the timeclock's branch/remote (two git
+    subprocesses) for collision checks. It defaults to False so hot/polled
+    callers (status, reports, TUI) stay cheap; only the dashboard opts in.
+    """
+    if active_path is None and prefer_hub:
+        from halyard.hub_client import read_state
+
+        state = read_state()
+        if state is not None:
+            return _active_timer_from_hub_state(state, resolve_git=resolve_git)
+
     if active_path is None:
         active_path = _HALYARD_ACTIVE
     if not active_path.exists():
@@ -238,7 +280,58 @@ def read_active_timer(active_path: Path | None = None) -> ActiveTimer | None:
     timeclock = Path(data["timeclock"]) if data.get("timeclock") else None
     started = data.get("started")
     elapsed = _elapsed_minutes(started, datetime.now()) if started else 0
-    return ActiveTimer(slug=slug, timeclock=timeclock, started=started, elapsed_minutes=elapsed)
+
+    # v5.0: Detect branch/remote for collision checks (opt-in; costs 2 git calls).
+    branch, remote = _resolve_git_context(timeclock) if resolve_git else (None, None)
+
+    return ActiveTimer(
+        slug=slug,
+        timeclock=timeclock,
+        started=started,
+        elapsed_minutes=elapsed,
+        branch=branch,
+        remote=remote,
+    )
+
+
+def _resolve_git_context(timeclock: Path | None) -> tuple[str | None, str | None]:
+    """Return (branch, remote) for the timeclock's project dir, or (None, None)."""
+    if not timeclock or not timeclock.exists():
+        return None, None
+    from halyard.git_context import current_branch, current_remote
+
+    return current_branch(timeclock.parent), current_remote(timeclock.parent)
+
+
+def _active_timer_from_hub_state(
+    state: dict[str, object], *, resolve_git: bool = False
+) -> ActiveTimer | None:
+    project = state.get("project")
+    if not isinstance(project, str) or not project:
+        return None
+    started_raw = state.get("started_at")
+    started = _hub_started_label(started_raw) if isinstance(started_raw, str) else None
+    elapsed = _elapsed_minutes(started, datetime.now()) if started else 0
+    timeclock_raw = state.get("timeclock")
+    timeclock = Path(timeclock_raw) if isinstance(timeclock_raw, str) and timeclock_raw else None
+
+    branch, remote = _resolve_git_context(timeclock) if resolve_git else (None, None)
+
+    return ActiveTimer(
+        slug=project,
+        timeclock=timeclock,
+        started=started,
+        elapsed_minutes=elapsed,
+        branch=branch,
+        remote=remote,
+    )
+
+
+def _hub_started_label(value: str) -> str | None:
+    try:
+        return datetime.fromisoformat(value).strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
 
 
 def get_active_project(project_dir: Path) -> str | None:
@@ -387,7 +480,9 @@ def build_dashboard_state(project_dir: Path) -> DashboardState:
 
     all_sessions = parse_sessions(project_dir)
     report = build_ai_report(project_dir, all_time=False)
-    active_timer = read_active_timer()
+    active_timer = read_active_timer(resolve_git=True)
+    timer_collision = _detect_timer_collision(active_timer)
+    collisions = detect_collisions(all_sessions)
     raw_human = build_human_time_report(project_dir)
     now = datetime.now()
     presence_minutes, presence_label = _compute_presence_today(all_sessions, now)
@@ -408,6 +503,78 @@ def build_dashboard_state(project_dir: Path) -> DashboardState:
         latest_session=latest_session,
         all_sessions=all_sessions,
         health=build_health_checks(project_dir, report=report, active_timer=active_timer),
+        timer_collision=timer_collision,
+        collisions=collisions,
+    )
+
+
+def detect_collisions(sessions: list[AiSession]) -> list[BranchCollision]:
+    """Aggregate overlapping AI effort per remote/branch across recent sessions.
+
+    Groups sessions by (remote, branch) and counts those that collide with another
+    in the same group (reusing the canonical ``collisions.find_collisions``), so the
+    dashboard can surface duplicate-effort hotspots without an active timer.
+    """
+    from halyard.collisions import find_collisions
+
+    groups: dict[tuple[str, str], list[AiSession]] = {}
+    for s in sessions:
+        if s.remote and s.branch:
+            groups.setdefault((s.remote, s.branch), []).append(s)
+
+    out: list[BranchCollision] = []
+    for (remote, branch), grp in groups.items():
+        # Cap per-branch work: collisions are about recency, and find_collisions
+        # is O(n) per session, so bound the group to avoid O(n²) on hot branches.
+        recent = sorted(grp, key=lambda s: s.end)[-100:]
+        colliding = [s for s in recent if find_collisions(s, recent)]
+        if not colliding:
+            continue
+        latest = max(colliding, key=lambda s: s.end)
+        out.append(
+            BranchCollision(
+                branch=branch,
+                remote=remote,
+                count=len(colliding),
+                tools=sorted({s.tool for s in colliding}),
+                latest_end=latest.end,
+                project=latest.project,
+            )
+        )
+    out.sort(key=lambda c: c.latest_end, reverse=True)
+    return out
+
+
+def _detect_timer_collision(active_timer: ActiveTimer | None) -> TimerCollision | None:
+    """Compute the latest branch collision for the active timer (one DB query)."""
+    if not active_timer or not active_timer.branch or not active_timer.remote:
+        return None
+
+    from halyard.ai_log import AiSession
+    from halyard.collisions import find_collisions
+    from halyard.db import get_recent_branch_activity
+
+    now = datetime.now()
+    probe = AiSession(
+        start=now,
+        end=now,
+        tool="probe",
+        model="probe",
+        input_tokens=0,
+        output_tokens=0,
+        cost_usd=0.0,
+        remote=active_timer.remote,
+        branch=active_timer.branch,
+    )
+    history = get_recent_branch_activity(active_timer.remote, active_timer.branch)
+    collisions = find_collisions(probe, history)
+    if not collisions:
+        return None
+    latest = collisions[0]
+    return TimerCollision(
+        tool=latest.tool,
+        branch=active_timer.branch,
+        seconds_ago=int((now - latest.end).total_seconds()),
     )
 
 
@@ -489,7 +656,9 @@ def build_aggregate_dashboard_state() -> DashboardState:
     primary = find_project_dir() or find_hub() or (dirs[0] if dirs else Path.cwd())
 
     report = build_ai_report(primary, all_time=False, sessions=all_sessions)
-    active_timer = read_active_timer()
+    active_timer = read_active_timer(resolve_git=True)
+    timer_collision = _detect_timer_collision(active_timer)
+    collisions = detect_collisions(all_sessions)
     raw_human = build_human_time_report(primary)
     now = datetime.now()
     presence_minutes, presence_label = _compute_presence_today(all_sessions, now)
@@ -511,6 +680,8 @@ def build_aggregate_dashboard_state() -> DashboardState:
         all_sessions=all_sessions,
         health=build_health_checks(primary, report=report, active_timer=active_timer),
         aggregate_count=len(dirs),
+        timer_collision=timer_collision,
+        collisions=collisions,
     )
 
 

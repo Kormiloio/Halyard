@@ -33,6 +33,7 @@ _EXPECTED_PANELS = {
     "sessions",
     "health",
     "adrift",
+    "collisions",
     "wake",
     "timeclock",
     "projects",

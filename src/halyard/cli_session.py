@@ -112,7 +112,7 @@ def register(app: typer.Typer) -> None:
         slug: str = typer.Argument(..., help="client/project slug, e.g. acme/auth-migration"),
     ) -> None:
         """Start the active timer."""
-        from halyard.orchestration import TimerAlreadyRunning, start_timer
+        from halyard.orchestration import HubStateError, TimerAlreadyRunning, start_timer
 
         timeclock_candidate = Path.cwd() / "time.timeclock"
         if not timeclock_candidate.exists():
@@ -131,6 +131,9 @@ def register(app: typer.Typer) -> None:
             )
             raise typer.Exit(code=1)
 
+        # v5.0: Duplicate-Effort Detection (Pre-start check)
+        _maybe_warn_collision(Path.cwd())
+
         account = slug.replace("/", ":", 1)
         try:
             timer = start_timer(Path.cwd(), account)
@@ -139,6 +142,9 @@ def register(app: typer.Typer) -> None:
                 f"[bold red]Error:[/] Timer already running for [bold]{e.slug}[/].\n"
                 "Run [bold]halyard stop[/] first."
             )
+            raise typer.Exit(code=1) from e
+        except HubStateError as e:
+            console.print(f"[bold red]Error:[/] {e}")
             raise typer.Exit(code=1) from e
 
         console.print(f"[bold green]Started[/] [bold]{timer.slug}[/] at {timer.started}.")
@@ -371,6 +377,9 @@ def register(app: typer.Typer) -> None:
             f"[bold cyan]{active.slug}[/]  {active.elapsed_label} elapsed  "
             f"(started {active.started or '?'})"
         )
+
+        # v5.0: Duplicate-Effort Detection (Status reporting)
+        _maybe_warn_collision(Path.cwd())
 
     @app.command()
     def invoice(
@@ -866,3 +875,26 @@ def register(app: typer.Typer) -> None:
             raise typer.Exit(code=1)
 
         console.print(f"[bold green]All {valid} lines valid.[/]")
+
+
+def _maybe_warn_collision(project_dir: Path) -> None:
+    """v5.0: Call the Hub to check for recent activity on the current branch."""
+    from halyard.git_context import current_branch, current_remote
+    from halyard.hub_client import check_collisions
+
+    branch = current_branch(project_dir)
+    remote = current_remote(project_dir)
+    if not branch or not remote:
+        return
+
+    collisions = check_collisions(remote, branch)
+    if not collisions:
+        return
+
+    latest = collisions[0]
+    minutes = latest["seconds_ago"] // 60
+    time_str = f"{minutes}m ago" if minutes > 0 else "just now"
+    console.print(
+        f"[yellow]Note:[/] Branch '[bold]{branch}[/]' had AI activity "
+        f"({latest['tool']}) {time_str}. Overlap detected."
+    )
