@@ -1092,6 +1092,13 @@ layers must read from this local source of truth; they do not replace it.
     shipped and test-covered (1483 tests passing). A richer per-session Gantt
     visualization is deferred (see design §4).**
 
+75. **v5.1 — Dashboard trio row:** Group the Outcomes, Wake, and Capture panels
+    into a single three-up row at the Outcomes position; tighten the Wake
+    heatmap and fix leverage-panel overflow at third-width. Presentational
+    only — no data, format, or CLI changes.
+    Spec in `openspec/changes/v5.1-dashboard-trio-row/`.
+    **Status: complete (1483 tests passing).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

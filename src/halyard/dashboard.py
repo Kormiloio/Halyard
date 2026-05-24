@@ -853,7 +853,7 @@ def _render_state(
         {_usage_panel(usage) if usage_tab == "overview" else _usage_models_panel(usage)}
       </article>
 
-      <article class="panel span-12" data-panel="leverage">
+      <article class="panel span-4" data-panel="leverage">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Outcomes</p>
@@ -862,6 +862,28 @@ def _render_state(
           <div class="pill-group"><span class="pill">30d</span></div>
         </div>
         {_leverage_panel(state.all_sessions, state.generated_at)}
+      </article>
+
+      <article class="panel span-4" data-panel="wake">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">{_morse("WAKE")}</p>
+            <h2>Wake · {_e(now.strftime("%B %Y"))}</h2>
+          </div>
+          <div class="pill-group">{trail_pill}</div>
+        </div>
+        {_trail_heatmap_html(report.sessions, now)}
+      </article>
+
+      <article class="panel span-4" data-panel="tools">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Capture</p>
+            <h2>Tools</h2>
+          </div>
+          {tools_pill}
+        </div>
+        {_tool_table(report.by_tool_usage)}
       </article>
 
       <article class="panel span-7" data-panel="sessions" data-hub-fragment="sessions">
@@ -913,17 +935,6 @@ def _render_state(
         {_collisions_panel(state.collisions)}
       </article>
 
-      <article class="panel span-12" data-panel="wake">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">{_morse("WAKE")}</p>
-            <h2>Wake · {_e(now.strftime("%B %Y"))}</h2>
-          </div>
-          <div class="pill-group">{trail_pill}</div>
-        </div>
-        {_trail_heatmap_html(report.sessions, now)}
-      </article>
-
       <article class="panel span-6" data-panel="timeclock">
         <div class="panel-head">
           <div>
@@ -955,17 +966,6 @@ def _render_state(
           {models_pill}
         </div>
         {_model_table(report.by_model)}
-      </article>
-
-      <article class="panel span-4" data-panel="tools">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Capture</p>
-            <h2>Tools</h2>
-          </div>
-          {tools_pill}
-        </div>
-        {_tool_table(report.by_tool_usage)}
       </article>
 
       {_surface_panel(report.by_tool_surface) if report.by_tool_surface else ""}
@@ -3099,7 +3099,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .usage-models-rows .model-name { display: inline-block; max-width: 280px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 6px; }
 
 /* v3.0 Leverage panel */
-.leverage-grid { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 18px; align-items: center; }
+.leverage-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 18px; align-items: center; }
 .leverage-headline { display: grid; gap: 8px; }
 .leverage-pct { font-size: 42px; font-weight: 700; line-height: 1.1; }
 .leverage-pct.leverage-high { color: #5cd28b; }
@@ -3121,8 +3121,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .leverage-label.leverage-closed::before { background: #d2675c; }
 .leverage-label.leverage-nopr::before { background: #b09060; }
 .leverage-label.leverage-unsynced::before { background: var(--muted); }
-.leverage-hint { grid-column: span 2; font-size: 12px; color: var(--muted); margin: 8px 0 0; }
-.leverage-hint code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; }
+.leverage-hint { grid-column: span 2; font-size: 12px; color: var(--muted); margin: 8px 0 0; overflow-wrap: anywhere; }
+.leverage-hint code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; overflow-wrap: anywhere; }
 .leverage-empty { padding: 12px 0; }
 
 /* Budget panel */
