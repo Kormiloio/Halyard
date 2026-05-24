@@ -32,11 +32,27 @@ The `<1100px` media query already collapses these panels to `span-12`, where
 the original two-column proportions read fine; the relaxed track sizing is a
 strict improvement there too.
 
+## Fill refinements
+
+The first cut left visible dead space at third-width: the Wake heatmap was
+left-aligned (only ~300px of a 456px panel) and the short Outcomes content
+sat top-aligned with a large bottom gap. Two follow-ups close those:
+
+- **Wake fills width.** `.trail-cal` is now `display: block` and the header /
+  row grids use `repeat(7, 1fr)` with `aspect-ratio: 1` cells, so the seven
+  columns stretch to fill the panel (square ~56px cells) instead of fixed
+  38px columns.
+- **Outcomes fills height.** A `panel-vfill` marker class makes the leverage
+  article a flex column and centers `.leverage-grid` vertically, so its
+  leftover space is balanced rather than dumped at the bottom. A class is used
+  (not a `[data-panel="leverage"]` selector) so the panel-id uniqueness test,
+  which regexes `data-panel="…"` across the whole document including
+  `<style>`, does not see a phantom duplicate.
+
 ## Verification
 
-- DOM rects (desktop 1440px): trio share one row, equal 456px width, equal
-  374px height, zero overflow; Models/Surface/Budget likewise align as a
-  second three-up row.
-- Wake heatmap cells render at 38×38px (was stretched far wider).
-- Visual screenshot confirms balanced layout.
+- DOM rects (desktop 1440px): trio share one row, equal width/height, zero
+  overflow; Wake calendar fills the full panel width; Models/Surface/Budget
+  align as a second three-up row.
+- Visual screenshot confirms balanced layout (Wake filled, Outcomes centered).
 - ruff, ruff format, mypy clean; full suite 1483 passing.

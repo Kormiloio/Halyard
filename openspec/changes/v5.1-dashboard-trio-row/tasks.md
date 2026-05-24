@@ -7,6 +7,8 @@
       `.leverage-hint` wrapping).
 - [x] Verify trio shares one row at desktop width; Models/Surface/Budget
       remain a clean second row.
+- [x] Make Wake heatmap fill the panel width (`repeat(7, 1fr)` + square cells).
+- [x] Center Outcomes content vertically (`panel-vfill`) to remove bottom gap.
 - [x] Verify responsive collapse (<1100px) still stacks full-width.
 - [x] ruff + ruff format + mypy clean.
 - [x] Full test suite passing (1483).

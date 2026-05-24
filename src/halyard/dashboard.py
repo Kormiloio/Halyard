@@ -853,7 +853,7 @@ def _render_state(
         {_usage_panel(usage) if usage_tab == "overview" else _usage_models_panel(usage)}
       </article>
 
-      <article class="panel span-4" data-panel="leverage">
+      <article class="panel span-4 panel-vfill" data-panel="leverage">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Outcomes</p>
@@ -3124,6 +3124,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .leverage-hint { grid-column: span 2; font-size: 12px; color: var(--muted); margin: 8px 0 0; overflow-wrap: anywhere; }
 .leverage-hint code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; overflow-wrap: anywhere; }
 .leverage-empty { padding: 12px 0; }
+.panel-vfill { display: flex; flex-direction: column; }
+.panel-vfill .leverage-grid { flex: 1; align-content: center; }
 
 /* Budget panel */
 .budget-list { display: grid; gap: 8px; }
@@ -3186,10 +3188,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .toast.show { transform: translateX(-50%) translateY(0); }
 
 /* Trail heatmap calendar */
-.trail-cal { display: inline-block; }
-.trail-cal-header { display: grid; grid-template-columns: repeat(7, 38px); gap: 5px; margin-bottom: 4px; font-size: 11px; color: var(--muted); font-weight: 700; text-align: center; }
-.trail-cal-row { display: grid; grid-template-columns: repeat(7, 38px); gap: 5px; margin-bottom: 5px; }
-.trail-cell { width: 38px; height: 38px; border-radius: 6px; border: 1px solid rgba(255,255,255,.05); display: flex; align-items: center; justify-content: center; cursor: default; transition: opacity .15s; }
+.trail-cal { display: block; }
+.trail-cal-header { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 4px; font-size: 11px; color: var(--muted); font-weight: 700; text-align: center; }
+.trail-cal-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 5px; }
+.trail-cell { width: auto; aspect-ratio: 1; border-radius: 6px; border: 1px solid rgba(255,255,255,.05); display: flex; align-items: center; justify-content: center; cursor: default; transition: opacity .15s; }
 .trail-cell:hover { opacity: .8; }
 .trail-dn { font-size: 11px; font-weight: 600; pointer-events: none; }
 .trail-empty { border-color: transparent; background: transparent; }
