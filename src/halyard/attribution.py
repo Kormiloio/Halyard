@@ -99,29 +99,54 @@ def format_attribution_mix(sessions: Iterable[AiSession]) -> str:
 # ---------------------------------------------------------------------------
 
 
+# Cached by (path, mtime): parse_sessions is the hottest read path and is
+# called per-project across reports/dashboard, so re-parsing the TOML every
+# call is wasteful. A write (set_project_alias) bumps mtime → next load re-reads.
+_alias_cache: tuple[str, float, dict[str, str]] | None = None
+
+
 def load_project_aliases() -> dict[str, str]:
     """Return the user's source-slug → canonical-slug map (``{}`` if none).
 
     Tolerant: a missing or invalid file yields an empty map (canonicalization
-    becomes a no-op) rather than raising on the read path.
+    becomes a no-op) rather than raising on the read path. Cached by file mtime.
     """
-    if not _ALIASES_PATH.exists():
+    global _alias_cache
+    key = str(_ALIASES_PATH)
+    try:
+        mtime = _ALIASES_PATH.stat().st_mtime
+    except OSError:
         return {}
+    if _alias_cache is not None and _alias_cache[0] == key and _alias_cache[1] == mtime:
+        return _alias_cache[2]
     try:
         data = tomllib.loads(_ALIASES_PATH.read_text())
     except (tomllib.TOMLDecodeError, OSError):
         return {}
     aliases = data.get("aliases", {})
-    if not isinstance(aliases, dict):
-        return {}
-    return {k: v for k, v in aliases.items() if isinstance(k, str) and isinstance(v, str)}
+    result = (
+        {k: v for k, v in aliases.items() if isinstance(k, str) and isinstance(v, str)}
+        if isinstance(aliases, dict)
+        else {}
+    )
+    _alias_cache = (key, mtime, result)
+    return result
 
 
 def canonical_project(slug: str | None, aliases: dict[str, str]) -> str | None:
-    """Resolve *slug* through the alias map (single hop). ``None`` stays None."""
+    """Resolve *slug* to its canonical form, following alias chains.
+
+    Follows ``A → B → C`` to the end with a cycle guard, so a chained alias map
+    never splits one logical project across two buckets. ``None`` stays None.
+    """
     if slug is None:
         return None
-    return aliases.get(slug, slug)
+    seen: set[str] = set()
+    cur = slug
+    while cur in aliases and cur not in seen:
+        seen.add(cur)
+        cur = aliases[cur]
+    return cur
 
 
 def set_project_alias(source: str, canonical: str) -> None:

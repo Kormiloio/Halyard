@@ -1211,6 +1211,21 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v5.8-project-alias-canonicalization/`.
     **Status: complete (1510 tests passing).**
 
+83. **v5.9 — Review remediation:** a correctness review of the v5.3–v5.8 work
+    found nine issues, all fixed here. **(HIGH)** `read_locked_file` released a
+    lock it never acquired on Windows (`LK_UNLCK` on an unlocked region →
+    `OSError` out of every `parse_sessions`); fixed with a symmetric
+    `_release_read_lock`. Plus: `parse_sessions` reads under the lock then
+    releases before parsing (less writer contention); `canonical_project`
+    resolves alias chains with a cycle guard; `load_project_aliases` is
+    mtime-cached; budget/invoice matching canonicalizes config slugs so an
+    aliased budget still matches; `_process_write_queue` guards each write so a
+    single failure can't drop the batch; the Hub collision banner shows the
+    canonical slug; "reset layout" clears hidden panels; Overview outcomes count
+    unique PRs, not sessions. Spec in
+    `openspec/changes/v5.9-review-remediation/`.
+    **Status: complete (1516 tests passing).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

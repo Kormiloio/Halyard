@@ -51,6 +51,11 @@ if sys.platform == "win32":
         # by msvcrt.locking.
         pass
 
+    def _release_read_lock(fd: int) -> None:
+        # Symmetric with the no-op _acquire_read_lock: must NOT call LK_UNLCK on
+        # a region that was never locked (that raises OSError on Windows).
+        pass
+
     def _release_lock(fd: int) -> None:
         _msvcrt.locking(fd, _msvcrt.LK_UNLCK, _LOCK_LENGTH)
 
@@ -63,6 +68,9 @@ else:
 
         def _acquire_read_lock(fd: int) -> None:
             _fcntl.flock(fd, _fcntl.LOCK_SH)
+
+        def _release_read_lock(fd: int) -> None:
+            _fcntl.flock(fd, _fcntl.LOCK_UN)
 
         def _release_lock(fd: int) -> None:
             _fcntl.flock(fd, _fcntl.LOCK_UN)
@@ -82,6 +90,9 @@ else:
                 _LOCK_WARNED = True
 
         def _acquire_read_lock(fd: int) -> None:
+            pass
+
+        def _release_read_lock(fd: int) -> None:
             pass
 
         def _release_lock(fd: int) -> None:
@@ -276,7 +287,7 @@ def read_locked_file(path: Path) -> Generator[IO[str], None, None]:
         try:
             yield f
         finally:
-            _release_lock(fd)
+            _release_read_lock(fd)
 
 
 # ---------------------------------------------------------------------------
@@ -668,37 +679,41 @@ def parse_sessions(project_dir: Path, *, now: datetime | None = None) -> list[Ai
     raw_by_hash: dict[str, str] = {}  # stripped raw line per hash, to detect true collisions
     amendments_by_hash: dict[str, list[Amendment]] = defaultdict(list)
 
+    # Read the lines under the shared lock, then release before parsing: a
+    # large read no longer blocks a concurrent writer (Hub append) for the whole
+    # parse, while torn-read safety (no partial line) is still guaranteed.
     with read_locked_file(log_path) as fh:
-        for line in _iter_log_lines(fh):
-            if line.startswith("s "):
-                parsed, error = _parse_line_result(line)
-                if parsed is not None:
-                    h = session_hash(line)
-                    stripped = line.strip()
-                    prior = raw_by_hash.get(h)
-                    if prior is not None and prior != stripped:
-                        # Two *different* `s` lines produced the same 48-bit
-                        # session_hash prefix. Folding `a` amendments by hash
-                        # would mis-apply one session's correction to the
-                        # other — silent cross-attribution. Astronomically
-                        # rare (~2^24 distinct sessions for 50%), but the
-                        # failure is silent corruption, so quarantine the
-                        # colliding line and drop it rather than fold blindly.
-                        _write_quarantine(
-                            line, f"session_hash collision with a different session ({h})"
-                        )
-                        continue
-                    raw_by_hash.setdefault(h, stripped)
-                    parsed._raw_hash = h
-                    if h not in sessions_by_hash:
-                        sessions_by_hash[h] = parsed
-                    sessions.append(parsed)
-                elif error is not None:
-                    _write_quarantine(line, error)
-            elif line.startswith("a "):
-                amendment = parse_amendment(line)
-                if amendment is not None:
-                    amendments_by_hash[amendment.session_hash].append(amendment)
+        raw_lines = list(_iter_log_lines(fh))
+    for line in raw_lines:
+        if line.startswith("s "):
+            parsed, error = _parse_line_result(line)
+            if parsed is not None:
+                h = session_hash(line)
+                stripped = line.strip()
+                prior = raw_by_hash.get(h)
+                if prior is not None and prior != stripped:
+                    # Two *different* `s` lines produced the same 48-bit
+                    # session_hash prefix. Folding `a` amendments by hash
+                    # would mis-apply one session's correction to the
+                    # other — silent cross-attribution. Astronomically
+                    # rare (~2^24 distinct sessions for 50%), but the
+                    # failure is silent corruption, so quarantine the
+                    # colliding line and drop it rather than fold blindly.
+                    _write_quarantine(
+                        line, f"session_hash collision with a different session ({h})"
+                    )
+                    continue
+                raw_by_hash.setdefault(h, stripped)
+                parsed._raw_hash = h
+                if h not in sessions_by_hash:
+                    sessions_by_hash[h] = parsed
+                sessions.append(parsed)
+            elif error is not None:
+                _write_quarantine(line, error)
+        elif line.startswith("a "):
+            amendment = parse_amendment(line)
+            if amendment is not None:
+                amendments_by_hash[amendment.session_hash].append(amendment)
 
     # Apply amendments in file order; last-write-wins per key.
     # Only the first-occurrence object per hash is amended.

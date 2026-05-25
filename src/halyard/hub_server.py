@@ -331,10 +331,14 @@ class HubServer:
         collisions = find_collisions(session, history)
 
         if collisions:
+            from halyard.attribution import canonical_project, load_project_aliases
+
             self.emit(
                 "collision_detected",
                 {
-                    "project": session.project,
+                    # canonicalize so the live banner matches the persistent
+                    # panels (which read via parse_sessions) — v5.9
+                    "project": canonical_project(session.project, load_project_aliases()),
                     "branch": session.branch,
                     "remote": session.remote,
                     "collision_count": len(collisions),
@@ -402,8 +406,15 @@ class HubServer:
             while self._write_queue:
                 sessions_to_write.append(self._write_queue.popleft())
 
+        # Per-item guard: a single failing write (e.g. transient IO error) must
+        # not drop the rest of the already-dequeued batch (v5.9).
         for session in sessions_to_write:
-            self._write_to_log(session)
+            try:
+                self._write_to_log(session)
+            except Exception as exc:
+                from halyard.ai_log import log_diagnostic
+
+                log_diagnostic(f"hub_server: session write failed: {exc}")
 
     def _flush_all(self) -> None:
         self._process_write_queue()

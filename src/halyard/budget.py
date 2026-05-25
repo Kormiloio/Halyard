@@ -96,8 +96,11 @@ def budget_status(now: datetime | None = None) -> list[BudgetStatus]:
     if now is None:
         now = datetime.now()
 
+    from halyard.attribution import canonical_project, load_project_aliases
+
     budgets = load_budgets()
     statuses: list[BudgetStatus] = []
+    aliases = load_project_aliases()
 
     # Prefer hub because it captures sessions across all projects.
     # Fall back to the CWD project dir for single-project setups.
@@ -106,13 +109,16 @@ def budget_status(now: datetime | None = None) -> list[BudgetStatus]:
 
     for slug, budget in budgets.items():
         today_spend, month_spend = 0.0, 0.0
+        # parse_sessions canonicalizes session.project; canonicalize the budget
+        # key too so a budget set on an aliased raw slug still matches (v5.9).
+        canon = canonical_project(slug, aliases)
 
         for candidate in filter(None, [hub, cwd_dir]):
             if not (candidate / AI_LOG_FILENAME).exists():
                 continue
             all_sessions = parse_sessions(candidate)
             # Filter by project slug to ensure correctness even in project-local logs.
-            sessions = [s for s in all_sessions if s.project == slug]
+            sessions = [s for s in all_sessions if s.project == canon]
             today_spend, month_spend = _sum_api_spend(sessions, now)
             break  # first valid source wins
 

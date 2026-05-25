@@ -2391,20 +2391,26 @@ def _overview_panels(state: DashboardState, usage: UsageAnalytics) -> str:
     ]
 
     by_proj: dict[str, float] = {}
-    outcomes = {"shipped": 0, "open": 0, "closed": 0, "none": 0}
+    # v5.9: count outcomes per unique PR (not per session) so one merged PR with
+    # many sessions counts once; sessions with no PR are counted individually.
+    pr_state_by_ref: dict[str, str] = {}
+    sessions_without_pr = 0
     for sess in state.all_sessions:
         if sess.project:
             # slugs are already canonical (parse_sessions applies the v5.8 alias map)
             by_proj[sess.project] = by_proj.get(sess.project, 0.0) + sess.cost_usd
-        st = (sess.pr_state or "").lower()
+        if sess.pr_ref:
+            pr_state_by_ref[sess.pr_ref] = (sess.pr_state or "").lower()
+        else:
+            sessions_without_pr += 1
+    outcomes = {"shipped": 0, "open": 0, "closed": 0, "none": sessions_without_pr}
+    for st in pr_state_by_ref.values():
         if st == "merged":
             outcomes["shipped"] += 1
-        elif st in ("open", "draft"):
+        elif st == "open":
             outcomes["open"] += 1
         elif st == "closed":
             outcomes["closed"] += 1
-        else:
-            outcomes["none"] += 1
     top_projects = sorted(by_proj.items(), key=lambda kv: -kv[1])[:6]
     daily_tokens = [float(d.tokens) for d in usage.daily[-30:]]
 
@@ -2902,6 +2908,7 @@ def _layout_script() -> str:
       resetBtn.addEventListener('click', function(){
         localStorage.removeItem(ORDER_KEY);
         localStorage.removeItem(COLL_KEY);
+        localStorage.removeItem(REM_KEY);
         location.reload();
       });
     }
