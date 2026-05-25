@@ -34,6 +34,10 @@ _TS_FMT = "%Y-%m-%d %H:%M:%S"
 
 # Configuration
 _IDLE_TTL = timedelta(minutes=10)
+# Cap the number of in-flight OTel sessions accumulated before TTL flush so a
+# local client spamming distinct session ids cannot grow memory without bound.
+# Oldest-by-last-update entries are evicted; a real editor has very few live.
+_MAX_OTEL_SESSIONS = 1000
 # Single source of truth for the auto-timer idle policy lives in auto_timer.
 _AUTO_INACTIVITY = timedelta(minutes=INACTIVITY_MINUTES)
 _MAX_BODY = 25 * 1024 * 1024  # 25 MB
@@ -342,6 +346,17 @@ class HubServer:
         """Queue OTLP traces for mapping and eventual logging."""
         with self._lock:
             accumulate_traces(self._otel_acc, payload)
+            self._evict_excess_otel()
+
+    def _evict_excess_otel(self) -> None:
+        """Bound ``_otel_acc`` size by dropping the least-recently-updated
+        sessions. Must be called holding ``self._lock``."""
+        excess = len(self._otel_acc) - _MAX_OTEL_SESSIONS
+        if excess <= 0:
+            return
+        oldest = sorted(self._otel_acc.items(), key=lambda kv: kv[1].last_update)
+        for sid, _acc in oldest[:excess]:
+            del self._otel_acc[sid]
 
     def flush_stale(self, *, force: bool = False) -> int:
         """Finalize and append sessions idle past the TTL (or all if force)."""
@@ -363,16 +378,23 @@ class HubServer:
     def _worker_loop(self) -> None:
         """Process the write queue and periodically flush idle OTel sessions."""
         while not self._stop.is_set():
+            self._worker_tick()
+            time.sleep(1)
+
+    def _worker_tick(self) -> None:
+        """One unit of background work, isolated so an unexpected error in any
+        step cannot kill the daemon thread and silently halt all writes."""
+        try:
             # 1. Process explicit AiSession writes
             self._process_write_queue()
-
             # 2. Flush idle OTel sessions
             self.flush_stale()
-
             # 3. Close stale auto-timer windows
             self._close_stale_presence()
+        except Exception as exc:  # never let one bad session stop the worker
+            from halyard.ai_log import log_diagnostic
 
-            time.sleep(1)
+            log_diagnostic(f"hub_server: worker tick failed: {exc}")
 
     def _process_write_queue(self) -> None:
         sessions_to_write = []
