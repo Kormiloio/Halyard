@@ -96,7 +96,15 @@ cli_spec.register(app)
 # Sub-app command groups (Typer sub-apps — Phase 1)
 # ---------------------------------------------------------------------------
 
-from halyard import cli_config, cli_db, cli_outcome, cli_projects, cli_service, cli_voyage  # noqa: E402, I001
+from halyard import (  # noqa: E402
+    cli_config,
+    cli_db,
+    cli_outcome,
+    cli_projects,
+    cli_service,
+    cli_timeclock,
+    cli_voyage,
+)
 
 app.add_typer(cli_service.app)
 app.add_typer(cli_config.app)
@@ -104,6 +112,7 @@ app.add_typer(cli_db.app)
 app.add_typer(cli_projects.app)
 app.add_typer(cli_voyage.app)
 app.add_typer(cli_outcome.app)
+app.add_typer(cli_timeclock.app)
 
 
 # ---------------------------------------------------------------------------

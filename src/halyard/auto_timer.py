@@ -51,6 +51,37 @@ def _clear_state() -> None:
     _AUTO_TIMER_FILE.unlink(missing_ok=True)
 
 
+# ---------------------------------------------------------------------------
+# Shared presence-state API (used by the Hub so its in-memory auto-presence
+# survives a restart — the file is the single source of truth shared by the
+# Hub and this standalone path).
+# ---------------------------------------------------------------------------
+
+
+def write_presence(
+    project: str, timeclock: Path, started: datetime, last_activity: datetime
+) -> None:
+    """Persist the open auto-presence window to ``~/.halyard/auto-timer``."""
+    _write_state(
+        {
+            "project": project,
+            "timeclock": str(timeclock),
+            "started": started.strftime(_TS_FMT),
+            "last_activity": last_activity.strftime(_TS_FMT),
+        }
+    )
+
+
+def read_presence() -> dict[str, str]:
+    """Return the persisted auto-presence window, or ``{}`` if none."""
+    return _read_state()
+
+
+def clear_presence() -> None:
+    """Delete the persisted auto-presence window."""
+    _clear_state()
+
+
 def _write_clockout(timeclock: Path, ts: str) -> None:
     from halyard.ai_log import locked_file
 

@@ -1226,6 +1226,31 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v5.9-review-remediation/`.
     **Status: complete (1516 tests passing).**
 
+84. **v5.10 — Timeclock integrity:** the auto human timer was silently
+    under-/over-billing — 361 dropped opens (400 clock-ins, 39 clock-outs) on
+    the dev machine. Two root causes fixed. **(HIGH)** The Hub held auto-presence
+    in memory only and recovered just the *manual* timer on startup, so every
+    restart orphaned an open `i`; it now persists presence to
+    `~/.halyard/auto-timer` and reconciles on startup (resume if recent,
+    close-stale if old), sharing one source of truth with the standalone path.
+    **(HIGH)** `test_auto_timer.py` `unlink`ed the *real* `~/.halyard/auto-timer`
+    in an autouse fixture, so `pytest` during real work deleted the live
+    clock-in — a conftest `_isolate_auto_timer` fixture now redirects it for
+    every test. New `halyard timeclock check` / `repair` (`timeclock_repair.py`)
+    rebuild clean i/o windows under the 30-min presence rule: merge auto runs,
+    preserve manual entries verbatim, drop backward/stale closes, and an
+    idempotency gate (`_needs_repair`) leaves structurally-sound files untouched
+    so re-running is a safe no-op. Clock-out handling hinges on an `_Open.merged`
+    flag: a clean single-`i`/`o` pair is authoritative (the auto-timer only
+    writes `o` at real last-activity, so even a 14h overnight agent session is
+    legit), while a dropped-open *run* caps its stale close at the last ping.
+    Repaired the live ledger to a faithful 60.9h/82 windows; per user judgment
+    two long unattended `git/Halyard` windows were capped to 30 min → 38.5h
+    applied (backups retained). Ran `outcome sync` (425 resolved, all no-PR —
+    direct-to-main workflow) and `backfill` (1 confident match). Spec in
+    `openspec/changes/v5.10-timeclock-integrity/`.
+    **Status: complete (1536 tests passing).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

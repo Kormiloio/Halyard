@@ -51,6 +51,20 @@ def _isolate_registry(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pyt
 
 
 @pytest.fixture(autouse=True)
+def _isolate_auto_timer(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch):
+    """No test may read, write, or delete the real ~/.halyard/auto-timer state.
+
+    The presence-window state file holds the live human-time clock-in. A test
+    that touches the real one (e.g. an autouse ``unlink`` for cleanup) deletes
+    an active clock-in mid-session, orphaning it — every ``pytest`` run during
+    real work then drops a billable open. Redirect it to a throwaway path.
+    """
+    state = tmp_path_factory.mktemp("halyard-auto-timer") / "auto-timer"
+    monkeypatch.setattr("halyard.auto_timer._AUTO_TIMER_FILE", state)
+    return state
+
+
+@pytest.fixture(autouse=True)
 def _no_real_hub(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make the suite hermetic against a Hub running on the dev machine.
 

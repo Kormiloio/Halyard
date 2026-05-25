@@ -283,6 +283,73 @@ class HubServer:
             if active.started:
                 with contextlib.suppress(ValueError):
                     self.state.started_at = datetime.strptime(active.started, _TS_FMT)
+        # Recover auto-presence the prior process left open. Without this every
+        # restart orphans an open `i` (in-memory auto_project resets to None),
+        # producing the `i i i … o` under-billing corruption.
+        self._reconcile_auto_presence()
+
+    def _reconcile_auto_presence(self, *, now: datetime | None = None) -> None:
+        """Resume or close-stale the auto-presence window persisted on disk.
+
+        Runs in ``__init__`` (via ``_load_state``) before any thread serves
+        traffic, so no lock is needed. A recent window resumes in memory (the
+        original ``i`` is already in the timeclock); a stale one is closed with
+        the ``o`` it never got.
+        """
+        from halyard.ai_log import locked_file
+        from halyard.auto_timer import clear_presence, read_presence
+
+        state = read_presence()
+        if not state:
+            return
+
+        project = state.get("project", "")
+        tc_str = state.get("timeclock", "")
+        last_str = state.get("last_activity") or state.get("started", "")
+        started_str = state.get("started", "") or last_str
+        if not (project and tc_str and last_str):
+            clear_presence()
+            return
+        try:
+            last = datetime.strptime(last_str, _TS_FMT)
+            started = datetime.strptime(started_str, _TS_FMT)
+        except ValueError:
+            clear_presence()
+            return
+
+        clock = now or datetime.now()
+        timeclock = Path(tc_str)
+        if clock - last >= _AUTO_INACTIVITY:
+            # Stale: close the orphaned open at its last known activity.
+            if timeclock.exists():
+                with locked_file(timeclock, "a") as f:
+                    f.write(f"o {last.strftime(_TS_FMT)}\n")
+            clear_presence()
+            return
+        # Recent: resume the window without writing a new clock-in.
+        self.state.auto_project = project
+        self.state.auto_started_at = started
+        self.state.auto_timeclock = timeclock
+        self.state.last_presence = last
+
+    def _persist_auto_presence_locked(self) -> None:
+        """Mirror in-memory auto-presence to ~/.halyard/auto-timer.
+
+        Caller must hold ``self._lock``. Clears the file when no window is open.
+        """
+        from halyard.auto_timer import clear_presence, write_presence
+
+        if self.state.auto_project is None:
+            clear_presence()
+            return
+        if self.state.auto_timeclock is None or self.state.auto_started_at is None:
+            return
+        write_presence(
+            self.state.auto_project,
+            self.state.auto_timeclock,
+            self.state.auto_started_at,
+            self.state.last_presence or self.state.auto_started_at,
+        )
 
     def start(self) -> None:
         """Start the hub server and background workers."""
@@ -512,11 +579,13 @@ class HubServer:
                 self.state.auto_started_at = clock
                 self.state.auto_timeclock = timeclock
             self.state.last_presence = clock
+            self._persist_auto_presence_locked()
 
     def _update_presence(self, *, now: datetime | None = None) -> None:
         with self._lock:
             if self.state.auto_project is not None:
                 self.state.last_presence = now or datetime.now()
+                self._persist_auto_presence_locked()
 
     def _close_presence_now(self, *, now: datetime | None = None) -> bool:
         from halyard.ai_log import locked_file
@@ -530,6 +599,7 @@ class HubServer:
             self.state.auto_started_at = None
             self.state.auto_timeclock = None
             self.state.last_presence = None
+            self._persist_auto_presence_locked()
 
         if timeclock and timeclock.exists():
             with locked_file(timeclock, "a") as f:

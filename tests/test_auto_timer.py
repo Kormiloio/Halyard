@@ -6,10 +6,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
+from halyard import auto_timer
 from halyard.auto_timer import (
-    _AUTO_TIMER_FILE,
     _TS_FMT,
     auto_timer_activity,
     auto_timer_close_if_stale,
@@ -18,19 +16,12 @@ from halyard.auto_timer import (
 )
 
 
-@pytest.fixture(autouse=True)
-def clean_auto_timer():
-    _AUTO_TIMER_FILE.unlink(missing_ok=True)
-    yield
-    _AUTO_TIMER_FILE.unlink(missing_ok=True)
-
-
 def _ts(dt: datetime) -> str:
     return dt.strftime(_TS_FMT)
 
 
 def _read_state() -> dict[str, str]:
-    lines = _AUTO_TIMER_FILE.read_text().splitlines()
+    lines = auto_timer._AUTO_TIMER_FILE.read_text().splitlines()
     return dict(line.split("=", 1) for line in lines if "=" in line)
 
 
@@ -51,7 +42,7 @@ def test_opens_new_timer(tmp_path):
     with patch("halyard.reports.read_active_timer", return_value=None):
         auto_timer_activity("acme:web", tc, now=t0)
 
-    assert _AUTO_TIMER_FILE.exists()
+    assert auto_timer._AUTO_TIMER_FILE.exists()
     state = _read_state()
     assert state["project"] == "acme:web"
     assert state["started"] == _ts(t0)
@@ -88,7 +79,7 @@ def test_skips_when_manual_timer_running(tmp_path):
     with patch("halyard.reports.read_active_timer", return_value=fake_active):
         auto_timer_activity("acme:web", tc, now=t0)
 
-    assert not _AUTO_TIMER_FILE.exists()
+    assert not auto_timer._AUTO_TIMER_FILE.exists()
     assert _read_tc(tc) == []
 
 
@@ -99,7 +90,7 @@ def test_skips_when_timeclock_missing(tmp_path):
     with patch("halyard.reports.read_active_timer", return_value=None):
         auto_timer_activity("acme:web", tc, now=t0)
 
-    assert not _AUTO_TIMER_FILE.exists()
+    assert not auto_timer._AUTO_TIMER_FILE.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +110,7 @@ def test_closes_stale_timer(tmp_path):
     closed = auto_timer_close_if_stale(now=t_stale)
 
     assert closed is True
-    assert not _AUTO_TIMER_FILE.exists()
+    assert not auto_timer._AUTO_TIMER_FILE.exists()
     lines = _read_tc(tc)
     assert any(line.startswith("o") and _ts(t0) in line for line in lines)
 
@@ -136,7 +127,7 @@ def test_does_not_close_active_timer(tmp_path):
     closed = auto_timer_close_if_stale(now=t_soon)
 
     assert closed is False
-    assert _AUTO_TIMER_FILE.exists()
+    assert auto_timer._AUTO_TIMER_FILE.exists()
     assert not any(line.startswith("o") for line in _read_tc(tc))
 
 
@@ -179,7 +170,7 @@ def test_close_now_writes_clockout(tmp_path):
     closed = auto_timer_close_now(now=t_stop)
 
     assert closed is True
-    assert not _AUTO_TIMER_FILE.exists()
+    assert not auto_timer._AUTO_TIMER_FILE.exists()
     lines = _read_tc(tc)
     assert any(line.startswith("o") and _ts(t_stop) in line for line in lines)
 
