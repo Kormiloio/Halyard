@@ -448,8 +448,10 @@ body.night-watch .night-watch-toast { display: flex !important; }
 .panel.is-removed { display: none !important; }
 
 /* Overview chart panels */
-.kpi-strip { display: flex; gap: 28px; flex-wrap: wrap; color: var(--muted, #8b98a9); font-size: 14px; }
+.kpi-strip { display: flex; gap: 28px; flex-wrap: wrap; justify-content: space-between; color: var(--muted, #8b98a9); font-size: 14px; }
 .kpi-strip b { color: var(--ink, #e6edf3); font-size: 22px; margin-right: 5px; }
+/* the KPI strip is one short row — don't apply the 260px panel floor to it */
+.panel.panel-compact { min-height: 0; }
 .donut-wrap { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .svg-donut .donut-top { fill: var(--ink, #e6edf3); font: 700 19px sans-serif; }
 .svg-donut .donut-sub { fill: var(--muted, #8b98a9); font: 11px sans-serif; text-transform: uppercase; letter-spacing: .06em; }

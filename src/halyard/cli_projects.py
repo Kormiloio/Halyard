@@ -63,3 +63,29 @@ def projects_add(
             "Run [bold]halyard init[/] there first."
         )
         raise typer.Exit(code=1)
+
+
+@app.command(name="alias")
+def projects_alias(
+    source: str = typer.Argument(None, help="Source slug to canonicalize."),
+    canonical: str = typer.Argument(None, help="Canonical slug it maps to."),
+    list_: bool = typer.Option(False, "--list", help="List current aliases."),
+) -> None:
+    """Merge a project slug into a canonical one (read-time; the log is never
+    rewritten). E.g. ``halyard projects alias git/Halyard kormilo:halyard``."""
+    from halyard.attribution import load_project_aliases, set_project_alias
+
+    if list_:
+        aliases = load_project_aliases()
+        if not aliases:
+            console.print("[yellow]No project aliases set.[/]")
+            return
+        console.print("[bold]Project aliases[/]\n")
+        for s, c in sorted(aliases.items()):
+            console.print(f"  {s}  [dim]→[/]  [green]{c}[/]")
+        return
+    if not source or not canonical:
+        console.print("[bold red]Error:[/] provide SOURCE and CANONICAL, or use --list.")
+        raise typer.Exit(code=1)
+    set_project_alias(source, canonical)
+    console.print(f"[bold green]Aliased[/] {source} [dim]→[/] {canonical}")

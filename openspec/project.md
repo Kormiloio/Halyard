@@ -1195,6 +1195,22 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v5.7-dashboard-b-plus/`.
     **Status: complete (1505 tests passing).**
 
+82. **v5.8 — Project alias canonicalization (read-time):** one logical project
+    accrues several slug forms in the append-only log over time (`git/Halyard`
+    git-auto, `kormilo/halyard` older form, `kormilo:halyard` canonical), so
+    every surface split its cost. A user-defined `[aliases]` map in
+    `~/.halyard/project-aliases.toml` (`attribution.canonical_project` +
+    `load`/`set`) is applied once at the `parse_sessions` read boundary so
+    dashboard, report, invoices, Moat, and MCP all group by the canonical slug.
+    **The log is never rewritten** — read-time reinterpretation only (trust /
+    append-only). `halyard projects alias <src> <canonical>` / `--list` manages
+    it; the v5.7 `_norm_project` dashboard stopgap is removed. The merge is
+    explicit (owner-confirmed), never heuristic, because `git/Halyard` ↔
+    `kormilo:halyard` is a human fact. Verified: the three forms collapse to one
+    `kormilo:halyard` ($4,444.41). Spec in
+    `openspec/changes/v5.8-project-alias-canonicalization/`.
+    **Status: complete (1510 tests passing).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

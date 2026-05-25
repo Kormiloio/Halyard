@@ -54,11 +54,8 @@ def test_svg_area_and_stacked_render() -> None:
     assert "sbar" in d._svg_stacked_bar([("x", 2, "#fff"), ("y", 1, "#000")])
 
 
-def test_norm_project_merges_separator_casing_and_alias() -> None:
-    assert d._norm_project("kormilo/Halyard") == "kormilo:halyard"
-    assert d._norm_project("kormilo:halyard") == "kormilo:halyard"
-    # git remote alias folds into the canonical slug
-    assert d._norm_project("git/Halyard") == "kormilo:halyard"
+# project canonicalization moved to attribution.canonical_project (v5.8);
+# covered in tests/test_v58_project_aliases.py.
 
 
 # --- Overview tab + tabs -------------------------------------------------- #

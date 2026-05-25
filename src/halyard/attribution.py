@@ -22,11 +22,20 @@ bound. Confidence is never inflated for an old guess.
 
 from __future__ import annotations
 
+import tomllib
 from collections import Counter
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Literal
 
 from halyard.ai_log import AiSession
+
+# v5.8: read-time project canonicalization. One logical project can accrue
+# several slug forms in the append-only log over time (e.g. a git-auto
+# `git/<repo>` slug vs. the canonical `client:project`); this user-defined map
+# merges them at read time so every surface groups by one slug. The log is
+# never rewritten — this is reinterpretation only.
+_ALIASES_PATH = Path.home() / ".halyard" / "project-aliases.toml"
 
 AttributionConfidence = Literal["timer", "mapped", "toml", "auto", "unknown", "none"]
 
@@ -83,3 +92,44 @@ def format_attribution_mix(sessions: Iterable[AiSession]) -> str:
         "none": "adrift",
     }
     return " · ".join(f"{label[b]} {n}" for b, n in mix.items())
+
+
+# ---------------------------------------------------------------------------
+# v5.8: project alias canonicalization (read-time)
+# ---------------------------------------------------------------------------
+
+
+def load_project_aliases() -> dict[str, str]:
+    """Return the user's source-slug → canonical-slug map (``{}`` if none).
+
+    Tolerant: a missing or invalid file yields an empty map (canonicalization
+    becomes a no-op) rather than raising on the read path.
+    """
+    if not _ALIASES_PATH.exists():
+        return {}
+    try:
+        data = tomllib.loads(_ALIASES_PATH.read_text())
+    except (tomllib.TOMLDecodeError, OSError):
+        return {}
+    aliases = data.get("aliases", {})
+    if not isinstance(aliases, dict):
+        return {}
+    return {k: v for k, v in aliases.items() if isinstance(k, str) and isinstance(v, str)}
+
+
+def canonical_project(slug: str | None, aliases: dict[str, str]) -> str | None:
+    """Resolve *slug* through the alias map (single hop). ``None`` stays None."""
+    if slug is None:
+        return None
+    return aliases.get(slug, slug)
+
+
+def set_project_alias(source: str, canonical: str) -> None:
+    """Add or update one ``source → canonical`` alias, persisting the map."""
+    import tomli_w
+
+    aliases = load_project_aliases()
+    aliases[source] = canonical
+    _ALIASES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"aliases": dict(sorted(aliases.items()))}
+    _ALIASES_PATH.write_bytes(tomli_w.dumps(payload).encode())

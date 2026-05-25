@@ -724,6 +724,16 @@ def parse_sessions(project_dir: Path, *, now: datetime | None = None) -> list[Ai
         for s in sessions
         if not session_is_synthetic_telemetry(s) and not session_starts_in_future(s, now=now)
     ]
+    # v5.8: canonicalize project slugs at the read boundary so every surface
+    # groups one logical project under one slug. User-defined map; the log is
+    # never rewritten. Local import — attribution imports ai_log.
+    from halyard.attribution import canonical_project, load_project_aliases
+
+    aliases = load_project_aliases()
+    if aliases:
+        for s in surfaced:
+            if s.project:
+                s.project = canonical_project(s.project, aliases)
     # v3.14: collapse redundant Gemini rows for the same session (the live
     # hook writes the whole-session cumulative total every turn and the
     # importer writes one more whole-session row). Read-time only — the raw

@@ -2265,19 +2265,6 @@ _CHART_PALETTE = (
     "#a0aec0",
 )
 
-_PROJECT_ALIASES: dict[str, str] = {"git:halyard": "kormilo:halyard"}
-
-
-def _norm_project(slug: str) -> str:
-    """Merge project slugs differing only by separator/casing for display.
-
-    A read-time grouping merge so the Overview charts don't split one project
-    several ways (e.g. ``kormilo/halyard`` vs ``kormilo:halyard``). The log and
-    history are never modified; a full remote->slug map is a separate concern.
-    """
-    s = slug.strip().lower().replace("/", ":")
-    return _PROJECT_ALIASES.get(s, s)
-
 
 def _svg_donut(
     segments: list[tuple[str, float, str]],
@@ -2407,8 +2394,8 @@ def _overview_panels(state: DashboardState, usage: UsageAnalytics) -> str:
     outcomes = {"shipped": 0, "open": 0, "closed": 0, "none": 0}
     for sess in state.all_sessions:
         if sess.project:
-            key = _norm_project(sess.project)
-            by_proj[key] = by_proj.get(key, 0.0) + sess.cost_usd
+            # slugs are already canonical (parse_sessions applies the v5.8 alias map)
+            by_proj[sess.project] = by_proj.get(sess.project, 0.0) + sess.cost_usd
         st = (sess.pr_state or "").lower()
         if st == "merged":
             outcomes["shipped"] += 1
@@ -2451,15 +2438,17 @@ def _overview_panels(state: DashboardState, usage: UsageAnalytics) -> str:
     ]
 
     return (
-        _panel_article("ov-kpis", "Overview", "At a glance", kpi_body, span="span-12")
-        + _panel_article("ov-cost", "Overview", "Where the money went", cost_body)
-        + _panel_article("ov-models", "Overview", "Model mix · tokens", mix_body)
+        _panel_article(
+            "ov-kpis", "Overview", "At a glance", kpi_body, span="span-12", cls="panel-compact"
+        )
+        + _panel_article("ov-cost", "Overview", "Where the money went", cost_body, span="span-6")
+        + _panel_article("ov-models", "Overview", "Model mix · tokens", mix_body, span="span-6")
         + _panel_article(
             "ov-trend",
             "Overview",
             f"Tokens over time · {len(daily_tokens)}d",
             _svg_area(daily_tokens, h=170),
-            span="span-8",
+            span="span-12",
         )
         + _panel_article("ov-activity", "Overview", "Activity", _activity_heatmap(usage))
         + _panel_article(
@@ -2480,9 +2469,11 @@ def _panel_article(
     *,
     span: str = "span-4",
     tab: str = "overview",
+    cls: str = "",
 ) -> str:
+    classes = f"panel {span}{(' ' + cls) if cls else ''}"
     return (
-        f'<article class="panel {span}" data-panel="{_e(panel_id)}" data-tab="{_e(tab)}">'
+        f'<article class="{classes}" data-panel="{_e(panel_id)}" data-tab="{_e(tab)}">'
         '<div class="panel-head"><div>'
         f'<p class="eyebrow">{_e(eyebrow)}</p><h2>{_e(title)}</h2></div></div>'
         f"{body}</article>"
