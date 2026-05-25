@@ -40,6 +40,17 @@ if sys.platform == "win32":
     def _acquire_lock(fd: int) -> None:
         _msvcrt.locking(fd, _msvcrt.LK_LOCK, _LOCK_LENGTH)
 
+    def _acquire_read_lock(fd: int) -> None:
+        # Windows _msvcrt.locking does not have a direct shared lock;
+        # LK_NBKCK is 'non-blocking' which isn't what we want.
+        # Actually, Windows locking is always exclusive.
+        # For now, readers on Windows will just not lock (same as before)
+        # to avoid blocking multiple readers, OR we can use exclusive lock
+        # which effectively serializes readers.
+        # Given the goal of "shared" lock, we skip it on Windows if not supported
+        # by msvcrt.locking.
+        pass
+
     def _release_lock(fd: int) -> None:
         _msvcrt.locking(fd, _msvcrt.LK_UNLCK, _LOCK_LENGTH)
 
@@ -49,6 +60,9 @@ else:
 
         def _acquire_lock(fd: int) -> None:
             _fcntl.flock(fd, _fcntl.LOCK_EX)
+
+        def _acquire_read_lock(fd: int) -> None:
+            _fcntl.flock(fd, _fcntl.LOCK_SH)
 
         def _release_lock(fd: int) -> None:
             _fcntl.flock(fd, _fcntl.LOCK_UN)
@@ -67,6 +81,9 @@ else:
                 )
                 _LOCK_WARNED = True
 
+        def _acquire_read_lock(fd: int) -> None:
+            pass
+
         def _release_lock(fd: int) -> None:
             pass
 
@@ -77,7 +94,8 @@ HEADER = (
     "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd> [key=value ...]\n"
 )
 AI_LOG_FILENAME = "ai-sessions.log"
-_HALYARD_LOG = Path.home() / ".halyard" / "halyard.log"
+_HALYARD_AUDIT_LOG = Path.home() / ".halyard" / "halyard.log"
+_HALYARD_DIAG_LOG = Path.home() / ".halyard" / "diagnostic.log"
 
 # Regex matching characters that would break the space-delimited log line format.
 # Used to sanitize positional fields (tool, model) before writing.
@@ -183,12 +201,32 @@ def _log_error(msg: str, exc: Exception) -> None:
     (we cannot log the logger failure).
     """
     try:
-        _HALYARD_LOG.parent.mkdir(parents=True, exist_ok=True)
+        _HALYARD_AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(tz=UTC).isoformat(timespec="seconds")
         tb = traceback.format_exc()
         entry = f"[{ts}] {msg}: {type(exc).__name__}: {exc}\n{tb}\n"
-        with _HALYARD_LOG.open("a", encoding="utf-8") as fh:
+        with _HALYARD_AUDIT_LOG.open("a", encoding="utf-8") as fh:
             fh.write(entry)
+    except OSError:
+        pass
+
+
+def log_diagnostic(msg: str, *, tool: str | None = None, project: str | None = None) -> None:
+    """Append a one-line diagnostic entry to ~/.halyard/diagnostic.log.
+
+    Used for silent fallbacks (Hub timeout, git failure) that would
+    otherwise be invisible to the user but are valuable for support.
+    """
+    try:
+        _HALYARD_DIAG_LOG.parent.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(tz=UTC).isoformat(timespec="seconds")
+        prefix = f"[{ts}]"
+        if tool:
+            prefix += f" [{tool}]"
+        if project:
+            prefix += f" [{project}]"
+        with _HALYARD_DIAG_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(f"{prefix} {msg}\n")
     except OSError:
         pass
 
@@ -207,10 +245,6 @@ def locked_file(path: Path, mode: str) -> Generator[IO[str], None, None]:
     prevent concurrent appends from interleaving writes. The backend
     (``fcntl.flock`` on POSIX, ``msvcrt.locking`` on Windows) is selected
     once at import time.
-
-    Read paths do not lock: ``parse_sessions`` is allowed to see any consistent
-    prefix of the file; the next refresh picks up any session that landed
-    mid-read.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     lock_key = str(path.resolve())
@@ -219,6 +253,26 @@ def locked_file(path: Path, mode: str) -> Generator[IO[str], None, None]:
     with thread_lock, open(path, mode, encoding="utf-8") as f:
         fd = f.fileno()
         _acquire_lock(fd)
+        try:
+            yield f
+        finally:
+            _release_lock(fd)
+
+
+@contextmanager
+def read_locked_file(path: Path) -> Generator[IO[str], None, None]:
+    """Open *path* for reading with a shared (read) lock held for the duration.
+
+    Ensures the reader never sees a 'torn read' (partial line) mid-write by
+    an exclusive writer. On platforms without shared locking (Windows),
+    this is a no-op that yields the file handle normally.
+    """
+    lock_key = str(path.resolve())
+    with _PATH_LOCKS_GUARD:
+        thread_lock = _PATH_LOCKS.setdefault(lock_key, threading.RLock())
+    with thread_lock, open(path, encoding="utf-8") as f:
+        fd = f.fileno()
+        _acquire_read_lock(fd)
         try:
             yield f
         finally:
@@ -572,18 +626,17 @@ def maybe_emit_milestones(project_dir: Path) -> None:
         pass
 
 
-def _iter_log_lines(path: Path) -> Generator[str, None, None]:
-    """Yield stripped, non-comment, non-empty lines from a log file.
+def _iter_log_lines(fh: IO[str]) -> Generator[str, None, None]:
+    """Yield stripped, non-comment, non-empty lines from a log file handle.
 
     Streaming reader: memory is bounded by the longest single line, not by
     total file size. Comment and blank lines are filtered here so callers
     don't have to repeat the check.
     """
-    with path.open("r", encoding="utf-8") as fh:
-        for raw_line in fh:
-            line = raw_line.strip()
-            if line and not line.startswith(";"):
-                yield line
+    for raw_line in fh:
+        line = raw_line.strip()
+        if line and not line.startswith(";"):
+            yield line
 
 
 def api_plus_tool_seconds(session: AiSession) -> int | None:
@@ -615,36 +668,37 @@ def parse_sessions(project_dir: Path, *, now: datetime | None = None) -> list[Ai
     raw_by_hash: dict[str, str] = {}  # stripped raw line per hash, to detect true collisions
     amendments_by_hash: dict[str, list[Amendment]] = defaultdict(list)
 
-    for line in _iter_log_lines(log_path):
-        if line.startswith("s "):
-            parsed, error = _parse_line_result(line)
-            if parsed is not None:
-                h = session_hash(line)
-                stripped = line.strip()
-                prior = raw_by_hash.get(h)
-                if prior is not None and prior != stripped:
-                    # Two *different* `s` lines produced the same 48-bit
-                    # session_hash prefix. Folding `a` amendments by hash
-                    # would mis-apply one session's correction to the
-                    # other — silent cross-attribution. Astronomically
-                    # rare (~2^24 distinct sessions for 50%), but the
-                    # failure is silent corruption, so quarantine the
-                    # colliding line and drop it rather than fold blindly.
-                    _write_quarantine(
-                        line, f"session_hash collision with a different session ({h})"
-                    )
-                    continue
-                raw_by_hash.setdefault(h, stripped)
-                parsed._raw_hash = h
-                if h not in sessions_by_hash:
-                    sessions_by_hash[h] = parsed
-                sessions.append(parsed)
-            elif error is not None:
-                _write_quarantine(line, error)
-        elif line.startswith("a "):
-            amendment = parse_amendment(line)
-            if amendment is not None:
-                amendments_by_hash[amendment.session_hash].append(amendment)
+    with read_locked_file(log_path) as fh:
+        for line in _iter_log_lines(fh):
+            if line.startswith("s "):
+                parsed, error = _parse_line_result(line)
+                if parsed is not None:
+                    h = session_hash(line)
+                    stripped = line.strip()
+                    prior = raw_by_hash.get(h)
+                    if prior is not None and prior != stripped:
+                        # Two *different* `s` lines produced the same 48-bit
+                        # session_hash prefix. Folding `a` amendments by hash
+                        # would mis-apply one session's correction to the
+                        # other — silent cross-attribution. Astronomically
+                        # rare (~2^24 distinct sessions for 50%), but the
+                        # failure is silent corruption, so quarantine the
+                        # colliding line and drop it rather than fold blindly.
+                        _write_quarantine(
+                            line, f"session_hash collision with a different session ({h})"
+                        )
+                        continue
+                    raw_by_hash.setdefault(h, stripped)
+                    parsed._raw_hash = h
+                    if h not in sessions_by_hash:
+                        sessions_by_hash[h] = parsed
+                    sessions.append(parsed)
+                elif error is not None:
+                    _write_quarantine(line, error)
+            elif line.startswith("a "):
+                amendment = parse_amendment(line)
+                if amendment is not None:
+                    amendments_by_hash[amendment.session_hash].append(amendment)
 
     # Apply amendments in file order; last-write-wins per key.
     # Only the first-occurrence object per hash is amended.
@@ -1105,7 +1159,7 @@ def unattributed_log_count() -> int:
     if not path.exists():
         return 0
     count = 0
-    with path.open("r", encoding="utf-8") as fh:
+    with read_locked_file(path) as fh:
         for raw_line in fh:
             if raw_line.strip().startswith("s "):
                 count += 1

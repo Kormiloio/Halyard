@@ -63,10 +63,13 @@ def _request(
         resp = conn.getresponse()
         raw = resp.read().decode()
         conn.close()
-    except (OSError, http.client.HTTPException, UnicodeDecodeError):
+    except (OSError, http.client.HTTPException, UnicodeDecodeError) as exc:
         # Best-effort loopback call on hot paths (session append, collision
         # check): a down/half-open Hub or a malformed response must degrade to
         # "unavailable" so the caller falls back to a direct local write.
+        from halyard.ai_log import log_diagnostic
+
+        log_diagnostic(f"hub_client: request failed ({method} {path}): {exc}")
         return None
 
     try:

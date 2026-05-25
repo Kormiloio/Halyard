@@ -88,7 +88,10 @@ def head_sha(cwd: Path) -> str | None:
         )
         sha = result.stdout.strip()
         return sha or None
-    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError) as exc:
+        from halyard.ai_log import log_diagnostic
+
+        log_diagnostic(f"git_context: head_sha failed: {exc}")
         return None
 
 
@@ -116,7 +119,10 @@ def commits_in_window(cwd: Path, start: datetime, end: datetime) -> int | None:
         if result.returncode != 0:
             return None
         return sum(1 for line in result.stdout.splitlines() if line.strip())
-    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError) as exc:
+        from halyard.ai_log import log_diagnostic
+
+        log_diagnostic(f"git_context: commits_in_window failed: {exc}")
         return None
 
 
@@ -163,7 +169,10 @@ def numstat_summary(cwd: Path, sha_at_start: str) -> tuple[int, int, int] | None
             except ValueError:
                 continue
         return added, removed, files
-    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError) as exc:
+        from halyard.ai_log import log_diagnostic
+
+        log_diagnostic(f"git_context: numstat_summary failed: {exc}")
         return None
 
 
@@ -178,7 +187,10 @@ def current_branch(cwd: Path) -> str | None:
         )
         branch = result.stdout.strip()
         return branch or None
-    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError) as exc:
+        from halyard.ai_log import log_diagnostic
+
+        log_diagnostic(f"git_context: current_branch failed: {exc}")
         return None
 
 
@@ -210,7 +222,10 @@ def _git_remote_url(cwd: Path) -> str | None:
         if result.returncode != 0:
             return None
         return result.stdout.strip() or None
-    except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+    except (subprocess.TimeoutExpired, OSError, FileNotFoundError) as exc:
+        from halyard.ai_log import log_diagnostic
+
+        log_diagnostic(f"git_context: _git_remote_url failed: {exc}")
         return None
 
 

@@ -459,7 +459,7 @@ def test_backfill_error_logs_to_halyard_log_and_warns(
 
     # Redirect halyard.log to a temp path to avoid polluting ~/.halyard/halyard.log
     halyard_log = tmp_path / "halyard.log"
-    monkeypatch.setattr("halyard.ai_log._HALYARD_LOG", halyard_log)
+    monkeypatch.setattr("halyard.ai_log._HALYARD_AUDIT_LOG", halyard_log)
 
     # Start the timer.
     start_timer(tmp_path, "acme:auth")
