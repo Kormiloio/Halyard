@@ -103,7 +103,8 @@ def test_dashboard_renders_collisions_panel(
     assert "feat/hub" in html
     assert "claude-code" in html
     assert "cursor" in html
-    assert "current.replaceWith(next)" in html
+    # v5.6: partial refresh swaps the metrics/grid regions in place.
+    assert "cur.innerHTML = next.innerHTML" in html
 
 
 def test_event_stream_delivers_emitted_event(hub) -> None:

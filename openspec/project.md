@@ -1107,6 +1107,94 @@ layers must read from this local source of truth; they do not replace it.
     Spec in `openspec/changes/v5.2-codex-growth-reimport/`.
     **Status: complete (1488 tests passing).**
 
+77. **v5.3 — Concurrency + observability hardening:** the three verified items
+    from an architecture review (the other two ship as v5.4). (1) **Reader
+    shared lock** — `read_locked_file()` (`LOCK_SH`) closes a torn-read window
+    where a reader concurrent with a large in-progress append could see a
+    partial line; `parse_sessions`/`unattributed_log_count` read through it.
+    Honest scope: the ledger is append-only and `_write_quarantine` only copies
+    to `quarantine.log`, so this is robustness, not the data-loss the review
+    claimed. (2) **Diagnostic log** — `log_diagnostic()` records silent
+    fallbacks (Hub timeout, every git subprocess failure) to
+    `~/.halyard/diagnostic.log` so degradation is observable. (3) **Latency
+    test** — a real `HubServer` slower than the 150 ms client timeout proves the
+    degrade-to-local-write path. Rejected: raising the (deliberate fail-fast)
+    timeout; a FastAPI rewrite. Spec in
+    `openspec/changes/v5.3-concurrency-observability/`.
+    **Status: complete (1495 tests passing).**
+
+78. **v5.4 — Dashboard page shell → Jinja2 + timezone ADR:** first increment of
+    breaking up the ~3,355-line `dashboard.py` monolith flagged in an
+    architecture review. The page chrome (doctype/head/topbar/metrics/grid
+    wrapper/footer/scripts) and per-panel scaffolding move from the
+    `_render_state` f-string into `src/halyard/templates/dashboard.html.j2`
+    (cached `autoescape=True` env); panel builders are untouched and their
+    pre-escaped HTML flows through as `|safe`, so output is behaviour-preserving
+    (100 existing dashboard tests pass unchanged; +3 templating tests). Also
+    lands the missing `docs/adr/` with `0001-timezone-model.md` — records the
+    accepted naive-local-domain / UTC-machine-log split, its single coercion
+    boundary (`_to_naive_local`), and the additive `tz=`-token path gated on
+    Halyard-Enterprise. Rejected: FastAPI port (unjustified for a localhost
+    single-user bridge); UTC-everywhere (breaking format migration, no
+    single-user benefit). Spec in
+    `openspec/changes/v5.4-dashboard-templating/`. The sibling concurrency/
+    observability review items (reader read-locking, fallback `diagnostic.log`,
+    Hub latency test) shipped as v5.3.
+    **Status: complete (1495 tests passing).**
+
+79. **v5.5 — Hub worker resilience + bounded OTel accumulator:** the two
+    verified items from a security review of the Hub's OTLP ingestion (the
+    review's per-field schema validator, pricing-signing, and token-access-log
+    recommendations were assessed and rejected — log-injection is already
+    prevented at the `to_log_line` write boundary, pricing already uses
+    HTTPS + origin-pin + SHA-256 TOFU, and the `0600` token is read directly by
+    a local attacker rather than via the function). (1) **Worker-tick
+    isolation** — `_worker_loop` split into a scheduler + `_worker_tick`
+    wrapped in `try/except` + a `log_diagnostic` breadcrumb, so one malformed
+    session can no longer silently kill the daemon worker and halt all
+    background writes. (2) **Bounded accumulator** — `_MAX_OTEL_SESSIONS` cap +
+    `_evict_excess_otel()` (oldest-by-`last_update`) so a local client spamming
+    distinct `session.id`s can't grow `_otel_acc` without bound. Spec in
+    `openspec/changes/v5.5-hub-worker-resilience/`.
+    **Status: complete (1498 tests passing).**
+
+80. **v5.6 — Dashboard: panel templates, external CSS, native partial refresh:**
+    three refinements to the server-rendered Bridge (architecture kept — the
+    right fit for a local-first `pipx` tool; FastAPI/React rewrite rejected).
+    (#2) `_CSS` (437 lines) → `templates/dashboard.css` via cached `_load_css()`,
+    output unchanged. (#1) the 7 repetitive table builders (models/tools/
+    projects/collisions/time/adrift/sessions) now render through a `data_table`
+    macro in `templates/panels/_macros.html.j2`; logic-heavy panels stay in
+    Python by design. (#3) the full-page `<meta refresh>` is replaced by a
+    zero-dependency native partial refresh — a 10s timer + Hub SSE swap the
+    `#metrics`/`#grid` regions in place and re-run sort + a new idempotent
+    `HalyardApplyLayout` hook, so sort/order/collapse survive and scroll/focus
+    are preserved. **HTMX was evaluated and rejected** (vendoring needs the file
+    offline; a CDN breaks offline-first). Browser-verified (no reload, in-place
+    swap, collapse survives). Spec in
+    `openspec/changes/v5.6-dashboard-templating-refresh/`.
+    **Status: complete (1498 tests passing).**
+
+81. **v5.7 — Dashboard "B+": tabbed overview + richer charts + panel on/off:**
+    owner-picked redesign after prototyping three directions
+    (`prototypes/dashboard_redesign.py`). Adds a calm **Overview** tab built
+    from hero inline-SVG visuals (cost donut [cost-only], model-mix donut,
+    tokens trend, activity heatmap, top-projects, outcomes, KPI strip) and a
+    **tab bar** (Overview/Money/Sessions/Voyage/Health/All). Tabs are
+    **client-side show/hide** — every panel stays in the DOM (real renderers,
+    all creature/passport/medal/rank icons intact), so existing tests + the
+    v5.6 partial-refresh keep working; only visibility changes (re-applied via
+    `HalyardApplyTabs`). Restores the controls: **per-panel on/off** (✕ + a
+    `▦ panels` manage menu, persisted) alongside collapse/drag, and the v2.73
+    column **sort** `⇅` (already present — a duplicate glyph was caught in
+    browser verification and removed). **Attribution normalized** for the
+    charts (`kormilo/halyard` + `git/Halyard` + `kormilo:halyard` → one);
+    full remote→slug map is a follow-up. New inline-SVG chart helpers
+    (`_svg_donut`/`_svg_area`/`_svg_stacked_bar`) — no JS charting dep,
+    offline-first. Browser-verified end-to-end. Spec in
+    `openspec/changes/v5.7-dashboard-b-plus/`.
+    **Status: complete (1505 tests passing).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

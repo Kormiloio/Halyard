@@ -1,0 +1,9 @@
+{#- Reusable dashboard table markup. Logic stays in Python; this owns the
+    table/thead/tbody/tr/td scaffolding. `headers` is a list of column labels;
+    `rows` is a list of rows, each a list of cell dicts {cls?, html}. The html
+    is pre-rendered/escaped by the caller, so it is emitted with |safe. The
+    table tag mirrors `_stbl` (data-sortable / data-sort-key / data-cols) so
+    the client column-sort keeps working. -#}
+{% macro data_table(key, cols, headers, rows, cls="") -%}
+<table{% if cls %} class='{{ cls }}'{% endif %} data-sortable data-sort-key='{{ key }}' data-cols='{{ cols }}'><thead><tr>{% for h in headers %}<th>{{ h }}</th>{% endfor %}</tr></thead><tbody>{% for row in rows %}<tr>{% for c in row %}<td{% if c.cls %} class='{{ c.cls }}'{% endif %}{% if c.sortval is defined %} data-sort-val='{{ c.sortval }}'{% endif %}{% if c.sev is defined %} data-sev='{{ c.sev }}'{% endif %}>{{ c.html|safe }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
+{%- endmacro %}

@@ -7,15 +7,20 @@ from __future__ import annotations
 import errno
 import hmac
 import html
+import math
 import socket
 import webbrowser
 from collections.abc import Iterable
 from contextlib import suppress
 from datetime import datetime, timedelta
+from functools import lru_cache
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from jinja2 import Environment, Template
 
 from halyard import leverage
 from halyard.ai_log import AiSession
@@ -41,6 +46,40 @@ from halyard.usage import (
 )
 
 DASHBOARD_PORT = 7432
+
+_TEMPLATE_DIR = Path(__file__).parent / "templates"
+
+
+@lru_cache(maxsize=1)
+def _env() -> Environment:
+    """Return the shared, cached Jinja2 environment for dashboard templates.
+
+    autoescape is on (HTML output); every injected fragment is already
+    escaped via ``_e`` or is server-rendered HTML, so templates mark each
+    with ``|safe``. Page chrome lives in ``templates/dashboard.html.j2`` and
+    reusable panel markup in ``templates/panels/`` — this module composes the
+    fragments and supplies pre-computed values.
+    """
+    from jinja2 import Environment, FileSystemLoader
+
+    return Environment(loader=FileSystemLoader(str(_TEMPLATE_DIR)), autoescape=True)
+
+
+@lru_cache(maxsize=1)
+def _dashboard_template() -> Template:
+    """Return the cached page-shell template."""
+    return _env().get_template("dashboard.html.j2")
+
+
+@lru_cache(maxsize=1)
+def _panel_macros() -> Any:
+    """Return the imported macro module from ``panels/_macros.html.j2``.
+
+    Calling ``_panel_macros().data_table(...)`` renders a macro to a string
+    so Python builders can keep their formatting logic while the table/row
+    markup lives in the template.
+    """
+    return _env().get_template("panels/_macros.html.j2").module
 
 
 class DashboardError(RuntimeError):
@@ -747,50 +786,20 @@ def _render_state(
         "muted" if trail_active_days else "warning",
     )
 
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="10">
-  <title>Halyard · The Bridge</title>
-  <style>{_CSS}</style>
-</head>
-<body>
-  <main class="shell">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark" id="brand-mark">
-          <svg viewBox="0 0 24 24" role="img" aria-label="Halyard">
-            <circle cx="12" cy="5" r="3"/>
-            <path d="M12 8v14"/>
-            <path d="M5 12H2a10 10 0 0 0 20 0h-3"/>
-          </svg>
-        </div>
-        <div>
-          <p class="eyebrow">Halyard · The Bridge · Web Dashboard</p>
-          <h1>{
-        _e(f"All Projects · {state.aggregate_count}")
-        if state.aggregate_count
-        else _e(state.project_dir.name)
-    }</h1>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;">
-        <button id="layout-toggle-all" class="theme-toggle" aria-label="Collapse or expand all panels" title="Collapse or expand all panels">▾ collapse all</button>
-        <button id="layout-reset" class="theme-toggle" aria-label="Reset panel layout" title="Reset panel layout to default">⊞ reset layout</button>
-        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark mode">☀️</button>
-        <button id="health-pill" class="status status-{health_level}" type="button"
-          title="{_e(_health_pill_title(state.health))}"
-          aria-label="{_e(_health_pill_title(state.health))}">{_e(health_level.title())}</button>
-      </div>
-    </header>
-    {_health_popup(state.health)}
-
-    <section class="metrics" aria-label="Today summary">
-      {_timer_metric(state.active_timer, state.timer_collision)}
-      {
-        _metric(
+    context = {
+        "css": _load_css(),
+        "overview_panels": _overview_panels(state, usage),
+        "title": (
+            _e(f"All Projects · {state.aggregate_count}")
+            if state.aggregate_count
+            else _e(state.project_dir.name)
+        ),
+        "health_level": health_level,
+        "health_pill_title": _e(_health_pill_title(state.health)),
+        "health_level_title": _e(health_level.title()),
+        "health_popup": _health_popup(state.health),
+        "timer_metric": _timer_metric(state.active_timer, state.timer_collision),
+        "metric_human": _metric(
             "Human Time",
             format_minutes(human_time.today_minutes or human_time.presence_minutes),
             "today"
@@ -798,19 +807,15 @@ def _render_state(
             else ("today · auto-detected" if human_time.presence_minutes > 0 else "today"),
             "normal",
             "human-time",
-        )
-    }
-      {
-        _metric(
+        ),
+        "metric_sessions": _metric(
             "AI Sessions",
             str(len(report.sessions)),
             report.period_label,
             "normal",
             "ai-sessions",
-        )
-    }
-      {
-        _metric(
+        ),
+        "metric_cost": _metric(
             "AI Cost",
             f"${report.total_cost:.2f}"
             if report.total_cost > 0
@@ -828,192 +833,80 @@ def _render_state(
             ),
             "money",
             "ai-cost",
-        )
+        ),
+        "voyage_panel": _voyage_panel(state),
+        "captains_panel": _captains_quarters_panel(state.project_dir, report.sessions),
+        "friends_panel": _friends_panel(state.project_dir, report.sessions),
+        "moat_panel": _moat_panel(state),
+        "usage_h2": "Models" if usage_tab == "models" else "Overview",
+        "range_control": _range_control(usage_range, usage_tab),
+        "tab_control": _tab_control(usage_tab, usage_range),
+        "active_days": _e(usage.summary.active_days),
+        "usage_body": (
+            _usage_panel(usage) if usage_tab == "overview" else _usage_models_panel(usage)
+        ),
+        "leverage_panel": _leverage_panel(state.all_sessions, state.generated_at),
+        "morse_wake": _morse("WAKE"),
+        "wake_month": _e(now.strftime("%B %Y")),
+        "trail_pill": trail_pill,
+        "trail_heatmap": _trail_heatmap_html(report.sessions, now),
+        "tools_pill": tools_pill,
+        "tool_table": _tool_table(report.by_tool_usage),
+        "morse_log": _morse("LOG"),
+        "sessions_pill": sessions_pill,
+        "sessions_table": _sessions_table(report.sessions),
+        "health_rows": "".join(
+            _health_row(check.label, check.status, check.detail) for check in state.health
+        ),
+        "adrift_attention": _e("on" if report.unattributed_count else "off"),
+        "unattr_pill": unattr_pill,
+        "unattributed_table": _unattributed_table(report.unattributed_sessions),
+        "collisions_attention": _e("on" if state.collisions else "off"),
+        "collisions_pill": collisions_pill,
+        "collisions_panel": _collisions_panel(state.collisions),
+        "morse_time": _morse("TIME"),
+        "time_pill": time_pill,
+        "time_table": _time_table(human_time.by_project),
+        "projects_pill": projects_pill,
+        "bucket_table": _bucket_table(report.by_project, "Project"),
+        "models_pill": models_pill,
+        "model_table": _model_table(report.by_model),
+        "surface_panel": (_surface_panel(report.by_tool_surface) if report.by_tool_surface else ""),
+        "budget_pill": budget_pill,
+        "budget_panel": _budget_panel(budgets),
+        "period_label": _e(report.period_label),
+        "costs_trust_pill": costs_trust_pill,
+        "costs_panel": _costs_panel(ledger, report.by_project, report.sessions),
+        "latest_label": _latest_label(latest),
+        "generated": _e(state.generated_at.strftime("%Y-%m-%d %H:%M:%S")),
+        "scripts": "".join(
+            (
+                _scroll_preserve_script(),
+                _layout_script(),
+                _health_popup_script(),
+                _celebration_script(),
+                _easter_egg_script(),
+                _table_sort_script(),
+                _tabs_script(),
+                _refresh_script(),
+            )
+        ),
     }
-    </section>
-
-    <section class="grid">
-      {_voyage_panel(state)}
-      {_captains_quarters_panel(state.project_dir, report.sessions)}
-      {_friends_panel(state.project_dir, report.sessions)}
-      {_moat_panel(state)}
-
-      <article class="panel span-12" data-panel="usage">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Usage Analytics</p>
-            <h2>{"Models" if usage_tab == "models" else "Overview"}</h2>
-          </div>
-          <div class="pill-group">
-            {_range_control(usage_range, usage_tab)}
-            {_tab_control(usage_tab, usage_range)}
-            <span class="pill">{_e(usage.summary.active_days)} active days</span>
-          </div>
-        </div>
-        {_usage_panel(usage) if usage_tab == "overview" else _usage_models_panel(usage)}
-      </article>
-
-      <article class="panel span-4 panel-vfill" data-panel="leverage">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Outcomes</p>
-            <h2>Did it ship?</h2>
-          </div>
-          <div class="pill-group"><span class="pill">30d</span></div>
-        </div>
-        {_leverage_panel(state.all_sessions, state.generated_at)}
-      </article>
-
-      <article class="panel span-4" data-panel="wake">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">{_morse("WAKE")}</p>
-            <h2>Wake · {_e(now.strftime("%B %Y"))}</h2>
-          </div>
-          <div class="pill-group">{trail_pill}</div>
-        </div>
-        {_trail_heatmap_html(report.sessions, now)}
-      </article>
-
-      <article class="panel span-4" data-panel="tools">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Capture</p>
-            <h2>Tools</h2>
-          </div>
-          {tools_pill}
-        </div>
-        {_tool_table(report.by_tool_usage)}
-      </article>
-
-      <article class="panel span-7" data-panel="sessions" data-hub-fragment="sessions">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">{_morse("LOG")}</p>
-            <h2>Recent AI Sessions</h2>
-          </div>
-          <div class="pill-group">{sessions_pill}<span class="pill">↺ 10s</span></div>
-        </div>
-        {_sessions_table(report.sessions)}
-      </article>
-
-      <article class="panel span-5" data-panel="health">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Collector State</p>
-            <h2>Health</h2>
-          </div>
-        </div>
-        <div class="health-list">{
-        "".join(_health_row(check.label, check.status, check.detail) for check in state.health)
-    }</div>
-      </article>
-
-      <article class="panel span-12 attention-{
-        _e("on" if report.unattributed_count else "off")
-    }" data-panel="adrift">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">· · · — — — · · ·</p>
-            <h2>Sessions Adrift</h2>
-          </div>
-          {unattr_pill}
-        </div>
-        {_unattributed_table(report.unattributed_sessions)}
-      </article>
-
-      <article class="panel span-12 attention-{
-        _e("on" if state.collisions else "off")
-    }" data-panel="collisions" data-hub-fragment="collisions">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Overlap</p>
-            <h2>Collisions</h2>
-          </div>
-          {collisions_pill}
-        </div>
-        {_collisions_panel(state.collisions)}
-      </article>
-
-      <article class="panel span-6" data-panel="timeclock">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">{_morse("TIME")}</p>
-            <h2>Timeclock</h2>
-          </div>
-          {time_pill}
-        </div>
-        {_time_table(human_time.by_project)}
-      </article>
-
-      <article class="panel span-6" data-panel="projects" data-hub-fragment="projects">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Attribution</p>
-            <h2>Projects</h2>
-          </div>
-          {projects_pill}
-        </div>
-        {_bucket_table(report.by_project, "Project")}
-      </article>
-
-      <article class="panel span-4" data-panel="models">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Mix</p>
-            <h2>Models</h2>
-          </div>
-          {models_pill}
-        </div>
-        {_model_table(report.by_model)}
-      </article>
-
-      {_surface_panel(report.by_tool_surface) if report.by_tool_surface else ""}
-
-      <article class="panel span-4" data-panel="budget">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Spend Limits</p>
-            <h2>Budget</h2>
-          </div>
-          {budget_pill}
-        </div>
-        {_budget_panel(budgets)}
-      </article>
-
-      <article class="panel span-12" data-panel="costs" data-hub-fragment="costs">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Cost Allocation</p>
-            <h2>Costs</h2>
-          </div>
-          <div class="pill-group"><span class="pill">{_e(report.period_label)}</span>{
-        costs_trust_pill
-    }</div>
-        </div>
-        {_costs_panel(ledger, report.by_project, report.sessions)}
-      </article>
-    </section>
-
-    <footer>
-      Latest session: {_latest_label(latest)} · Generated {
-        _e(state.generated_at.strftime("%Y-%m-%d %H:%M:%S"))
-    }
-    </footer>
-  </main>
-  {_scroll_preserve_script()}
-  {_layout_script()}
-  {_health_popup_script()}
-  {_celebration_script()}
-  {_easter_egg_script()}
-  {_table_sort_script()}
-  {_hub_events_script()}
-</body>
-</html>"""
+    return _dashboard_template().render(**context)
 
 
-def _hub_events_script() -> str:
-    """v4.3: Reactive Hub event listener."""
+def _refresh_script() -> str:
+    """Partial in-place refresh (v5.6) — replaces the old full-page
+    ``<meta refresh>``.
+
+    A 10s timer plus Hub SSE events fetch the page and swap only the
+    ``#metrics`` and ``#grid`` regions' contents, then re-run the table-sort
+    and layout re-apply hooks so column sort, saved panel order, and collapse
+    state survive the swap. No navigation, so scroll and focus are preserved.
+    Fail-safe: any error leaves the server-rendered dashboard intact, and with
+    JS disabled the page still renders fully on load (it just doesn't
+    auto-update).
+    """
     import json
 
     from halyard.hub_client import hub_url
@@ -1022,15 +915,14 @@ def _hub_events_script() -> str:
     return """<script>
 (function(){
   try {
+    var REGIONS = ['metrics', 'grid'];
     var pending = false;
-    var wanted = {
-      session_ingested: ['sessions', 'ai-sessions', 'ai-cost', 'projects', 'costs', 'collisions'],
-      collision_detected: ['timer', 'collisions'],
-      timer_started: ['timer'],
-      timer_stopped: ['timer'],
-      timer_updated: ['timer']
-    };
-    function patch(names) {
+    function reinit() {
+      if (window.HalyardBootTables) window.HalyardBootTables();
+      if (window.HalyardApplyLayout) window.HalyardApplyLayout();
+      if (window.HalyardApplyTabs) window.HalyardApplyTabs();
+    }
+    function refresh() {
       if (pending) return;
       pending = true;
       fetch(window.location.href, {
@@ -1042,31 +934,76 @@ def _hub_events_script() -> str:
         return resp.text();
       }).then(function(html) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
-        names.forEach(function(name) {
-          var current = document.querySelector('[data-hub-fragment="' + name + '"]');
-          var next = doc.querySelector('[data-hub-fragment="' + name + '"]');
-          if (current && next) current.replaceWith(next);
+        var swapped = false;
+        REGIONS.forEach(function(id) {
+          var cur = document.getElementById(id);
+          var next = doc.getElementById(id);
+          if (cur && next) { cur.innerHTML = next.innerHTML; swapped = true; }
         });
-        if (window.HalyardBootTables) window.HalyardBootTables();
+        if (swapped) reinit();
       }).catch(function(err) {
-        if (window.console) console.debug('Halyard realtime refresh skipped:', err);
+        if (window.console) console.debug('Halyard refresh skipped:', err);
       }).finally(function() {
         pending = false;
       });
     }
-    var source = new EventSource(__HUB_EVENTS_URL__);
-    source.onmessage = function(event) {
-      var msg = JSON.parse(event.data);
-      var fragments = wanted[msg.type];
-      if (fragments) patch(fragments);
-    };
-    source.onerror = function() {
-      // Best effort, don't spam errors if Hub is down
-      source.close();
-    };
+    // Periodic refresh replaces the old full-page <meta refresh>.
+    setInterval(refresh, 10000);
+    // Instant refresh on Hub events.
+    try {
+      var wanted = {
+        session_ingested: 1, collision_detected: 1,
+        timer_started: 1, timer_stopped: 1, timer_updated: 1
+      };
+      var source = new EventSource(__HUB_EVENTS_URL__);
+      source.onmessage = function(event) {
+        var msg = JSON.parse(event.data);
+        if (wanted[msg.type]) refresh();
+      };
+      source.onerror = function() { source.close(); };
+    } catch (e) {}
   } catch (e) {}
 })();
 </script>""".replace("__HUB_EVENTS_URL__", events_url)
+
+
+def _tabs_script() -> str:
+    """v5.7: client-side tab filter. Every panel stays in the DOM; only the
+    active tab's panels show (the 'all' tab shows everything). The panel->tab
+    mapping lives here so no per-panel markup change is needed; Overview panels
+    carry their own data-tab. Active tab persists in localStorage and is
+    re-applied after a partial refresh via window.HalyardApplyTabs."""
+    return """<script>
+(function(){
+  var KEY='halyard-tab-v1';
+  var TAB_OF={
+    voyage:'voyage','captains-quarters':'voyage',friends:'voyage',wake:'voyage',
+    moat:'money',projects:'money',budget:'money',costs:'money',
+    sessions:'sessions',adrift:'sessions',collisions:'sessions',tools:'sessions',
+    timeclock:'sessions',surface:'sessions',
+    usage:'health',health:'health',models:'health',leverage:'health'
+  };
+  function active(){ return localStorage.getItem(KEY) || 'overview'; }
+  function tabOf(p){ return p.getAttribute('data-tab') || TAB_OF[p.getAttribute('data-panel')] || 'all'; }
+  function apply(){
+    var a=active();
+    document.querySelectorAll('.tabbar .tab').forEach(function(t){
+      t.classList.toggle('active', t.getAttribute('data-tab')===a);
+    });
+    document.querySelectorAll('#grid > [data-panel]').forEach(function(p){
+      p.classList.toggle('tab-hidden', a!=='all' && tabOf(p)!==a);
+    });
+  }
+  window.HalyardApplyTabs=apply;
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('.tabbar .tab'); if(!b)return;
+    e.preventDefault();
+    localStorage.setItem(KEY, b.getAttribute('data-tab'));
+    apply();
+  });
+  try { apply(); } catch(e) {}
+})();
+</script>"""
 
 
 def _captains_quarters_panel(project_dir: Path, sessions: list[AiSession]) -> str:
@@ -1408,26 +1345,30 @@ def _sessions_table(sessions: Iterable[AiSession]) -> str:
             f"<br><small class='muted'>{_e(session.branch)}</small>" if session.branch else ""
         )
         rows.append(
-            "<tr>"
-            f"<td>{_e(session.end.strftime('%H:%M'))}</td>"
-            f"<td><span class='tool-icon tool-{_e(css_key)}'>{emoji}</span></td>"
-            f"<td>{_e(session.project or '(unattributed)')}{branch_tag}</td>"
-            f"<td>{_e(session.model)}</td>"
-            f"<td class='num'>{_e(dur)}</td>"
-            f"<td class='num' data-sort-val='{session.input_tokens + session.output_tokens}'>"
-            f"{session.input_tokens:,} / {session.output_tokens:,}</td>"
-            f"<td class='num'>${session.cost_usd:.4f}</td>"
-            f"<td class='num' data-sev='{_session_sev(session)}'>{health}</td>"
-            "</tr>"
+            [
+                {"html": _e(session.end.strftime("%H:%M"))},
+                {"html": f"<span class='tool-icon tool-{_e(css_key)}'>{emoji}</span>"},
+                {"html": f"{_e(session.project or '(unattributed)')}{branch_tag}"},
+                {"html": _e(session.model)},
+                {"cls": "num", "html": _e(dur)},
+                {
+                    "cls": "num",
+                    "sortval": session.input_tokens + session.output_tokens,
+                    "html": f"{session.input_tokens:,} / {session.output_tokens:,}",
+                },
+                {"cls": "num", "html": f"${session.cost_usd:.4f}"},
+                {"cls": "num", "sev": _session_sev(session), "html": health},
+            ]
         )
     if not rows:
         return '<p class="empty">No AI sessions captured this period.<br>Start Claude Code, Cursor, or Gemini CLI in this directory.</p>'
-    return (
-        _stbl("recent-sessions", "m,x,x,x,x,n,n,s")
-        + "<thead><tr><th>Time</th><th>Tool</th><th>Project</th><th>Model</th>"
-        "<th>Dur</th><th>In / Out</th><th>Cost</th><th>Health</th></tr></thead><tbody>"
-        + "".join(rows)
-        + "</tbody></table>"
+    return str(
+        _panel_macros().data_table(
+            "recent-sessions",
+            "m,x,x,x,x,n,n,s",
+            ["Time", "Tool", "Project", "Model", "Dur", "In / Out", "Cost", "Health"],
+            rows,
+        )
     )
 
 
@@ -1956,6 +1897,15 @@ def _usage_tool_rows(usage: UsageAnalytics) -> str:
     return "<div class='usage-list'>" + "".join(rows) + "</div>"
 
 
+def _bar_cell(pct: int, label: str) -> str:
+    """Pre-rendered share-bar cell body shared by the model/tool tables."""
+    return (
+        "<div class='bar-cell'>"
+        f"<div class='bar-wrap'><div class='bar' style='width:{pct}%'></div></div>"
+        f"<span>{_e(label)}</span></div>"
+    )
+
+
 def _model_table(buckets: Iterable[CostBucket]) -> str:
     bucket_list = list(buckets)
     if not bucket_list:
@@ -1966,19 +1916,17 @@ def _model_table(buckets: Iterable[CostBucket]) -> str:
         pct = int((bucket.cost_usd / total_cost) * 100)
         pct_label = f"{pct}%" if pct > 0 or bucket.cost_usd == 0 else "<1%"
         rows.append(
-            "<tr>"
-            f"<td>{_e(bucket.label)}</td>"
-            f"<td class='num'>{bucket.sessions}</td>"
-            f"<td class='num'>${bucket.cost_usd:.2f}</td>"
-            f"<td><div class='bar-cell'>"
-            f"<div class='bar-wrap'><div class='bar' style='width:{pct}%'></div></div>"
-            f"<span>{_e(pct_label)}</span></div></td>"
-            "</tr>"
+            [
+                {"html": _e(bucket.label)},
+                {"cls": "num", "html": str(bucket.sessions)},
+                {"cls": "num", "html": f"${bucket.cost_usd:.2f}"},
+                {"html": _bar_cell(pct, pct_label)},
+            ]
         )
-    return (
-        _stbl("models", "t,n,n,n")
-        + "<thead><tr><th>Model</th><th>Sessions</th><th>Cost</th><th>Share</th>"
-        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+    return str(
+        _panel_macros().data_table(
+            "models", "t,n,n,n", ["Model", "Sessions", "Cost", "Share"], rows
+        )
     )
 
 
@@ -1993,19 +1941,21 @@ def _tool_table(buckets: Iterable[ToolUsageBucket]) -> str:
         pct_label = f"{pct}%" if pct > 0 or bucket.sessions == 0 else "<1%"
         tok_label = compact_number(bucket.tokens) if bucket.tokens else "—"
         rows.append(
-            "<tr>"
-            f"<td>{_e(bucket.tool)}</td>"
-            f"<td class='num'>{bucket.sessions}</td>"
-            f"<td class='num'>{_e(tok_label)}</td>"
-            f"<td class='num'>${bucket.cost_usd:.2f}</td>"
-            f"<td><div class='bar-cell'>"
-            f"<div class='bar-wrap'><div class='bar' style='width:{pct}%'></div></div>"
-            f"<span>{_e(pct_label)}</span></div></td>"
-            "</tr>"
+            [
+                {"html": _e(bucket.tool)},
+                {"cls": "num", "html": str(bucket.sessions)},
+                {"cls": "num", "html": _e(tok_label)},
+                {"cls": "num", "html": f"${bucket.cost_usd:.2f}"},
+                {"html": _bar_cell(pct, pct_label)},
+            ]
         )
-    return (
-        _stbl("tools", "t,n,n,n,n") + "<thead><tr><th>Tool</th><th>Sessions</th><th>Tokens</th>"
-        "<th>Cost</th><th>Share</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+    return str(
+        _panel_macros().data_table(
+            "tools",
+            "t,n,n,n,n",
+            ["Tool", "Sessions", "Tokens", "Cost", "Share"],
+            rows,
+        )
     )
 
 
@@ -2039,20 +1989,23 @@ def _collisions_panel(collisions: Iterable[object]) -> str:
         mins = int((now - c.latest_end).total_seconds() // 60)
         when = f"{mins}m ago" if mins > 0 else "just now"
         proj = f"{_e(c.project)} · " if c.project else ""
-        rows.append(
-            "<tr>"
-            f"<td>{proj}<strong>{_e(c.branch)}</strong>"
+        branch_cell = (
+            f"{proj}<strong>{_e(c.branch)}</strong>"
             f"<div class='bar-wrap'><div class='bar bar-collision' "
-            f"style='width:{pct}%'></div></div></td>"
-            f"<td class='num'>{c.count}</td>"
-            f"<td>{_e(', '.join(c.tools))}</td>"
-            f"<td class='num'>{_e(when)}</td>"
-            "</tr>"
+            f"style='width:{pct}%'></div></div>"
         )
-    return (
-        _stbl("collisions", "t,n,t,n")
-        + "<thead><tr><th>Branch</th><th>Overlaps</th><th>Tools</th><th>Last</th>"
-        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+        rows.append(
+            [
+                {"html": branch_cell},
+                {"cls": "num", "html": str(c.count)},
+                {"html": _e(", ".join(c.tools))},
+                {"cls": "num", "html": _e(when)},
+            ]
+        )
+    return str(
+        _panel_macros().data_table(
+            "collisions", "t,n,t,n", ["Branch", "Overlaps", "Tools", "Last"], rows
+        )
     )
 
 
@@ -2060,18 +2013,16 @@ def _bucket_table(buckets: Iterable[CostBucket], label: str) -> str:
     rows = []
     for bucket in buckets:
         rows.append(
-            "<tr>"
-            f"<td>{_e(bucket.label)}</td>"
-            f"<td class='num'>{bucket.sessions}</td>"
-            f"<td class='num'>${bucket.cost_usd:.2f}</td>"
-            "</tr>"
+            [
+                {"html": _e(bucket.label)},
+                {"cls": "num", "html": str(bucket.sessions)},
+                {"cls": "num", "html": f"${bucket.cost_usd:.2f}"},
+            ]
         )
     if not rows:
         return f'<p class="empty">No {label.lower()} data yet.</p>'
-    return (
-        _stbl(f"bucket-{label}", "t,n,n")
-        + f"<thead><tr><th>{_e(label)}</th><th>Sessions</th><th>Cost</th>"
-        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+    return str(
+        _panel_macros().data_table(f"bucket-{label}", "t,n,n", [label, "Sessions", "Cost"], rows)
     )
 
 
@@ -2183,21 +2134,26 @@ def _unattributed_table(sessions: Iterable[AiSession]) -> str:
     rows = []
     for session in list(sessions)[-25:][::-1]:
         rows.append(
-            "<tr>"
-            f"<td data-sort-val='{int(session.end.timestamp())}'>"
-            f"{_e(session.end.strftime('%Y-%m-%d %H:%M'))}</td>"
-            f"<td>{_e(session.tool)}</td>"
-            f"<td>{_e(session.model)}</td>"
-            f"<td class='num'>{session.input_tokens:,} / {session.output_tokens:,}</td>"
-            f"<td class='num'>${session.cost_usd:.4f}</td>"
-            "</tr>"
+            [
+                {
+                    "sortval": int(session.end.timestamp()),
+                    "html": _e(session.end.strftime("%Y-%m-%d %H:%M")),
+                },
+                {"html": _e(session.tool)},
+                {"html": _e(session.model)},
+                {"cls": "num", "html": f"{session.input_tokens:,} / {session.output_tokens:,}"},
+                {"cls": "num", "html": f"${session.cost_usd:.4f}"},
+            ]
         )
     if not rows:
         return '<p class="empty">All hands accounted for. Manifest clean.</p>'
-    return (
-        _stbl("sessions-adrift", "n,t,x,x,n")
-        + "<thead><tr><th>Time</th><th>Tool</th><th>Model</th>"
-        "<th>In / Out</th><th>Cost</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+    return str(
+        _panel_macros().data_table(
+            "sessions-adrift",
+            "n,t,x,x,n",
+            ["Time", "Tool", "Model", "In / Out", "Cost"],
+            rows,
+        )
     )
 
 
@@ -2205,18 +2161,18 @@ def _time_table(buckets: Iterable[TimeBucket]) -> str:
     rows = []
     for bucket in buckets:
         rows.append(
-            f"<tr><td>{_e(bucket.label)}</td>"
-            f"<td class='num' data-sort-val='{bucket.minutes}'>"
-            f"{_e(format_minutes(bucket.minutes))}</td></tr>"
+            [
+                {"html": _e(bucket.label)},
+                {
+                    "cls": "num",
+                    "sortval": bucket.minutes,
+                    "html": _e(format_minutes(bucket.minutes)),
+                },
+            ]
         )
     if not rows:
         return '<p class="empty">No human time recorded this month.<br>Run <code>halyard start &lt;project&gt;</code> to begin tracking.</p>'
-    return (
-        _stbl("timeclock", "t,n")
-        + "<thead><tr><th>Project</th><th>Time</th></tr></thead><tbody>"
-        + "".join(rows)
-        + "</tbody></table>"
-    )
+    return str(_panel_macros().data_table("timeclock", "t,n", ["Project", "Time"], rows))
 
 
 def _health_row(label: str, status: str, detail: str) -> str:
@@ -2292,6 +2248,245 @@ def _fmt_limit(spend: float, limit: float | None) -> str:
 
 def _e(value: object) -> str:
     return html.escape(str(value))
+
+
+# --------------------------------------------------------------------------- #
+# v5.7: inline-SVG chart helpers (offline-first; no JS charting dependency)
+# --------------------------------------------------------------------------- #
+_CHART_PALETTE = (
+    "#4fd1c5",
+    "#63b3ed",
+    "#b794f4",
+    "#f6ad55",
+    "#fc8181",
+    "#68d391",
+    "#76e4f7",
+    "#f687b3",
+    "#a0aec0",
+)
+
+_PROJECT_ALIASES: dict[str, str] = {"git:halyard": "kormilo:halyard"}
+
+
+def _norm_project(slug: str) -> str:
+    """Merge project slugs differing only by separator/casing for display.
+
+    A read-time grouping merge so the Overview charts don't split one project
+    several ways (e.g. ``kormilo/halyard`` vs ``kormilo:halyard``). The log and
+    history are never modified; a full remote->slug map is a separate concern.
+    """
+    s = slug.strip().lower().replace("/", ":")
+    return _PROJECT_ALIASES.get(s, s)
+
+
+def _svg_donut(
+    segments: list[tuple[str, float, str]],
+    *,
+    size: int = 180,
+    thick: int = 30,
+    center_top: str = "",
+    center_sub: str = "",
+) -> str:
+    """A donut chart as inline SVG. ``segments`` = (label, value, color)."""
+    r = (size - thick) / 2
+    cx = cy = size / 2
+    circ = 2 * math.pi * r
+    total = sum(v for _, v, _ in segments) or 1.0
+    arcs = []
+    offset = 0.0
+    for _label, value, color in segments:
+        dash = (value / total) * circ
+        arcs.append(
+            f"<circle cx='{cx}' cy='{cy}' r='{r:.1f}' fill='none' "
+            f"stroke='{_e(color)}' stroke-width='{thick}' "
+            f"stroke-dasharray='{dash:.2f} {circ - dash:.2f}' "
+            f"stroke-dashoffset='{-offset:.2f}' transform='rotate(-90 {cx} {cy})' />"
+        )
+        offset += dash
+    return (
+        f"<svg viewBox='0 0 {size} {size}' width='{size}' height='{size}' "
+        f"class='svg-donut' role='img'>{''.join(arcs)}"
+        f"<text x='{cx}' y='{cy - 2}' text-anchor='middle' class='donut-top'>{_e(center_top)}</text>"
+        f"<text x='{cx}' y='{cy + 16}' text-anchor='middle' class='donut-sub'>{_e(center_sub)}</text>"
+        "</svg>"
+    )
+
+
+def _svg_area(
+    values: list[float],
+    *,
+    w: int = 600,
+    h: int = 160,
+    color: str = "#4fd1c5",
+    fill: str = "rgba(79,209,197,.16)",
+) -> str:
+    """An area+line trend chart as inline SVG."""
+    if not values:
+        return "<p class='empty'>no data</p>"
+    n = len(values)
+    mx = max(values) or 1.0
+    pad = 6
+    iw, ih = w - pad * 2, h - pad * 2
+    pts: list[tuple[float, float]] = []
+    for i, v in enumerate(values):
+        x = pad + (iw * (i / (n - 1)) if n > 1 else iw / 2)
+        y = pad + ih - (v / mx) * ih
+        pts.append((x, y))
+    line = "M" + " L".join(f"{x:.1f} {y:.1f}" for x, y in pts)
+    area = (
+        f"M{pts[0][0]:.1f} {h - pad:.1f} L"
+        + " L".join(f"{x:.1f} {y:.1f}" for x, y in pts)
+        + f" L{pts[-1][0]:.1f} {h - pad:.1f} Z"
+    )
+    return (
+        f"<svg viewBox='0 0 {w} {h}' width='100%' height='{h}' "
+        f"preserveAspectRatio='none' class='svg-area'>"
+        f"<path d='{area}' fill='{fill}'/>"
+        f"<path d='{line}' fill='none' stroke='{_e(color)}' stroke-width='2'/></svg>"
+    )
+
+
+def _svg_stacked_bar(parts: list[tuple[str, int, str]]) -> str:
+    """A single part-to-whole horizontal bar + legend as inline SVG/HTML."""
+    total = sum(v for _, v, _ in parts) or 1
+    segs = "".join(
+        f"<span class='sb-seg' title='{_e(lbl)}: {v}' "
+        f"style='width:{100 * v / total:.1f}%;background:{_e(c)}'></span>"
+        for lbl, v, c in parts
+        if v
+    )
+    keys = "".join(
+        f"<span class='sb-key'><span class='dot' style='background:{_e(c)}'></span>"
+        f"{_e(lbl)} {v}</span>"
+        for lbl, v, c in parts
+    )
+    return f"<div class='sbar'>{segs}</div><div class='sb-legend'>{keys}</div>"
+
+
+def _chart_legend(segments: list[tuple[str, float, str]], fmt: object) -> str:
+    rows = "".join(
+        f"<li><span class='dot' style='background:{_e(c)}'></span>"
+        f"<span class='lg-label'>{_e(lbl)}</span>"
+        f"<span class='lg-val'>{_e(fmt(v))}</span></li>"  # type: ignore[operator]
+        for lbl, v, c in segments
+    )
+    return f"<ul class='chart-legend'>{rows}</ul>"
+
+
+def _chart_hbars(rows: list[tuple[str, float]], fmt: object, color: str = "#b794f4") -> str:
+    mx = max((v for _, v in rows), default=0.0) or 1.0
+    out = "".join(
+        f"<div class='cbar'><span class='cb-label'>{_e(label)}</span>"
+        f"<span class='cb-track'><span class='cb-fill' "
+        f"style='width:{int(100 * value / mx)}%;background:{_e(color)}'></span></span>"
+        f"<span class='cb-val'>{_e(fmt(value))}</span></div>"  # type: ignore[operator]
+        for label, value in rows
+    )
+    return out or "<p class='empty'>no data</p>"
+
+
+def _ov_usd(v: float) -> str:
+    return f"${v:,.0f}" if v >= 100 else f"${v:.2f}"
+
+
+def _overview_panels(state: DashboardState, usage: UsageAnalytics) -> str:
+    """v5.7: the Overview tab — hero charts built from existing data."""
+    s = usage.summary
+    pal = _CHART_PALETTE
+
+    cost_segs = [
+        (b.model, b.cost_usd, pal[i % len(pal)])
+        for i, b in enumerate(sorted(usage.by_model, key=lambda b: -b.cost_usd)[:6])
+    ]
+    tok_segs = [
+        (b.model, float(b.tokens), pal[i % len(pal)])
+        for i, b in enumerate(sorted(usage.by_model, key=lambda b: -b.tokens)[:6])
+    ]
+
+    by_proj: dict[str, float] = {}
+    outcomes = {"shipped": 0, "open": 0, "closed": 0, "none": 0}
+    for sess in state.all_sessions:
+        if sess.project:
+            key = _norm_project(sess.project)
+            by_proj[key] = by_proj.get(key, 0.0) + sess.cost_usd
+        st = (sess.pr_state or "").lower()
+        if st == "merged":
+            outcomes["shipped"] += 1
+        elif st in ("open", "draft"):
+            outcomes["open"] += 1
+        elif st == "closed":
+            outcomes["closed"] += 1
+        else:
+            outcomes["none"] += 1
+    top_projects = sorted(by_proj.items(), key=lambda kv: -kv[1])[:6]
+    daily_tokens = [float(d.tokens) for d in usage.daily[-30:]]
+
+    peak = "—" if s.peak_hour is None else _hour_label(s.peak_hour)
+    kpi_body = (
+        "<div class='kpi-strip'>"
+        f"<span><b>{_ov_usd(s.total_cost_usd)}</b> cost</span>"
+        f"<span><b>{s.sessions:,}</b> sessions</span>"
+        f"<span><b>{_e(compact_number(s.total_tokens))}</b> tokens</span>"
+        f"<span><b>{s.active_days}</b> active days</span>"
+        f"<span><b>{_e(peak)}</b> peak hr</span>"
+        "</div>"
+    )
+    cost_body = (
+        "<div class='donut-wrap'>"
+        + _svg_donut(cost_segs, center_top=_ov_usd(s.total_cost_usd), center_sub="total")
+        + _chart_legend(cost_segs, _ov_usd)
+        + "</div>"
+    )
+    mix_body = (
+        "<div class='donut-wrap'>"
+        + _svg_donut(tok_segs, size=150, thick=24)
+        + _chart_legend(tok_segs, compact_number)
+        + "</div>"
+    )
+    outcome_parts = [
+        ("shipped", outcomes["shipped"], "#68d391"),
+        ("open", outcomes["open"], "#63b3ed"),
+        ("closed", outcomes["closed"], "#fc8181"),
+        ("no PR", outcomes["none"], "#4a5568"),
+    ]
+
+    return (
+        _panel_article("ov-kpis", "Overview", "At a glance", kpi_body, span="span-12")
+        + _panel_article("ov-cost", "Overview", "Where the money went", cost_body)
+        + _panel_article("ov-models", "Overview", "Model mix · tokens", mix_body)
+        + _panel_article(
+            "ov-trend",
+            "Overview",
+            f"Tokens over time · {len(daily_tokens)}d",
+            _svg_area(daily_tokens, h=170),
+            span="span-8",
+        )
+        + _panel_article("ov-activity", "Overview", "Activity", _activity_heatmap(usage))
+        + _panel_article(
+            "ov-projects",
+            "Overview",
+            "Top projects by cost",
+            _chart_hbars(top_projects, _ov_usd),
+        )
+        + _panel_article("ov-outcomes", "Overview", "Outcomes", _svg_stacked_bar(outcome_parts))
+    )
+
+
+def _panel_article(
+    panel_id: str,
+    eyebrow: str,
+    title: str,
+    body: str,
+    *,
+    span: str = "span-4",
+    tab: str = "overview",
+) -> str:
+    return (
+        f'<article class="panel {span}" data-panel="{_e(panel_id)}" data-tab="{_e(tab)}">'
+        '<div class="panel-head"><div>'
+        f'<p class="eyebrow">{_e(eyebrow)}</p><h2>{_e(title)}</h2></div></div>'
+        f"{body}</article>"
+    )
 
 
 def _stbl(key: str, cols: str, cls: str = "") -> str:
@@ -2518,6 +2713,11 @@ def _layout_script() -> str:
     var collapsedSet = {};
     collapsed.forEach(function(id){ collapsedSet[id] = true; });
 
+    var REM_KEY = 'halyard-removed-v1';
+    var removedSet = {};
+    readJSON(REM_KEY, []).forEach(function(id){ removedSet[id] = true; });
+    function persistRemoved(){ localStorage.setItem(REM_KEY, JSON.stringify(Object.keys(removedSet))); }
+
     function persistOrder(){
       var out = {};
       ['grid','metrics'].forEach(function(ck){
@@ -2560,6 +2760,10 @@ def _layout_script() -> str:
 
     var dragId = null;
     function addControls(el){
+      // Idempotent: a panel re-inserted by a partial refresh already has its
+      // controls + listeners, so don't double-wire it.
+      if (el.querySelector(':scope > .panel-head .lay-controls')
+       || el.querySelector(':scope > .lay-controls')) return;
       var id = el.getAttribute('data-panel');
       var host = el.querySelector(':scope > .panel-head');
       var controls = document.createElement('div');
@@ -2572,8 +2776,18 @@ def _layout_script() -> str:
       toggle.className = 'lay-toggle'; toggle.type = 'button';
       toggle.textContent = '▾'; toggle.title = 'Collapse';
       toggle.setAttribute('aria-label', 'Collapse or expand panel');
-      controls.appendChild(handle); controls.appendChild(toggle);
+      var remove = document.createElement('button');
+      remove.className = 'lay-remove'; remove.type = 'button';
+      remove.textContent = '✕'; remove.title = 'Hide panel';
+      remove.setAttribute('aria-label', 'Hide panel');
+      controls.appendChild(handle); controls.appendChild(toggle); controls.appendChild(remove);
       if (host) { host.appendChild(controls); } else { el.appendChild(controls); }
+
+      remove.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        removedSet[id] = true; el.classList.add('is-removed');
+        persistRemoved(); renderPanelsMenu();
+      });
 
       toggle.addEventListener('click', function(ev){
         ev.stopPropagation();
@@ -2620,13 +2834,50 @@ def _layout_script() -> str:
       });
     }
 
-    restoreOrder();
-    Array.prototype.slice.call(document.querySelectorAll('[data-panel]'))
-      .forEach(function(el){
-        if (!containerKey(el.parentElement)) return;
-        addControls(el);
-        if (collapsedSet[el.getAttribute('data-panel')]) setCollapsed(el, true);
+    function applyLayout(){
+      restoreOrder();
+      Array.prototype.slice.call(document.querySelectorAll('[data-panel]'))
+        .forEach(function(el){
+          if (!containerKey(el.parentElement)) return;
+          addControls(el);
+          if (collapsedSet[el.getAttribute('data-panel')]) setCollapsed(el, true);
+          if (removedSet[el.getAttribute('data-panel')]) el.classList.add('is-removed');
+        });
+    }
+    // Exposed so a partial refresh can re-apply order + collapse + hidden to swapped panels.
+    window.HalyardApplyLayout = applyLayout;
+    applyLayout();
+
+    // "panels" menu — switch hidden panels back on.
+    var panelsBtn = document.getElementById('panels-btn');
+    var panelsMenu = document.getElementById('panels-menu');
+    function renderPanelsMenu(){
+      if (!panelsMenu) return;
+      var items = '';
+      Array.prototype.slice.call(document.querySelectorAll('[data-panel]'))
+        .filter(function(el){ return containerKey(el.parentElement); })
+        .forEach(function(el){
+          var id = el.getAttribute('data-panel');
+          var h = el.querySelector(':scope > .panel-head h2') || el.querySelector('h2');
+          var label = h ? h.textContent : id;
+          items += '<label><input type="checkbox" data-pid="' + id + '" ' +
+                   (removedSet[id] ? '' : 'checked') + '> ' + label + '</label>';
+        });
+      panelsMenu.innerHTML = items;
+    }
+    if (panelsBtn && panelsMenu) {
+      panelsBtn.addEventListener('click', function(){
+        panelsMenu.classList.toggle('open'); renderPanelsMenu();
       });
+      panelsMenu.addEventListener('change', function(ev){
+        var cb = ev.target; if (!cb.getAttribute('data-pid')) return;
+        var id = cb.getAttribute('data-pid');
+        var el = document.querySelector('[data-panel="' + id + '"]');
+        if (cb.checked) { delete removedSet[id]; if (el) el.classList.remove('is-removed'); }
+        else { removedSet[id] = true; if (el) el.classList.add('is-removed'); }
+        persistRemoved();
+      });
+    }
 
     function layoutBoxes(){
       return Array.prototype.slice.call(document.querySelectorAll('[data-panel]'))
@@ -2914,442 +3165,7 @@ def _easter_egg_script() -> str:
 </script>"""
 
 
-_CSS = """
-:root {
-  color-scheme: dark;
-  --bg: #091114;
-  --panel: #101b20;
-  --panel-2: #14242b;
-  --line: #25404a;
-  --text: #eff7f5;
-  --muted: #8ea5a8;
-  --cyan: #45d6d0;
-  --green: #70e18f;
-  --amber: #f3bf5b;
-  --red: #ff6f6f;
-  --purple: #b09fe8;
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  min-width: 920px;
-  background:
-    linear-gradient(180deg, rgba(69, 214, 208, .08), transparent 28rem),
-    var(--bg);
-  color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-.shell { width: min(1440px, calc(100vw - 48px)); margin: 0 auto; padding: 28px 0; }
-.topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; }
-.brand { display: inline-flex; align-items: center; gap: 14px; }
-.brand-mark { display: grid; place-items: center; width: 44px; height: 44px; }
-.brand-mark svg { width: 38px; height: 38px; fill: none; stroke: var(--cyan); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 8px rgba(69,214,208,.45)); }
-.eyebrow { margin: 0 0 6px; color: var(--cyan); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-h1, h2 { margin: 0; letter-spacing: 0; }
-h1 { font-size: 28px; }
-h2 { font-size: 17px; }
-.status, .pill {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 7px 11px;
-  color: var(--muted);
-  background: rgba(255,255,255,.03);
-  font-size: 12px;
-  font-weight: 700;
-}
-.status-healthy { color: var(--green); border-color: rgba(112, 225, 143, .4); }
-.status-warning { color: var(--amber); border-color: rgba(243, 191, 91, .45); }
-.status-error { color: var(--red); border-color: rgba(255, 111, 111, .5); }
-button.status { cursor: pointer; font-family: inherit; line-height: 1; }
-button.status:hover { filter: brightness(1.15); }
-button.status:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
-/* ── v2.43 health detail popup ── */
-.health-popup[hidden] { display: none; }
-.health-popup { position: fixed; inset: 0; z-index: 50; }
-.health-popup-backdrop { position: absolute; inset: 0; background: rgba(2,8,12,.55); }
-.health-popup-card {
-  position: absolute; top: 64px; right: 20px; width: min(440px, calc(100vw - 40px));
-  max-height: 70vh; overflow: auto; background: var(--panel);
-  border: 1px solid var(--line); border-radius: 12px;
-  box-shadow: 0 18px 50px rgba(0,0,0,.5); padding: 16px;
-}
-.health-popup-head { display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 12px; }
-.health-popup-x { background: none; border: 1px solid var(--line); border-radius: 6px;
-  color: var(--muted); cursor: pointer; font-size: 12px; padding: 3px 8px; }
-.health-popup-x:hover { border-color: var(--cyan); color: var(--text); }
-.health-popup-row { display: grid; grid-template-columns: 14px 1fr; gap: 10px;
-  align-items: start; padding: 10px; border: 1px solid rgba(37,64,74,.7);
-  border-radius: 8px; background: var(--panel-2); margin-bottom: 8px; }
-.health-popup-detail { color: var(--muted); font-size: 12px; margin: 3px 0 0;
-  overflow-wrap: anywhere; }
-.health-popup-fix { color: var(--cyan); font-size: 12px;
-  margin: 10px 0 0; overflow-wrap: anywhere; }
-.health-popup-fix code { background: rgba(255,255,255,.06); padding: 1px 5px;
-  border-radius: 4px; }
-.health-popup-ok { color: var(--green); font-weight: 700; }
-.pill-healthy { color: var(--green); border-color: rgba(112, 225, 143, .4); background: rgba(112, 225, 143, .08); }
-.pill-warning { color: var(--amber); border-color: rgba(243, 191, 91, .45); background: rgba(243, 191, 91, .08); }
-.pill-error { color: var(--red); border-color: rgba(255, 111, 111, .5); background: rgba(255, 111, 111, .08); }
-.pill-muted { color: var(--muted); }
-.pill-group { display: flex; gap: 6px; align-items: center; }
-.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
-.metric, .panel {
-  border: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.015)), var(--panel);
-  border-radius: 8px;
-  box-shadow: 0 18px 60px rgba(0, 0, 0, .24);
-}
-.metric { min-height: 118px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; }
-.metric span, .metric small, footer { color: var(--muted); }
-.metric strong { font-size: 28px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.metric-focus strong { color: var(--cyan); }
-.metric-money strong { color: var(--green); }
-.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
-.panel { min-height: 260px; padding: 16px; overflow: hidden; }
-.span-7 { grid-column: span 7; }
-.span-12 { grid-column: span 12; }
-.span-6 { grid-column: span 6; }
-.span-5 { grid-column: span 5; }
-.span-4 { grid-column: span 4; }
-.span-3 { grid-column: span 3; }
-.panel-head { min-height: 42px; display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.attention-on { border-color: rgba(243, 191, 91, .62); }
-.attention-on .pill { color: var(--amber); border-color: rgba(243, 191, 91, .45); }
-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-th, td { border-bottom: 1px solid rgba(37, 64, 74, .72); padding: 10px 8px; text-align: left; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-th { color: var(--muted); font-size: 11px; text-transform: uppercase; }
-th.h-sortable { cursor: pointer; user-select: none; }
-th.h-sortable:hover { color: var(--text); }
-.sort-ind { opacity: .35; margin-left: .35em; font-size: .9em; }
-th[aria-sort="ascending"] .sort-ind, th[aria-sort="descending"] .sort-ind { opacity: .95; }
-td.num { text-align: right; font-variant-numeric: tabular-nums; }
-tfoot td { border-bottom: none; border-top: 1px solid var(--line); }
-.empty { min-height: 150px; display: grid; place-items: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; margin: 0; text-align: center; line-height: 1.6; }
-.health-list { display: grid; gap: 10px; }
-.health-row { display: grid; grid-template-columns: 14px 1fr; align-items: center; gap: 10px; min-height: 42px; padding: 10px; border: 1px solid rgba(37,64,74,.7); border-radius: 8px; background: var(--panel-2); }
-.health-row strong, .health-row small { display: block; }
-.health-row small { margin-top: 2px; color: var(--muted); overflow-wrap: anywhere; }
-.dot { width: 10px; height: 10px; border-radius: 99px; display: block; background: var(--muted); }
-.dot-healthy { background: var(--green); box-shadow: 0 0 18px rgba(112, 225, 143, .55); }
-.dot-warning { background: var(--amber); box-shadow: 0 0 18px rgba(243, 191, 91, .45); }
-.dot-error { background: var(--red); box-shadow: 0 0 18px rgba(255, 111, 111, .5); }
-.dot-neutral { background: var(--muted); }
-footer { padding: 18px 2px 0; font-size: 12px; }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 3px; }
-
-/* Tool icons */
-.tool-icon { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; font-size: 15px; text-align: center; }
-.tool-C { background: rgba(69, 214, 208, .15); }
-.tool-X { background: rgba(112, 225, 143, .12); }
-.tool-G { background: rgba(243, 191, 91, .12); }
-.tool-V { background: rgba(180, 120, 255, .12); }
-.tool-O, .tool-A { background: rgba(255,255,255,.08); }
-
-/* Progress bars */
-.bar-wrap { width: 100%; background: var(--line); border-radius: 99px; height: 4px; overflow: hidden; }
-.bar { height: 100%; border-radius: 99px; background: var(--cyan); transition: width .3s; }
-.bar-ok { background: var(--green); }
-.bar-collision { background: var(--amber); }
-.bar-warn { background: var(--amber); }
-.bar-high { background: var(--amber); opacity: .85; }
-.bar-over { background: var(--red); }
-.bar-cell { display: flex; align-items: center; gap: 8px; }
-.bar-cell .bar-wrap { flex: 1; min-width: 40px; }
-.bar-cell span { font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 30px; text-align: right; }
-
-/* Usage analytics */
-.usage-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; align-items: start; }
-.usage-stats { grid-column: span 3; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
-.usage-stat { min-height: 76px; padding: 10px 12px; border: 1px solid rgba(37,64,74,.7); border-radius: 8px; background: var(--panel-2); }
-.usage-stat span, .usage-stat small, .usage-tools small, .usage-models small, .mini-empty { color: var(--muted); }
-.usage-stat span, .usage-stat strong, .usage-stat small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.usage-stat strong { margin: 7px 0 5px; font-size: 22px; line-height: 1; color: var(--text); }
-.usage-activity, .usage-models, .usage-tools { min-height: 120px; }
-.usage-activity > strong, .usage-models > strong, .usage-tools > strong { display: block; margin-bottom: 10px; font-size: 13px; }
-.usage-heatmap { display: grid; grid-template-columns: repeat(15, 16px); gap: 6px; align-content: start; }
-.usage-cell { width: 16px; height: 16px; border-radius: 4px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.04); }
-.usage-l1 { background: rgba(69,214,208,.18); }
-.usage-l2 { background: rgba(69,214,208,.34); }
-.usage-l3 { background: rgba(112,225,143,.44); }
-.usage-l4 { background: rgba(112,225,143,.72); }
-.usage-cell-missing { background: rgba(243,191,91,.25); }
-.usage-list { display: grid; gap: 9px; }
-.usage-row { display: grid; grid-template-columns: minmax(110px, 1fr) 1.2fr 78px; gap: 8px; align-items: center; font-size: 12px; }
-.usage-row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.usage-row small { text-align: right; white-space: nowrap; }
-.usage-warnings { grid-column: span 3; display: flex; gap: 8px; flex-wrap: wrap; }
-
-/* v2.23 Usage Analytics: segmented controls + Models tab */
-.segment-group { display: inline-flex; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); }
-.pill-segment { border-radius: 0; padding: 4px 10px; font-size: 12px; text-decoration: none; color: var(--muted); background: transparent; border: none; border-right: 1px solid rgba(255,255,255,0.08); }
-.pill-segment:last-child { border-right: none; }
-.pill-segment:hover { background: rgba(255,255,255,0.04); color: var(--fg); }
-.pill-segment.pill-active { background: rgba(76,156,243,0.2); color: var(--fg); }
-.usage-models-tab { display: grid; gap: 14px; }
-.usage-models-chart svg { width: 100%; height: auto; max-height: 200px; }
-.usage-models-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); }
-.legend-item { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; }
-.legend-item .model-name, .legend-item span:not(.legend-swatch) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.legend-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
-.usage-models-rows { width: 100%; border-collapse: collapse; font-size: 12px; }
-.usage-models-rows th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-.usage-models-rows td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); }
-.usage-models-rows td.num, .usage-models-rows th.num { text-align: right; white-space: nowrap; }
-.usage-models-rows .model-name { display: inline-block; max-width: 280px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 6px; }
-
-/* v3.0 Leverage panel */
-.leverage-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 18px; align-items: center; }
-.leverage-headline { display: grid; gap: 8px; }
-.leverage-pct { font-size: 42px; font-weight: 700; line-height: 1.1; }
-.leverage-pct.leverage-high { color: #5cd28b; }
-.leverage-pct.leverage-mid { color: #f3bf5b; }
-.leverage-pct.leverage-low { color: var(--muted); }
-.leverage-caption { font-size: 13px; color: var(--muted); }
-.leverage-caption strong { color: var(--fg); }
-.leverage-friction { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
-.leverage-struggle { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
-.leverage-mcp { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
-.leverage-rows { display: grid; gap: 6px; }
-.leverage-row { display: grid; grid-template-columns: 1.4fr 64px 64px; gap: 12px; align-items: center; font-size: 13px; }
-.leverage-row strong { text-align: right; }
-.leverage-row small { text-align: right; color: var(--muted); }
-.leverage-label { display: inline-flex; align-items: center; gap: 6px; }
-.leverage-label::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.leverage-label.leverage-merged::before { background: #5cd28b; }
-.leverage-label.leverage-open::before { background: #5b9cf3; }
-.leverage-label.leverage-closed::before { background: #d2675c; }
-.leverage-label.leverage-nopr::before { background: #b09060; }
-.leverage-label.leverage-unsynced::before { background: var(--muted); }
-.leverage-hint { grid-column: span 2; font-size: 12px; color: var(--muted); margin: 8px 0 0; overflow-wrap: anywhere; }
-.leverage-hint code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; overflow-wrap: anywhere; }
-.leverage-empty { padding: 12px 0; }
-.panel-vfill { display: flex; flex-direction: column; }
-.panel-vfill .leverage-grid { flex: 1; align-content: center; }
-
-/* Budget panel */
-.budget-list { display: grid; gap: 8px; }
-.budget-item { padding: 10px 12px; border: 1px solid rgba(37,64,74,.7); border-radius: 8px; background: var(--panel-2); }
-.budget-item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.budget-slug { font-size: 13px; font-weight: 600; }
-.budget-nums { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 8px; }
-.badge { border-radius: 99px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
-.badge-ok { background: rgba(112, 225, 143, .15); color: var(--green); }
-.badge-warn { background: rgba(243, 191, 91, .15); color: var(--amber); }
-.badge-high { background: rgba(243, 191, 91, .25); color: var(--amber); }
-.badge-over { background: rgba(255, 111, 111, .15); color: var(--red); }
-.spend-ok strong, .spend-ok { color: inherit; }
-.spend-warn strong, .spend-warn { color: var(--amber); }
-.spend-high strong, .spend-high { color: var(--amber); }
-.spend-over strong, .spend-over { color: var(--red); }
-
-/* Trust labels */
-.trust { display: inline-block; border-radius: 99px; padding: 2px 9px; font-size: 11px; font-weight: 700; }
-.trust-captured { background: rgba(112, 225, 143, .15); color: var(--green); }
-.trust-calculated { background: rgba(69, 214, 208, .15); color: var(--cyan); }
-.trust-allocated { background: rgba(243, 191, 91, .15); color: var(--amber); }
-.trust-missing { background: rgba(255, 111, 111, .12); color: var(--red); }
-.trust-inferred { background: rgba(255,255,255,.08); color: var(--muted); }
-.trust-mixed { background: rgba(176, 159, 232, .2); color: var(--purple); }
-.trust-unallocated { background: rgba(255,255,255,.06); color: var(--muted); }
-.inferred-dot { color: var(--muted); font-size: 11px; cursor: help; }
-.costs-note { font-size: 12px; color: var(--muted); margin-top: 12px; }
-
-/* Timer controls */
-.timer-form { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
-.timer-input {
-  flex: 1; min-width: 0;
-  background: rgba(255,255,255,.07); border: 1px solid var(--line); border-radius: 4px;
-  color: var(--text); font-size: 12px; padding: 5px 8px; outline: none;
-}
-.timer-input:focus { border-color: var(--cyan); }
-.btn {
-  border: none; border-radius: 4px; cursor: pointer;
-  font-size: 11px; font-weight: 700; padding: 5px 10px; letter-spacing: .04em;
-  white-space: nowrap;
-}
-.btn-start { background: rgba(112, 225, 143, .15); color: var(--green); }
-.btn-start:hover { background: rgba(112, 225, 143, .25); }
-.btn-stop { background: rgba(255, 111, 111, .12); color: var(--red); width: 100%; }
-.btn-stop:hover { background: rgba(255, 111, 111, .22); }
-.btn-sm { background: rgba(255,255,255,.06); color: var(--muted); font-size: 10px; padding: 3px 8px; }
-.btn-sm:hover { background: rgba(255,255,255,.12); color: var(--fg); }
-
-/* Stop celebration toast */
-.toast {
-  position: fixed; top: 28px; left: 50%;
-  transform: translateX(-50%) translateY(-140%);
-  background: rgba(112,225,143,.12); border: 1px solid rgba(112,225,143,.4);
-  color: #70e18f; padding: 10px 24px; border-radius: 999px;
-  font-weight: 700; font-size: 14px; letter-spacing: .02em;
-  z-index: 999; white-space: nowrap;
-  transition: transform .45s cubic-bezier(.34,1.56,.64,1);
-}
-.toast.show { transform: translateX(-50%) translateY(0); }
-
-/* Trail heatmap calendar */
-.trail-cal { display: block; }
-.trail-cal-header { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 4px; font-size: 11px; color: var(--muted); font-weight: 700; text-align: center; }
-.trail-cal-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 5px; }
-.trail-cell { width: auto; aspect-ratio: 1; border-radius: 6px; border: 1px solid rgba(255,255,255,.05); display: flex; align-items: center; justify-content: center; cursor: default; transition: opacity .15s; }
-.trail-cell:hover { opacity: .8; }
-.trail-dn { font-size: 11px; font-weight: 600; pointer-events: none; }
-.trail-empty { border-color: transparent; background: transparent; }
-.trail-future { background: rgba(255,255,255,.02); border-color: transparent; }
-.trail-future .trail-dn { color: var(--muted); opacity: .4; }
-.trail-none { background: rgba(255,255,255,.04); }
-.trail-none .trail-dn { color: var(--muted); }
-.trail-unattr { background: rgba(243,191,91,.13); border-color: rgba(243,191,91,.22); }
-.trail-unattr .trail-dn { color: var(--amber); }
-.trail-partial { background: rgba(243,191,91,.22); border-color: rgba(243,191,91,.38); }
-.trail-partial .trail-dn { color: var(--amber); }
-.trail-full { background: rgba(112,225,143,.16); border-color: rgba(112,225,143,.30); }
-.trail-full .trail-dn { color: var(--green); }
-.trail-legend { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--muted); }
-.trail-legend .trail-cell { width: 14px; height: 14px; min-width: 14px; border-radius: 3px; pointer-events: none; }
-.trail-legend .trail-dn { display: none; }
-
-/* Current Voyage panel */
-.voyage-bar-outer { width: 100%; background: var(--line); border-radius: 99px; height: 5px; overflow: hidden; margin: 10px 0 14px; }
-.voyage-bar-fill { height: 100%; border-radius: 99px; background: var(--cyan); transition: width .4s ease; }
-.voyage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.voyage-col { display: flex; flex-direction: column; gap: 5px; padding: 12px 14px; border: 1px solid rgba(37,64,74,.7); border-radius: 8px; background: var(--panel-2); }
-.voyage-col-warn { border-color: rgba(243,191,91,.3); }
-.voyage-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .09em; font-weight: 700; }
-.voyage-value { font-size: 26px; font-weight: 700; line-height: 1.1; color: var(--text); }
-.voyage-sub { font-size: 11px; color: var(--muted); }
-.proof-healthy { color: var(--green); }
-.proof-warn { color: var(--amber); }
-.proof-low { color: var(--red); }
-.proof-neutral { color: var(--muted); }
-
-/* Captain's Quarters */
-.cq-body { display: grid; grid-template-columns: 2fr 1fr 1.5fr 1fr; gap: 24px; }
-.cq-main { display: flex; flex-direction: column; gap: 14px; }
-.cq-rank { display: flex; align-items: flex-start; gap: 16px; }
-.cq-rank-icon { font-size: 38px; line-height: 1; }
-.cq-rank-name { margin: 0; font-size: 22px; font-weight: 700; }
-.cq-rank-flavor { margin: 4px 0 0; font-size: 13px; color: var(--muted); font-style: italic; }
-.cq-progress-outer { width: 100%; background: var(--line); border-radius: 99px; height: 5px; overflow: hidden; margin: 4px 0 6px; }
-.cq-progress-fill { height: 100%; border-radius: 99px; background: var(--cyan); transition: width .4s ease; }
-.cq-sub { margin: 0; font-size: 11px; color: var(--muted); }
-.cq-stripes { display: flex; align-items: center; gap: 12px; }
-.cq-stripe-bar { font-size: 22px; color: var(--cyan); letter-spacing: 3px; }
-.cq-section-label { margin: 0 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
-.cq-medals { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.cq-medal { display: flex; align-items: flex-start; gap: 8px; cursor: default; }
-.cq-medal:hover .cq-medal-desc { color: var(--text); }
-.cq-medal-icon { font-size: 18px; flex-shrink: 0; }
-.cq-medal-name { font-size: 13px; font-weight: 600; display: block; }
-.cq-medal-desc { font-size: 11px; color: var(--muted); display: block; }
-.cq-empty { font-style: italic; }
-.cq-stamps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.cq-stamp { display: flex; align-items: center; gap: 8px; }
-.cq-stamp-icon { font-size: 18px; flex-shrink: 0; }
-.cq-stamp-name { font-size: 13px; font-weight: 600; }
-.cq-ladder { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.cq-ladder-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-.cq-ladder-active { color: var(--cyan); font-weight: 700; }
-
-/* Friends of the Sea */
-.friends-grid { display: flex; flex-wrap: wrap; gap: 12px; padding: 4px 0 8px; }
-.friend-card { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; border-radius: 8px; background: var(--surface); min-width: 160px; max-width: 220px; flex: 1 1 160px; }
-.friend-moored { border: 1px solid var(--cyan); }
-.friend-active { border: 1px solid var(--border); }
-.friend-creature { font-size: 28px; line-height: 1; }
-.friend-slug { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.friend-stage { font-size: 11px; color: var(--muted); }
-.friend-trait { font-size: 11px; color: var(--cyan); font-style: italic; }
-.friend-count { font-size: 11px; color: var(--muted); }
-.friend-progress-outer { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 2px 0; }
-.friend-progress-fill { height: 100%; background: var(--cyan); border-radius: 2px; }
-.friend-stage-anchors_aweigh { color: var(--amber); }
-.friend-stage-making_headway { color: var(--cyan); }
-.friend-stage-rounding_the_mark { color: #7dd3fc; }
-.friend-stage-flying_colors { color: #4ade80; }
-
-@media (max-width: 1100px) {
-  body { min-width: 760px; }
-  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .span-7, .span-6, .span-5, .span-4, .span-3 { grid-column: span 12; }
-  .usage-grid { grid-template-columns: 1fr; }
-  .usage-stats, .usage-warnings { grid-column: span 1; }
-  .usage-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .voyage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .cq-body { grid-template-columns: 1fr; }
-}
-
-/* Light mode */
-body.light-mode {
-  color-scheme: light;
-  --bg: #f4f7f8;
-  --panel: #ffffff;
-  --panel-2: #eef2f3;
-  --line: #d0dde0;
-  --text: #0e2028;
-  --muted: #5a7a82;
-  --cyan: #0e9e99;
-  --green: #1a9e3f;
-  --amber: #b07a10;
-  --red: #c0392b;
-  --purple: #6b52c8;
-  background: linear-gradient(180deg, rgba(14,158,153,.06), transparent 28rem), var(--bg) !important;
-}
-body.light-mode .panel, body.light-mode article { box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-body.light-mode .brand-mark svg { filter: drop-shadow(0 0 6px rgba(14,158,153,.3)); }
-.theme-toggle {
-  background: none; border: 1px solid var(--line); border-radius: 8px;
-  color: var(--muted); cursor: pointer; font-size: 16px;
-  padding: 5px 10px; line-height: 1; transition: border-color .2s, color .2s;
-}
-.theme-toggle:hover { border-color: var(--cyan); color: var(--text); }
-/* ── v2.42 customizable layout ── */
-.lay-controls { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }
-/* Metrics have no .panel-head, so pin their controls to the top-right
-   corner of the card (consistent with where panel controls sit). */
-.metric { position: relative; }
-.metric > .lay-controls { position: absolute; top: 10px; right: 12px; margin-left: 0; }
-.lay-handle, .lay-toggle {
-  background: none; border: 1px solid var(--line); border-radius: 6px;
-  color: var(--muted); cursor: pointer; font-size: 12px; line-height: 1;
-  padding: 3px 7px; transition: border-color .15s, color .15s;
-}
-.lay-handle { cursor: grab; }
-.lay-handle:hover, .lay-toggle:hover { border-color: var(--cyan); color: var(--text); }
-[data-panel].lay-dragging { opacity: .45; }
-[data-panel].lay-over { outline: 2px dashed var(--cyan); outline-offset: 2px; }
-.panel.is-collapsed, .metric.is-collapsed { min-height: 0; }
-.panel.is-collapsed > *:not(.panel-head),
-.metric.is-collapsed > *:not(.panel-head):not(span):not(.lay-controls) { display: none; }
-.metric.is-collapsed > strong, .metric.is-collapsed > small,
-.metric.is-collapsed > form { display: none; }
-.panel.is-collapsed .panel-head { margin-bottom: 0; }
-
-/* Night Watch mode — activated by clicking the logo 5x */
-body.night-watch { --bg: #0a0a0f; --surface: #0d0d14; --border: #1a1a2e; --text: #c8a8e9; --muted: #6a5a8a; }
-body.night-watch .topbar { background: #0d0d14; border-color: #1a1a2e; }
-body.night-watch .brand-mark svg { stroke: #c8a8e9; }
-body.night-watch .night-watch-toast { display: flex !important; }
-.night-watch-toast {
-  display: none;
-  position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 999;
-  background: #1a1a2e; color: #c8a8e9; border: 1px solid #c8a8e9;
-  padding: .6rem 1.2rem; border-radius: 8px; font-size: .85rem;
-  align-items: center; gap: .5rem;
-}
-
-/* ── v5.0 collision alert ── */
-.collision-alert {
-  margin-top: 12px;
-  padding: 8px 12px;
-  background: rgba(243, 191, 91, 0.1);
-  border: 1px solid rgba(243, 191, 91, 0.3);
-  border-radius: 6px;
-  color: var(--amber);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.collision-alert span { font-weight: 800; font-size: 11px; text-transform: uppercase; }
-.collision-alert small { font-size: 11px; opacity: 0.9; line-height: 1.3; }
-"""
+@lru_cache(maxsize=1)
+def _load_css() -> str:
+    """Return the dashboard stylesheet, read once from the templates dir."""
+    return (_TEMPLATE_DIR / "dashboard.css").read_text(encoding="utf-8")

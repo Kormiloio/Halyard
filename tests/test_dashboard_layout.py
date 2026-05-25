@@ -16,6 +16,14 @@ from halyard.dashboard import render_dashboard
 
 # Every panel + metric the layout script must be able to target.
 _EXPECTED_PANELS = {
+    # v5.7 Overview tab (new hero charts)
+    "ov-kpis",
+    "ov-cost",
+    "ov-models",
+    "ov-trend",
+    "ov-activity",
+    "ov-projects",
+    "ov-outcomes",
     # metrics row
     "timer",
     "human-time",

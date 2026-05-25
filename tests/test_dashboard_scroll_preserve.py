@@ -1,9 +1,10 @@
 """Scroll position is preserved across the dashboard's reloads.
 
 The 7d/30d/All and Overview/Models controls are server-rendered links
-and a <meta refresh> hard-reloads every 10s; both reset scroll to the
-top. The page must ship a scroll-restoration script so reading a
-mid-page panel isn't interrupted.
+that hard-reload and reset scroll to the top, so the page ships a
+scroll-restoration script. Auto-update no longer uses a full-page
+``<meta refresh>`` (v5.6) — it swaps the metrics/grid regions in place,
+which preserves scroll without a navigation.
 """
 
 from __future__ import annotations
@@ -32,8 +33,11 @@ def test_dashboard_includes_scroll_preserve(tmp_path: Path) -> None:
     assert "beforeunload" in html
 
 
-def test_meta_refresh_still_present(tmp_path: Path) -> None:
-    # The auto-refresh stays (scroll persistence is what makes it
-    # non-disruptive); guard against accidentally removing it.
+def test_no_meta_refresh_uses_partial_swap(tmp_path: Path) -> None:
+    # v5.6: the full-page <meta refresh> is gone; auto-update is an in-place
+    # 10s timer that swaps the metrics/grid regions and re-applies layout.
     html = render_dashboard(_proj(tmp_path / "p"))
-    assert 'http-equiv="refresh"' in html
+    assert 'http-equiv="refresh"' not in html
+    assert "setInterval(refresh, 10000)" in html
+    assert "getElementById(id)" in html  # region swap
+    assert "HalyardApplyLayout" in html  # layout re-applied after swap

@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Halyard · The Bridge</title>
+  <style>{{ css|safe }}</style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" id="brand-mark">
+          <svg viewBox="0 0 24 24" role="img" aria-label="Halyard">
+            <circle cx="12" cy="5" r="3"/>
+            <path d="M12 8v14"/>
+            <path d="M5 12H2a10 10 0 0 0 20 0h-3"/>
+          </svg>
+        </div>
+        <div>
+          <p class="eyebrow">Halyard · The Bridge · Web Dashboard</p>
+          <h1>{{ title|safe }}</h1>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button id="panels-btn" class="theme-toggle" aria-label="Show or hide panels" title="Show or hide panels">▦ panels</button>
+        <div id="panels-menu" class="panels-menu"></div>
+        <button id="layout-toggle-all" class="theme-toggle" aria-label="Collapse or expand all panels" title="Collapse or expand all panels">▾ collapse all</button>
+        <button id="layout-reset" class="theme-toggle" aria-label="Reset panel layout" title="Reset panel layout to default">⊞ reset layout</button>
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark mode">☀️</button>
+        <button id="health-pill" class="status status-{{ health_level|safe }}" type="button"
+          title="{{ health_pill_title|safe }}"
+          aria-label="{{ health_pill_title|safe }}">{{ health_level_title|safe }}</button>
+      </div>
+    </header>
+    {{ health_popup|safe }}
+
+    <section class="metrics" id="metrics" aria-label="Today summary">
+      {{ timer_metric|safe }}
+      {{ metric_human|safe }}
+      {{ metric_sessions|safe }}
+      {{ metric_cost|safe }}
+    </section>
+
+    <nav class="tabbar" id="tabbar" aria-label="Dashboard sections">
+      <button class="tab" data-tab="overview" type="button">Overview</button>
+      <button class="tab" data-tab="money" type="button">Money</button>
+      <button class="tab" data-tab="sessions" type="button">Sessions</button>
+      <button class="tab" data-tab="voyage" type="button">Voyage</button>
+      <button class="tab" data-tab="health" type="button">Health</button>
+      <button class="tab" data-tab="all" type="button">All</button>
+    </nav>
+
+    <section class="grid" id="grid">
+      {{ overview_panels|safe }}
+      {{ voyage_panel|safe }}
+      {{ captains_panel|safe }}
+      {{ friends_panel|safe }}
+      {{ moat_panel|safe }}
+
+      <article class="panel span-12" data-panel="usage">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Usage Analytics</p>
+            <h2>{{ usage_h2|safe }}</h2>
+          </div>
+          <div class="pill-group">
+            {{ range_control|safe }}
+            {{ tab_control|safe }}
+            <span class="pill">{{ active_days|safe }} active days</span>
+          </div>
+        </div>
+        {{ usage_body|safe }}
+      </article>
+
+      <article class="panel span-4 panel-vfill" data-panel="leverage">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Outcomes</p>
+            <h2>Did it ship?</h2>
+          </div>
+          <div class="pill-group"><span class="pill">30d</span></div>
+        </div>
+        {{ leverage_panel|safe }}
+      </article>
+
+      <article class="panel span-4" data-panel="wake">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">{{ morse_wake|safe }}</p>
+            <h2>Wake · {{ wake_month|safe }}</h2>
+          </div>
+          <div class="pill-group">{{ trail_pill|safe }}</div>
+        </div>
+        {{ trail_heatmap|safe }}
+      </article>
+
+      <article class="panel span-4" data-panel="tools">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Capture</p>
+            <h2>Tools</h2>
+          </div>
+          {{ tools_pill|safe }}
+        </div>
+        {{ tool_table|safe }}
+      </article>
+
+      <article class="panel span-7" data-panel="sessions" data-hub-fragment="sessions">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">{{ morse_log|safe }}</p>
+            <h2>Recent AI Sessions</h2>
+          </div>
+          <div class="pill-group">{{ sessions_pill|safe }}<span class="pill">↺ 10s</span></div>
+        </div>
+        {{ sessions_table|safe }}
+      </article>
+
+      <article class="panel span-5" data-panel="health">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Collector State</p>
+            <h2>Health</h2>
+          </div>
+        </div>
+        <div class="health-list">{{ health_rows|safe }}</div>
+      </article>
+
+      <article class="panel span-12 attention-{{ adrift_attention|safe }}" data-panel="adrift">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">· · · — — — · · ·</p>
+            <h2>Sessions Adrift</h2>
+          </div>
+          {{ unattr_pill|safe }}
+        </div>
+        {{ unattributed_table|safe }}
+      </article>
+
+      <article class="panel span-12 attention-{{ collisions_attention|safe }}" data-panel="collisions" data-hub-fragment="collisions">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Overlap</p>
+            <h2>Collisions</h2>
+          </div>
+          {{ collisions_pill|safe }}
+        </div>
+        {{ collisions_panel|safe }}
+      </article>
+
+      <article class="panel span-6" data-panel="timeclock">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">{{ morse_time|safe }}</p>
+            <h2>Timeclock</h2>
+          </div>
+          {{ time_pill|safe }}
+        </div>
+        {{ time_table|safe }}
+      </article>
+
+      <article class="panel span-6" data-panel="projects" data-hub-fragment="projects">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Attribution</p>
+            <h2>Projects</h2>
+          </div>
+          {{ projects_pill|safe }}
+        </div>
+        {{ bucket_table|safe }}
+      </article>
+
+      <article class="panel span-4" data-panel="models">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Mix</p>
+            <h2>Models</h2>
+          </div>
+          {{ models_pill|safe }}
+        </div>
+        {{ model_table|safe }}
+      </article>
+
+      {{ surface_panel|safe }}
+
+      <article class="panel span-4" data-panel="budget">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Spend Limits</p>
+            <h2>Budget</h2>
+          </div>
+          {{ budget_pill|safe }}
+        </div>
+        {{ budget_panel|safe }}
+      </article>
+
+      <article class="panel span-12" data-panel="costs" data-hub-fragment="costs">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Cost Allocation</p>
+            <h2>Costs</h2>
+          </div>
+          <div class="pill-group"><span class="pill">{{ period_label|safe }}</span>{{ costs_trust_pill|safe }}</div>
+        </div>
+        {{ costs_panel|safe }}
+      </article>
+    </section>
+
+    <footer>
+      Latest session: {{ latest_label|safe }} · Generated {{ generated|safe }}
+    </footer>
+  </main>
+  {{ scripts|safe }}
+</body>
+</html>
