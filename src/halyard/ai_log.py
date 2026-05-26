@@ -228,16 +228,23 @@ def log_diagnostic(msg: str, *, tool: str | None = None, project: str | None = N
     Used for silent fallbacks (Hub timeout, git failure) that would
     otherwise be invisible to the user but are valuable for support.
     """
+
+    def _flat(value: str) -> str:
+        # Keep one diagnostic event on exactly one physical line: a newline in
+        # msg/tool/project would otherwise split it into several entries and
+        # corrupt downstream line-by-line parsing.
+        return value.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+
     try:
         _HALYARD_DIAG_LOG.parent.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(tz=UTC).isoformat(timespec="seconds")
         prefix = f"[{ts}]"
         if tool:
-            prefix += f" [{tool}]"
+            prefix += f" [{_flat(tool)}]"
         if project:
-            prefix += f" [{project}]"
+            prefix += f" [{_flat(project)}]"
         with _HALYARD_DIAG_LOG.open("a", encoding="utf-8") as fh:
-            fh.write(f"{prefix} {msg}\n")
+            fh.write(f"{prefix} {_flat(msg)}\n")
     except OSError:
         pass
 
@@ -744,7 +751,7 @@ def parse_sessions(project_dir: Path, *, now: datetime | None = None) -> list[Ai
     # never rewritten. Local import — attribution imports ai_log.
     from halyard.attribution import canonical_project, load_project_aliases
 
-    aliases = load_project_aliases()
+    aliases = load_project_aliases(project_dir)
     if aliases:
         for s in surfaced:
             if s.project:

@@ -226,7 +226,7 @@ def generate_invoice(
         from halyard.ai_plans import read_ai_plans
         from halyard.reports import parse_timeclock
 
-        _canon_accounts = _canonical_accounts(project_accounts)
+        _canon_accounts = _canonical_accounts(project_accounts, project_dir)
         evidence_sessions = [
             s
             for s in parse_sessions(project_dir)
@@ -589,17 +589,17 @@ def _ai_cost_for(
         period_start=period_start,
         period_end=period_end,
         api_only=False,
-        accounts=_canonical_accounts(project_accounts),
+        accounts=_canonical_accounts(project_accounts, project_dir),
         places=2,
     )
 
 
-def _canonical_accounts(accounts: set[str]) -> set[str]:
+def _canonical_accounts(accounts: set[str], project_dir: Path) -> set[str]:
     """Map invoice project accounts through the alias map so they match the
     (already canonicalized) ``session.project`` values (v5.9)."""
     from halyard.attribution import canonical_project, load_project_aliases
 
-    aliases = load_project_aliases()
+    aliases = load_project_aliases(project_dir)
     return {canonical_project(a, aliases) or a for a in accounts}
 
 

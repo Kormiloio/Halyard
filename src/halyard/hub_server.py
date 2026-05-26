@@ -405,7 +405,9 @@ class HubServer:
                 {
                     # canonicalize so the live banner matches the persistent
                     # panels (which read via parse_sessions) — v5.9
-                    "project": canonical_project(session.project, load_project_aliases()),
+                    "project": canonical_project(
+                        session.project, load_project_aliases(self.project_dir)
+                    ),
                     "branch": session.branch,
                     "remote": session.remote,
                     "collision_count": len(collisions),

@@ -100,12 +100,13 @@ def budget_status(now: datetime | None = None) -> list[BudgetStatus]:
 
     budgets = load_budgets()
     statuses: list[BudgetStatus] = []
-    aliases = load_project_aliases()
 
     # Prefer hub because it captures sessions across all projects.
     # Fall back to the CWD project dir for single-project setups.
     hub = find_hub()
     cwd_dir = find_project_dir()
+    # Committed aliases come from the CWD project (or hub) dir, merged with home.
+    aliases = load_project_aliases(cwd_dir or hub)
 
     for slug, budget in budgets.items():
         today_spend, month_spend = 0.0, 0.0

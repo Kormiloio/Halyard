@@ -44,6 +44,8 @@ halyard.toml
 clients.toml
 projects.toml
 time.timeclock
+time.timeclock.bak*
+project-aliases.toml
 voyages.toml
 invoices/
 *.tmp

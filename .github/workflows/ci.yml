@@ -47,3 +47,31 @@ jobs:
         # Inspecting the current env in place avoids the re-resolution
         # entirely; --skip-editable still skips the local halyard.
         run: pip-audit --skip-editable
+
+  # Real-Windows coverage for the platform-specific file-locking path
+  # (_acquire_read_lock / _release_read_lock — the v5.9 read-lock crash site).
+  # Runs only the suite; lint/format/mypy/audit are platform-independent and
+  # stay on ubuntu above. Non-blocking (continue-on-error) until the first
+  # green run confirms the suite passes on Windows, since we have no Windows
+  # machine to pre-verify on.
+  test-windows:
+    runs-on: windows-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Test with pytest
+        run: pytest -q

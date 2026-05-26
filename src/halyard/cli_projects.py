@@ -73,10 +73,13 @@ def projects_alias(
 ) -> None:
     """Merge a project slug into a canonical one (read-time; the log is never
     rewritten). E.g. ``halyard projects alias git/Halyard kormilo:halyard``."""
+    from halyard.ai_log import find_project_dir
     from halyard.attribution import load_project_aliases, set_project_alias
 
+    project_dir = find_project_dir()
+
     if list_:
-        aliases = load_project_aliases()
+        aliases = load_project_aliases(project_dir)
         if not aliases:
             console.print("[yellow]No project aliases set.[/]")
             return
@@ -87,5 +90,6 @@ def projects_alias(
     if not source or not canonical:
         console.print("[bold red]Error:[/] provide SOURCE and CANONICAL, or use --list.")
         raise typer.Exit(code=1)
-    set_project_alias(source, canonical)
-    console.print(f"[bold green]Aliased[/] {source} [dim]→[/] {canonical}")
+    set_project_alias(source, canonical, project_dir)
+    target = "project (committed)" if project_dir else "~/.halyard (local)"
+    console.print(f"[bold green]Aliased[/] {source} [dim]→[/] {canonical}  [dim]· {target}[/]")

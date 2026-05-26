@@ -1251,6 +1251,20 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v5.10-timeclock-integrity/`.
     **Status: complete (1536 tests passing).**
 
+85. **v5.11 — Loose ends:** four small carry-overs. (1) The read-time project
+    alias map is now **committable**: `load_project_aliases(project_dir)` merges
+    a version-controlled `<project_dir>/project-aliases.toml` (shared baseline)
+    with `~/.halyard` (local override wins), and `set_project_alias` writes the
+    committed file when a project dir is known — so aliases stop being
+    per-machine. (The map is gitignored in *this* product repo since it doubles
+    as the dev's data dir; real user projects commit it.) (2) `log_diagnostic`
+    flattens embedded newlines so one event stays one line. (3) A conftest
+    `_isolate_halyard_logs` fixture stops the suite from writing the real
+    `~/.halyard/{diagnostic,halyard}.log`. (4) A non-blocking `test-windows` CI
+    job runs the suite on `windows-latest`, giving real-Windows coverage of the
+    v5.9 read-lock path. Spec in `openspec/changes/v5.11-loose-ends/`.
+    **Status: complete (1544 tests passing).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

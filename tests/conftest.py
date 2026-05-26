@@ -51,6 +51,22 @@ def _isolate_registry(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pyt
 
 
 @pytest.fixture(autouse=True)
+def _isolate_halyard_logs(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+):
+    """No test may write the real ~/.halyard/{diagnostic,halyard}.log.
+
+    Many code paths call ``log_diagnostic`` / the audit log, which resolve to
+    module-level ``Path.home()`` constants — so without isolation the suite
+    scribbles "in tests" lines into the developer's real logs.
+    """
+    logdir = tmp_path_factory.mktemp("halyard-logs")
+    monkeypatch.setattr("halyard.ai_log._HALYARD_DIAG_LOG", logdir / "diagnostic.log")
+    monkeypatch.setattr("halyard.ai_log._HALYARD_AUDIT_LOG", logdir / "halyard.log")
+    return logdir
+
+
+@pytest.fixture(autouse=True)
 def _isolate_auto_timer(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch):
     """No test may read, write, or delete the real ~/.halyard/auto-timer state.
 

@@ -35,7 +35,13 @@ from halyard.ai_log import AiSession
 # `git/<repo>` slug vs. the canonical `client:project`); this user-defined map
 # merges them at read time so every surface groups by one slug. The log is
 # never rewritten — this is reinterpretation only.
+#
+# v5.11: two sources. The committed `<project_dir>/project-aliases.toml` is the
+# shared, version-controlled baseline; the per-machine `~/.halyard` file is an
+# optional local override. They merge as {**committed, **home} so a machine can
+# locally re-point an alias without editing the shared file.
 _ALIASES_PATH = Path.home() / ".halyard" / "project-aliases.toml"
+_ALIASES_FILENAME = "project-aliases.toml"
 
 AttributionConfidence = Literal["timer", "mapped", "toml", "auto", "unknown", "none"]
 
@@ -99,37 +105,56 @@ def format_attribution_mix(sessions: Iterable[AiSession]) -> str:
 # ---------------------------------------------------------------------------
 
 
-# Cached by (path, mtime): parse_sessions is the hottest read path and is
-# called per-project across reports/dashboard, so re-parsing the TOML every
-# call is wasteful. A write (set_project_alias) bumps mtime → next load re-reads.
-_alias_cache: tuple[str, float, dict[str, str]] | None = None
+# Cached by both files' (path, mtime): parse_sessions is the hottest read path
+# and is called per-project across reports/dashboard, so re-parsing the TOML
+# every call is wasteful. A write (set_project_alias) bumps an mtime → next load
+# re-reads. A missing file contributes a None mtime, so its later creation also
+# invalidates the cache.
+_AliasSig = tuple[str, float | None]
+_alias_cache: tuple[tuple[_AliasSig, _AliasSig], dict[str, str]] | None = None
 
 
-def load_project_aliases() -> dict[str, str]:
-    """Return the user's source-slug → canonical-slug map (``{}`` if none).
-
-    Tolerant: a missing or invalid file yields an empty map (canonicalization
-    becomes a no-op) rather than raising on the read path. Cached by file mtime.
-    """
-    global _alias_cache
-    key = str(_ALIASES_PATH)
+def _alias_file_sig(path: Path) -> _AliasSig:
     try:
-        mtime = _ALIASES_PATH.stat().st_mtime
+        return (str(path), path.stat().st_mtime)
     except OSError:
-        return {}
-    if _alias_cache is not None and _alias_cache[0] == key and _alias_cache[1] == mtime:
-        return _alias_cache[2]
+        return (str(path), None)
+
+
+def _read_alias_file(path: Path) -> dict[str, str]:
+    """Parse one alias file's ``[aliases]`` table; ``{}`` if missing/invalid."""
     try:
-        data = tomllib.loads(_ALIASES_PATH.read_text())
+        data = tomllib.loads(path.read_text())
     except (tomllib.TOMLDecodeError, OSError):
         return {}
     aliases = data.get("aliases", {})
-    result = (
-        {k: v for k, v in aliases.items() if isinstance(k, str) and isinstance(v, str)}
-        if isinstance(aliases, dict)
-        else {}
+    if not isinstance(aliases, dict):
+        return {}
+    return {k: v for k, v in aliases.items() if isinstance(k, str) and isinstance(v, str)}
+
+
+def load_project_aliases(project_dir: Path | None = None) -> dict[str, str]:
+    """Return the source-slug → canonical-slug map (``{}`` if none).
+
+    Merges the committed ``<project_dir>/project-aliases.toml`` (shared baseline)
+    with the per-machine ``~/.halyard/project-aliases.toml`` (local override
+    wins). Tolerant: missing/invalid files yield an empty map rather than raising
+    on the read path. Cached by both files' mtimes.
+    """
+    global _alias_cache
+    committed_path = (project_dir / _ALIASES_FILENAME) if project_dir is not None else None
+    home_sig = _alias_file_sig(_ALIASES_PATH)
+    committed_sig: _AliasSig = (
+        _alias_file_sig(committed_path) if committed_path is not None else ("", None)
     )
-    _alias_cache = (key, mtime, result)
+    cache_key = (home_sig, committed_sig)
+    if _alias_cache is not None and _alias_cache[0] == cache_key:
+        return _alias_cache[1]
+
+    committed = _read_alias_file(committed_path) if committed_path is not None else {}
+    home = _read_alias_file(_ALIASES_PATH)
+    result = {**committed, **home}  # local override wins over committed baseline
+    _alias_cache = (cache_key, result)
     return result
 
 
@@ -149,12 +174,21 @@ def canonical_project(slug: str | None, aliases: dict[str, str]) -> str | None:
     return cur
 
 
-def set_project_alias(source: str, canonical: str) -> None:
-    """Add or update one ``source → canonical`` alias, persisting the map."""
+def set_project_alias(source: str, canonical: str, project_dir: Path | None = None) -> None:
+    """Add or update one ``source → canonical`` alias, persisting the map.
+
+    Writes to the committed ``<project_dir>/project-aliases.toml`` when a project
+    dir is given (so the alias lands in version control), else the per-machine
+    ``~/.halyard`` file. Only the target file's own entries are rewritten — the
+    other source is never folded in.
+    """
+    global _alias_cache
     import tomli_w
 
-    aliases = load_project_aliases()
+    target = (project_dir / _ALIASES_FILENAME) if project_dir is not None else _ALIASES_PATH
+    aliases = _read_alias_file(target)
     aliases[source] = canonical
-    _ALIASES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
     payload = {"aliases": dict(sorted(aliases.items()))}
-    _ALIASES_PATH.write_bytes(tomli_w.dumps(payload).encode())
+    target.write_bytes(tomli_w.dumps(payload).encode())
+    _alias_cache = None  # invalidate; next load re-reads both sources
