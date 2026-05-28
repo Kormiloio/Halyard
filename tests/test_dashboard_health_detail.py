@@ -15,9 +15,9 @@ from halyard.dashboard import render_dashboard
 
 
 def _full_project(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\n")
-    (tmp_path / "time.timeclock").write_text("; time\n")
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp_path / "time.timeclock").write_text("; time\n", encoding="utf-8")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     append_session(
         tmp_path,
         AiSession(
@@ -44,9 +44,9 @@ def test_pill_is_a_button_with_title_and_popup_present(tmp_path: Path) -> None:
 
 def test_popup_lists_failing_check_and_points_to_doctor(tmp_path: Path) -> None:
     # An unattributed session yields an "Attribution" warning check.
-    (tmp_path / "halyard.toml").write_text("[business]\n")
-    (tmp_path / "time.timeclock").write_text("; time\n")
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp_path / "time.timeclock").write_text("; time\n", encoding="utf-8")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     append_session(
         tmp_path,
         AiSession(

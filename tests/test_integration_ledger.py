@@ -50,10 +50,10 @@ def _session(
 
 
 def _init_project(tmp_path: Path, plans_toml: str | None = None) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\n")
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     if plans_toml is not None:
-        (tmp_path / "ai-plans.toml").write_text(plans_toml)
+        (tmp_path / "ai-plans.toml").write_text(plans_toml, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ def test_note_with_newline_does_not_corrupt_log(tmp_path: Path) -> None:
     session = AiSession(**{**session.__dict__, "note": "line one\nline two"})
     append_session(tmp_path, session)
 
-    log_text = (tmp_path / AI_LOG_FILENAME).read_text()
+    log_text = (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8")
     data_lines = [ln for ln in log_text.splitlines() if ln.startswith("s ")]
     assert len(data_lines) == 1, "newline in note must not produce extra log lines"
     # Newline is percent-encoded (%0A) and the literal raw newline is gone.

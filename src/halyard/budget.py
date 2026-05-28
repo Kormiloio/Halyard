@@ -34,7 +34,7 @@ def load_budgets() -> dict[str, ProjectBudget]:
     if not _BUDGETS_FILE.exists():
         return {}
     try:
-        data = tomllib.loads(_BUDGETS_FILE.read_text())
+        data = tomllib.loads(_BUDGETS_FILE.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError:
         return {}
     result: dict[str, ProjectBudget] = {}
@@ -147,7 +147,7 @@ def set_budget(
     # Load existing data as raw dict to preserve other entries
     if _BUDGETS_FILE.exists():
         try:
-            data: dict[str, object] = dict(tomllib.loads(_BUDGETS_FILE.read_text()))
+            data: dict[str, object] = dict(tomllib.loads(_BUDGETS_FILE.read_text(encoding="utf-8")))
         except tomllib.TOMLDecodeError:
             data = {}
     else:
@@ -167,7 +167,7 @@ def set_budget(
         entry["monthly_usd"] = monthly_usd
 
     data[slug] = entry
-    _BUDGETS_FILE.write_text(tomli_w.dumps(data))
+    _BUDGETS_FILE.write_text(tomli_w.dumps(data), encoding="utf-8")
 
     return ProjectBudget(
         daily_usd=entry.get("daily_usd"),

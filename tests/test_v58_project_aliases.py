@@ -46,12 +46,12 @@ def test_set_then_load_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 def test_invalid_toml_is_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     p = _use_alias_file(tmp_path, monkeypatch)
-    p.write_text("this is not valid toml = = =")
+    p.write_text("this is not valid toml = = =", encoding="utf-8")
     assert load_project_aliases() == {}
 
 
 def _write_log(tmp_path: Path, *projects: str) -> None:
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     for i, proj in enumerate(projects):
         append_session(
             tmp_path,

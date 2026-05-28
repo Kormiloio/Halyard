@@ -41,7 +41,7 @@ def test_read_locked_file_uses_read_release(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     log = tmp_path / "f.log"
-    log.write_text("hi\n")
+    log.write_text("hi\n", encoding="utf-8")
     calls: list[str] = []
     monkeypatch.setattr(ai_log, "_release_lock", lambda fd: calls.append("write"))
     monkeypatch.setattr(ai_log, "_release_read_lock", lambda fd: calls.append("read"))
@@ -92,7 +92,7 @@ def test_budget_matches_aliased_slug(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     proj = tmp_path / "proj"
     proj.mkdir()
-    (proj / AI_LOG_FILENAME).write_text(HEADER)
+    (proj / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     append_session(
         proj,
         AiSession(

@@ -17,9 +17,9 @@ from halyard.service import _load_or_create_token
 
 
 def _init_project(project_dir: Path) -> None:
-    (project_dir / "halyard.toml").write_text("[business]\n")
-    (project_dir / "time.timeclock").write_text("; time\n")
-    (project_dir / AI_LOG_FILENAME).write_text(HEADER)
+    (project_dir / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (project_dir / "time.timeclock").write_text("; time\n", encoding="utf-8")
+    (project_dir / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
 
 
 @pytest.fixture()

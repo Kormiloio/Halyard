@@ -33,7 +33,13 @@ def to_jsonable(obj: Any) -> Any:
         return {str(k): to_jsonable(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple, set, frozenset)):
         return [to_jsonable(v) for v in obj]
-    # pathlib.Path and any other path-like / opaque value
+    # pathlib.Path → POSIX form so a serialized path is the same string on
+    # every OS (str(WindowsPath('/x/y')) renders as '\\x\\y').
+    from pathlib import PurePath
+
+    if isinstance(obj, PurePath):
+        return obj.as_posix()
+    # any other opaque value
     return str(obj)
 
 

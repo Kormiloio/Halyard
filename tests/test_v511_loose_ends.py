@@ -18,7 +18,7 @@ def _reset_alias_cache():
 
 def _write_aliases(path: Path, mapping: dict[str, str]) -> None:
     body = "[aliases]\n" + "".join(f'"{k}" = "{v}"\n' for k, v in mapping.items())
-    path.write_text(body)
+    path.write_text(body, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ def test_set_project_alias_writes_committed_file(tmp_path, monkeypatch):
 
     committed = proj / "project-aliases.toml"
     assert committed.exists()
-    assert "git/Foo" in committed.read_text()
+    assert "git/Foo" in committed.read_text(encoding="utf-8")
     assert not (tmp_path / "home" / "project-aliases.toml").exists()
     assert attribution.load_project_aliases(proj) == {"git/Foo": "acme:foo"}
 
@@ -85,7 +85,7 @@ def test_set_project_alias_without_dir_writes_home(tmp_path, monkeypatch):
     home = tmp_path / "home" / "project-aliases.toml"
     monkeypatch.setattr(attribution, "_ALIASES_PATH", home)
     attribution.set_project_alias("git/Foo", "acme:foo")
-    assert home.exists() and "git/Foo" in home.read_text()
+    assert home.exists() and "git/Foo" in home.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ def test_log_diagnostic_collapses_newlines(tmp_path, monkeypatch):
     log = tmp_path / "diagnostic.log"
     monkeypatch.setattr(ai_log, "_HALYARD_DIAG_LOG", log)
     ai_log.log_diagnostic("line one\nline two\r\nthree", tool="a\nb", project="p\nq")
-    content = log.read_text()
+    content = log.read_text(encoding="utf-8")
     assert content.count("\n") == 1  # exactly one trailing newline → one entry
     assert "line one line two three" in content
     assert "[a b]" in content and "[p q]" in content
@@ -113,8 +113,8 @@ def test_real_diag_log_untouched_by_diagnostics():
     # away from the real path; a diagnostic write lands in the tmp redirect.
     real = Path.home() / ".halyard" / "diagnostic.log"
     assert real != ai_log._HALYARD_DIAG_LOG
-    before = real.read_text() if real.exists() else None
+    before = real.read_text(encoding="utf-8") if real.exists() else None
     ai_log.log_diagnostic("isolation probe — must not hit the real log")
-    after = real.read_text() if real.exists() else None
+    after = real.read_text(encoding="utf-8") if real.exists() else None
     assert after == before  # real log unchanged
-    assert "isolation probe" in ai_log._HALYARD_DIAG_LOG.read_text()
+    assert "isolation probe" in ai_log._HALYARD_DIAG_LOG.read_text(encoding="utf-8")

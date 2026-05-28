@@ -34,7 +34,7 @@ def _summary(path: Path) -> tuple[int, int, float, float, int]:
     from halyard.reports import timeclock_anomalies
     from halyard.timeclock_repair import counted_minutes, reconstruct_timeclock
 
-    lines = path.read_text().splitlines()
+    lines = path.read_text(encoding="utf-8").splitlines()
     dropped, orphans = timeclock_anomalies(path)
     repaired = reconstruct_timeclock(lines)
     windows = sum(1 for line in repaired if line.lstrip().startswith("o "))
@@ -88,7 +88,7 @@ def timeclock_repair_cmd(
         console.print(f"[yellow]No timeclock at {path}.[/]")
         raise typer.Exit()
 
-    original = path.read_text().splitlines()
+    original = path.read_text(encoding="utf-8").splitlines()
     repaired = reconstruct_timeclock(original)
     dropped, orphans, current_h, repaired_h, windows = _summary(path)
 

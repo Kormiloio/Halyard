@@ -64,7 +64,7 @@ def record_turn(payload: dict[str, Any], is_start: bool) -> int:
     else:
         state["assistant_count"] += 1
 
-    path.write_text(json.dumps(state))
+    path.write_text(json.dumps(state), encoding="utf-8")
 
     # Trigger finalization of OTHER stale sessions while we are here
     finalize_stale_sessions()
@@ -147,7 +147,7 @@ def _read_state(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
     try:
-        return cast(dict[str, Any], json.loads(path.read_text()))
+        return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
     except (json.JSONDecodeError, OSError):
         return None
 

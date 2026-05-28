@@ -43,7 +43,7 @@ def test_read_lock_waits_for_exclusive_writer(tmp_path: Path) -> None:
     instrumentation only inflates it, so it never flakes downward.
     """
     log = tmp_path / AI_LOG_FILENAME
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
 
     script = textwrap.dedent(
         f"""
@@ -81,7 +81,7 @@ def test_log_diagnostic_writes_one_line(tmp_path: Path, monkeypatch: pytest.Monk
 
     ai_log.log_diagnostic("something degraded", tool="git", project="acme:auth")
 
-    content = diag.read_text()
+    content = diag.read_text(encoding="utf-8")
     assert "something degraded" in content
     assert "[git]" in content
     assert "[acme:auth]" in content
@@ -136,9 +136,9 @@ def test_hub_timeout_falls_back_to_local_write(
 
         log_path = tmp_path / AI_LOG_FILENAME
         assert log_path.exists()
-        assert "slow-hub-tool" in log_path.read_text()
+        assert "slow-hub-tool" in log_path.read_text(encoding="utf-8")
 
-        diag_content = diag.read_text()
+        diag_content = diag.read_text(encoding="utf-8")
         assert "hub_client: request failed" in diag_content
         assert "timed out" in diag_content.lower()
     finally:

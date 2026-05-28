@@ -54,7 +54,8 @@ def test_parse_chat_session_incremental_subpath_format(tmp_path: Path) -> None:
                 ),
                 json.dumps({"kind": 1, "k": ["requests", 0, "completionTokens"], "v": 779}),
             ]
-        )
+        ),
+        encoding="utf-8",
     )
     s = parse_chat_session(f)
     assert s is not None  # not skipped as "empty"
@@ -73,13 +74,15 @@ def mock_vscode_storage(tmp_path: Path) -> Path:
     # Setup Halyard project
     project_dir = tmp_path / "halyard"
     project_dir.mkdir()
-    (project_dir / "halyard.toml").write_text('[project]\nslug = "acme:halyard"')
-    (project_dir / AI_LOG_FILENAME).write_text("")
+    (project_dir / "halyard.toml").write_text('[project]\nslug = "acme:halyard"', encoding="utf-8")
+    (project_dir / AI_LOG_FILENAME).write_text("", encoding="utf-8")
 
     # Project 1: Halyard
     ws1 = storage / "ws1-id"
     ws1.mkdir()
-    (ws1 / "workspace.json").write_text(json.dumps({"folder": project_dir.as_uri()}))
+    (ws1 / "workspace.json").write_text(
+        json.dumps({"folder": project_dir.as_uri()}), encoding="utf-8"
+    )
 
     # Session for WS1
     chat_dir = ws1 / "chatSessions"
@@ -122,7 +125,8 @@ def mock_vscode_storage(tmp_path: Path) -> Path:
                     }
                 ),
             ]
-        )
+        ),
+        encoding="utf-8",
     )
 
     # Edit manifest for WS1
@@ -136,7 +140,8 @@ def mock_vscode_storage(tmp_path: Path) -> Path:
                     [f"{project_dir.as_uri()}/tests/test_app.py", "hash2"],
                 ]
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
     return storage
@@ -218,7 +223,8 @@ def test_import_copilot_sessions_skips_privacy_content(
                 "k": ["requests", 0, "completionTokens"],
                 "v": 10,
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
     project_dir = tmp_path / "halyard"
@@ -228,7 +234,7 @@ def test_import_copilot_sessions_skips_privacy_content(
 
     import_copilot_sessions(project_dir=project_dir)
 
-    log_content = (project_dir / AI_LOG_FILENAME).read_text()
+    log_content = (project_dir / AI_LOG_FILENAME).read_text(encoding="utf-8")
     assert "SECRET_KEY" not in log_content
     assert "thought" not in log_content
     assert "10" in log_content

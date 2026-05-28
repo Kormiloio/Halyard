@@ -22,7 +22,7 @@ class LaunchdProvider(ServiceProvider):
 
         halyard_exe = _halyard_exe()
         self.plist_path.parent.mkdir(parents=True, exist_ok=True)
-        self.plist_path.write_text(self._plist(halyard_exe, project_dir, port))
+        self.plist_path.write_text(self._plist(halyard_exe, project_dir, port), encoding="utf-8")
         subprocess.run(["launchctl", "load", "-w", str(self.plist_path)], check=True)
         return f"http://127.0.0.1:{port}/"
 

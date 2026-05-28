@@ -293,7 +293,7 @@ def _load_imported_state() -> dict[str, int | None]:
     if not _IMPORTED_STATE_FILE.exists():
         return {}
     state: dict[str, int | None] = {}
-    for raw in _IMPORTED_STATE_FILE.read_text().splitlines():
+    for raw in _IMPORTED_STATE_FILE.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line:
             continue
@@ -313,7 +313,7 @@ def _save_imported_state(state: dict[str, int | None]) -> None:
     lines = [
         f"{uuid}\t{size}" if size is not None else uuid for uuid, size in sorted(state.items())
     ]
-    _IMPORTED_STATE_FILE.write_text("\n".join(lines) + "\n")
+    _IMPORTED_STATE_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _file_size(path: Path) -> int:
@@ -343,7 +343,7 @@ def codex_imported_any() -> bool:
     if not state.exists():
         return False
     try:
-        return any(line.strip() for line in state.read_text().splitlines())
+        return any(line.strip() for line in state.read_text(encoding="utf-8").splitlines())
     except OSError:
         return False
 

@@ -242,7 +242,7 @@ def test_read_voyages_missing_file(tmp_path: Path) -> None:
 
 
 def test_read_voyages_corrupt_file(tmp_path: Path) -> None:
-    (tmp_path / "voyages.toml").write_text("not valid toml ][")
+    (tmp_path / "voyages.toml").write_text("not valid toml ][", encoding="utf-8")
     assert read_voyages(tmp_path) == []
 
 

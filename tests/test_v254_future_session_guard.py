@@ -17,8 +17,8 @@ _NOW = datetime(2026, 5, 16, 8, 38, 0)
 
 def _proj(p: Path) -> Path:
     p.mkdir(parents=True, exist_ok=True)
-    (p / "halyard.toml").write_text("[business]\n")
-    (p / AI_LOG_FILENAME).write_text(HEADER)
+    (p / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (p / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     return p
 
 
@@ -60,13 +60,13 @@ def test_parse_sessions_excludes_future_keeps_file(tmp_path: Path) -> None:
     append_session(proj, real)
     append_session(proj, future)
 
-    before = (proj / AI_LOG_FILENAME).read_text()
+    before = (proj / AI_LOG_FILENAME).read_text(encoding="utf-8")
     got = parse_sessions(proj, now=_NOW)
 
     assert len(got) == 1
     assert got[0].start == datetime(2026, 5, 15, 23, 57)
     # Raw line preserved on disk (read-only exclusion, like v2.53).
-    assert (proj / AI_LOG_FILENAME).read_text() == before
+    assert (proj / AI_LOG_FILENAME).read_text(encoding="utf-8") == before
     assert sum(1 for ln in before.splitlines() if ln.startswith("s ")) == 2
 
 
@@ -81,7 +81,7 @@ def test_seed_demo_never_writes_future_sessions(tmp_path: Path) -> None:
     now = datetime.now()
     starts = [
         AiSession.from_log_line(ln).start  # type: ignore[union-attr]
-        for ln in (tmp_path / AI_LOG_FILENAME).read_text().splitlines()
+        for ln in (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8").splitlines()
         if ln.startswith("s ")
     ]
     assert starts, "seed-demo wrote nothing"

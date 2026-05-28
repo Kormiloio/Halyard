@@ -103,16 +103,20 @@ def test_confirm_writes_project_to_matching_line(tmp_path: Path) -> None:
     from halyard.ai_log import confirm_session_attributions
 
     log = tmp_path / "ai-sessions.log"
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
     sess = _session(project=None)
     append_session(tmp_path, sess)
 
-    raw_line = next(line.rstrip() for line in log.read_text().splitlines() if line.startswith("s "))
+    raw_line = next(
+        line.rstrip()
+        for line in log.read_text(encoding="utf-8").splitlines()
+        if line.startswith("s ")
+    )
 
     changed = confirm_session_attributions(tmp_path, [(raw_line, "acme:auth")])
 
     assert changed == 1
-    content = log.read_text()
+    content = log.read_text(encoding="utf-8")
     assert "project=acme:auth" in content
 
 
@@ -120,17 +124,19 @@ def test_confirm_does_not_touch_other_lines(tmp_path: Path) -> None:
     from halyard.ai_log import confirm_session_attributions
 
     log = tmp_path / "ai-sessions.log"
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
     append_session(tmp_path, _session(project="acme:existing"))
     append_session(tmp_path, _session(project=None))
 
-    raw_lines = [ln.rstrip() for ln in log.read_text().splitlines() if ln.startswith("s ")]
+    raw_lines = [
+        ln.rstrip() for ln in log.read_text(encoding="utf-8").splitlines() if ln.startswith("s ")
+    ]
     unattributed_line = next(ln for ln in raw_lines if "project=" not in ln)
 
     changed = confirm_session_attributions(tmp_path, [(unattributed_line, "acme:new")])
 
     assert changed == 1
-    content_lines = log.read_text().splitlines()
+    content_lines = log.read_text(encoding="utf-8").splitlines()
     lines = [ln for ln in content_lines if ln.startswith("s ")]
     amendment_lines = [ln for ln in content_lines if ln.startswith("a ")]
     attributed = [ln for ln in lines if "project=acme:existing" in ln]
@@ -146,7 +152,7 @@ def test_confirm_empty_confirmations_returns_zero(tmp_path: Path) -> None:
     from halyard.ai_log import confirm_session_attributions
 
     log = tmp_path / "ai-sessions.log"
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
     append_session(tmp_path, _session(project=None))
 
     changed = confirm_session_attributions(tmp_path, [])
@@ -171,7 +177,7 @@ def test_interactive_no_timeclock_exits_early(
     from halyard.orchestration import interactive_confirm_attribution
 
     log = tmp_path / "ai-sessions.log"
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
     append_session(tmp_path, _session(project=None))
 
     interactive_confirm_attribution(tmp_path)
@@ -186,12 +192,12 @@ def test_interactive_no_candidates_exits_clean(
     from halyard.orchestration import interactive_confirm_attribution
 
     log = tmp_path / "ai-sessions.log"
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
     # session is already attributed — no candidates
     append_session(tmp_path, _session(project="acme:auth"))
 
     tc = tmp_path / "time.timeclock"
-    tc.write_text("i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 11:00:00\n")
+    tc.write_text("i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 11:00:00\n", encoding="utf-8")
 
     interactive_confirm_attribution(tmp_path)
 
@@ -203,18 +209,18 @@ def test_interactive_confirms_session(tmp_path: Path, monkeypatch: pytest.Monkey
     from halyard.orchestration import interactive_confirm_attribution
 
     log = tmp_path / "ai-sessions.log"
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
     sess = _session(start=datetime(2026, 5, 7, 10, 0), project=None, minutes=10)
     append_session(tmp_path, sess)
 
     tc = tmp_path / "time.timeclock"
-    tc.write_text("i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 11:00:00\n")
+    tc.write_text("i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 11:00:00\n", encoding="utf-8")
 
     monkeypatch.setattr("typer.prompt", lambda *_a, **_kw: "y")
 
     interactive_confirm_attribution(tmp_path)
 
-    content = log.read_text()
+    content = log.read_text(encoding="utf-8")
     assert "project=acme:auth" in content
 
 
@@ -222,18 +228,18 @@ def test_interactive_rejects_session(tmp_path: Path, monkeypatch: pytest.MonkeyP
     from halyard.orchestration import interactive_confirm_attribution
 
     log = tmp_path / "ai-sessions.log"
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
     sess = _session(start=datetime(2026, 5, 7, 10, 0), project=None, minutes=10)
     append_session(tmp_path, sess)
 
     tc = tmp_path / "time.timeclock"
-    tc.write_text("i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 11:00:00\n")
+    tc.write_text("i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 11:00:00\n", encoding="utf-8")
 
     monkeypatch.setattr("typer.prompt", lambda *_a, **_kw: "n")
 
     interactive_confirm_attribution(tmp_path)
 
-    content = log.read_text()
+    content = log.read_text(encoding="utf-8")
     assert "project=" not in content.replace("; Halyard", "")
 
 

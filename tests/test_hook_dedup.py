@@ -41,10 +41,11 @@ def test_cursor_collapses_stale_halyard_entries(tmp_path: Path) -> None:
                     ],
                 },
             }
-        )
+        ),
+        encoding="utf-8",
     )
     cli_hooks._do_install_hook_cursor()
-    d = json.loads(cfg.read_text())
+    d = json.loads(cfg.read_text(encoding="utf-8"))
     bsp = d["hooks"]["beforeSubmitPrompt"]
     halyard = [e for e in bsp if cli_hooks._is_halyard_hook_cmd(e["command"])]
     assert len(halyard) == 1
@@ -59,9 +60,9 @@ def test_cursor_collapses_stale_halyard_entries(tmp_path: Path) -> None:
 def test_cursor_install_is_byte_idempotent(tmp_path: Path) -> None:
     cli_hooks._do_install_hook_cursor()
     cfg = tmp_path / ".cursor" / "hooks.json"
-    first = cfg.read_text()
+    first = cfg.read_text(encoding="utf-8")
     cli_hooks._do_install_hook_cursor()
-    assert cfg.read_text() == first  # true no-op on the second run
+    assert cfg.read_text(encoding="utf-8") == first  # true no-op on the second run
 
 
 # --- gemini ---------------------------------------------------------------
@@ -91,10 +92,11 @@ def test_gemini_collapses_duplicate_blocks(tmp_path: Path) -> None:
                     "AfterAgent": [hblock("/a/halyard gc-hook")],
                 }
             }
-        )
+        ),
+        encoding="utf-8",
     )
     cli_hooks._do_install_hook_gemini()
-    d = json.loads(cfg.read_text())
+    d = json.loads(cfg.read_text(encoding="utf-8"))
     ss = d["hooks"]["SessionStart"]
     halyard_blocks = [
         b
@@ -111,9 +113,9 @@ def test_gemini_collapses_duplicate_blocks(tmp_path: Path) -> None:
 def test_gemini_install_is_byte_idempotent(tmp_path: Path) -> None:
     cli_hooks._do_install_hook_gemini()
     cfg = tmp_path / ".gemini" / "settings.json"
-    first = cfg.read_text()
+    first = cfg.read_text(encoding="utf-8")
     cli_hooks._do_install_hook_gemini()
-    assert cfg.read_text() == first
+    assert cfg.read_text(encoding="utf-8") == first
 
 
 def test_is_halyard_hook_cmd_does_not_match_foreign() -> None:

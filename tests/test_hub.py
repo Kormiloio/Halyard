@@ -39,7 +39,7 @@ def test_set_hub_honors_project_integrity_mode(hub_pointer: Path, tmp_path: Path
 
     project = tmp_path / "myproject"
     project.mkdir()
-    (project / "halyard.toml").write_text('state_integrity = "hash"\n')
+    (project / "halyard.toml").write_text('state_integrity = "hash"\n', encoding="utf-8")
     state_integrity._reset_cache_for_tests()
 
     set_hub(project)
@@ -52,7 +52,7 @@ def test_set_hub_honors_project_integrity_mode(hub_pointer: Path, tmp_path: Path
 def test_find_hub_returns_none_when_dir_missing(hub_pointer: Path, tmp_path: Path) -> None:
     # We bypass set_hub's validation to test find_hub's resilience
     missing = tmp_path / "gone"
-    hub_pointer.write_text(str(missing))
+    hub_pointer.write_text(str(missing), encoding="utf-8")
     assert find_hub() is None
 
 

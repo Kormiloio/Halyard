@@ -63,8 +63,8 @@ def test_halyard_exe_rejects_untrusted_which_and_uses_trusted_argv0(tmp_path: Pa
     trusted = tmp_path / "trusted" / "bin" / "halyard"
     evil.parent.mkdir(parents=True)
     trusted.parent.mkdir(parents=True)
-    evil.write_text("#!/bin/sh\n")
-    trusted.write_text("#!/bin/sh\n")
+    evil.write_text("#!/bin/sh\n", encoding="utf-8")
+    trusted.write_text("#!/bin/sh\n", encoding="utf-8")
 
     def _trusted(path: Path) -> bool:
         return path == trusted.resolve()
@@ -79,7 +79,7 @@ def test_halyard_exe_rejects_untrusted_which_and_uses_trusted_argv0(tmp_path: Pa
 
 def test_halyard_exe_rejects_untrusted_argv0(tmp_path: Path) -> None:
     evil = tmp_path / "halyard"
-    evil.write_text("#!/bin/sh\n")
+    evil.write_text("#!/bin/sh\n", encoding="utf-8")
     with (
         patch("halyard.cli_hooks.shutil.which", return_value=None),
         patch("halyard.cli_hooks.sys.argv", [str(evil)]),
@@ -94,29 +94,29 @@ def test_halyard_exe_rejects_untrusted_argv0(tmp_path: Path) -> None:
 def test_load_existing_settings_absent_and_empty(tmp_path: Path) -> None:
     assert _load_existing_settings(tmp_path / "nope.json") == {}
     empty = tmp_path / "e.json"
-    empty.write_text("   \n")
+    empty.write_text("   \n", encoding="utf-8")
     assert _load_existing_settings(empty) == {}
 
 
 def test_load_existing_settings_valid(tmp_path: Path) -> None:
     f = tmp_path / "s.json"
-    f.write_text('{"hooks": {}}')
+    f.write_text('{"hooks": {}}', encoding="utf-8")
     assert _load_existing_settings(f) == {"hooks": {}}
 
 
 def test_load_existing_settings_refuses_to_clobber_invalid(tmp_path: Path) -> None:
     f = tmp_path / "s.json"
     original = '{"hooks": {} // a JSONC comment Claude tolerates\n}'
-    f.write_text(original)
+    f.write_text(original, encoding="utf-8")
     with pytest.raises(HookWriteError, match="not valid JSON"):
         _load_existing_settings(f)
     # The user's file must be left exactly as it was.
-    assert f.read_text() == original
+    assert f.read_text(encoding="utf-8") == original
 
 
 def test_load_existing_settings_rejects_non_object(tmp_path: Path) -> None:
     f = tmp_path / "s.json"
-    f.write_text("[1, 2, 3]")
+    f.write_text("[1, 2, 3]", encoding="utf-8")
     with pytest.raises(HookWriteError, match="not a JSON object"):
         _load_existing_settings(f)
 
@@ -130,10 +130,10 @@ def test_install_claude_hook_leaves_bad_config_untouched(tmp_path: Path) -> None
     settings = tmp_path / ".claude" / "settings.json"
     settings.parent.mkdir(parents=True)
     bad = "{ broken json"
-    settings.write_text(bad)
+    settings.write_text(bad, encoding="utf-8")
     with (
         patch("halyard.cli_hooks.Path.cwd", return_value=tmp_path),
         pytest.raises(HookWriteError),
     ):
         cli_hooks._do_install_hook_claude(global_=False)
-    assert settings.read_text() == bad
+    assert settings.read_text(encoding="utf-8") == bad

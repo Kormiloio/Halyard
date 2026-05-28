@@ -70,17 +70,18 @@ def _write_rollout(codex_dir: Path, events: list[dict]) -> Path:  # type: ignore
     day = codex_dir / "2026" / "05" / "23"
     day.mkdir(parents=True, exist_ok=True)
     path = day / _FILENAME
-    path.write_text("\n".join(json.dumps(e) for e in events))
+    path.write_text("\n".join(json.dumps(e) for e in events), encoding="utf-8")
     return path
 
 
 def _project(tmp_path: Path) -> Path:
     p = tmp_path / "project"
     p.mkdir(parents=True, exist_ok=True)
-    (p / "halyard.toml").write_text("[project]\nslug = 'test'\n")
+    (p / "halyard.toml").write_text("[project]\nslug = 'test'\n", encoding="utf-8")
     (p / "ai-sessions.log").write_text(
         "; Halyard AI session log\n"
-        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd> [key=value ...]\n"
+        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd> [key=value ...]\n",
+        encoding="utf-8",
     )
     return p
 
@@ -97,7 +98,7 @@ def _isolate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def _codex_lines(project: Path) -> list[str]:
     return [
         ln
-        for ln in (project / "ai-sessions.log").read_text().splitlines()
+        for ln in (project / "ai-sessions.log").read_text(encoding="utf-8").splitlines()
         if ln.startswith("s ") and " codex " in ln
     ]
 
@@ -151,12 +152,12 @@ def test_legacy_bare_uuid_triggers_recheck(tmp_path: Path) -> None:
     _write_rollout(codex_dir, _events(input_tokens=5000, output_tokens=900))
 
     # Pre-v5.2 state: a bare UUID with no recorded size.
-    (tmp_path / "codex-imported").write_text(f"{_UUID}\n")
+    (tmp_path / "codex-imported").write_text(f"{_UUID}\n", encoding="utf-8")
 
     re_imported = import_codex_sessions(project_dir=project)
     assert len(re_imported) == 1, "a size-less legacy entry must be re-checked once"
     # And the state is upgraded to the new uuid<TAB>size form.
-    state = (tmp_path / "codex-imported").read_text()
+    state = (tmp_path / "codex-imported").read_text(encoding="utf-8")
     assert "\t" in state and _UUID in state
 
 

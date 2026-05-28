@@ -165,7 +165,7 @@ def _read_capped(path: Path) -> str | None:
             return None
         if path.stat().st_size > _MAX_HISTORY_BYTES:
             return None
-        return path.read_text()
+        return path.read_text(encoding="utf-8")
     except OSError:
         return None
 
@@ -467,7 +467,7 @@ def project_dir_for_slug(slug: str) -> Path | None:
     if not pointer.exists():
         return None
     try:
-        return Path(pointer.read_text().strip())
+        return Path(pointer.read_text(encoding="utf-8").strip())
     except (OSError, UnicodeDecodeError):
         return None
 

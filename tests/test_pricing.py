@@ -115,7 +115,7 @@ def test_load_pricing_table_no_local_file(tmp_path: Path) -> None:
 def test_load_pricing_table_local_overrides_bundled(tmp_path: Path) -> None:
     _reset_cache()
     local = tmp_path / "pricing.toml"
-    local.write_text("[models.claude-sonnet-4-6]\ninput = 1.00\noutput = 5.00\n")
+    local.write_text("[models.claude-sonnet-4-6]\ninput = 1.00\noutput = 5.00\n", encoding="utf-8")
     with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local):
         table = load_pricing_table()
     assert table["claude-sonnet-4-6"] == (1.00, 5.00)
@@ -127,7 +127,7 @@ def test_load_pricing_table_local_overrides_bundled(tmp_path: Path) -> None:
 def test_load_pricing_table_local_adds_new_model(tmp_path: Path) -> None:
     _reset_cache()
     local = tmp_path / "pricing.toml"
-    local.write_text("[models.brand-new-model]\ninput = 0.50\noutput = 2.00\n")
+    local.write_text("[models.brand-new-model]\ninput = 0.50\noutput = 2.00\n", encoding="utf-8")
     with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local):
         table = load_pricing_table()
     assert "brand-new-model" in table
@@ -138,7 +138,7 @@ def test_load_pricing_table_local_adds_new_model(tmp_path: Path) -> None:
 def test_load_pricing_table_corrupted_local_falls_back(tmp_path: Path) -> None:
     _reset_cache()
     local = tmp_path / "pricing.toml"
-    local.write_text("not valid toml ][[[")
+    local.write_text("not valid toml ][[[", encoding="utf-8")
     with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local):
         table = load_pricing_table()
     assert table == PRICING
@@ -148,7 +148,7 @@ def test_load_pricing_table_corrupted_local_falls_back(tmp_path: Path) -> None:
 def test_model_is_known_with_local_file(tmp_path: Path) -> None:
     _reset_cache()
     local = tmp_path / "pricing.toml"
-    local.write_text("[models.local-only-model]\ninput = 1.00\noutput = 4.00\n")
+    local.write_text("[models.local-only-model]\ninput = 1.00\noutput = 4.00\n", encoding="utf-8")
     with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local):
         assert model_is_known("local-only-model") is True
     _reset_cache()
@@ -166,7 +166,7 @@ def test_pricing_table_age_days_absent(tmp_path: Path) -> None:
 
 def test_pricing_table_age_days_fresh(tmp_path: Path) -> None:
     local = tmp_path / "pricing.toml"
-    local.write_text("[models]\n")
+    local.write_text("[models]\n", encoding="utf-8")
     with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local):
         age = pricing_table_age_days()
     assert age is not None
@@ -293,8 +293,8 @@ def test_update_pricing_missing_models_table(tmp_path: Path) -> None:
 def test_update_pricing_atomic_replaces_existing(tmp_path: Path) -> None:
     _reset_cache()
     local = tmp_path / "pricing.toml"
-    local.write_text("[models.old-model]\ninput = 9.0\noutput = 36.0\n")
-    original_content = local.read_text()
+    local.write_text("[models.old-model]\ninput = 9.0\noutput = 36.0\n", encoding="utf-8")
+    original_content = local.read_text(encoding="utf-8")
 
     mock_resp = MagicMock()
     mock_resp.read.return_value = _VALID_TOML.encode()
@@ -308,8 +308,8 @@ def test_update_pricing_atomic_replaces_existing(tmp_path: Path) -> None:
     ):
         update_pricing()
 
-    assert local.read_text() == _VALID_TOML
-    assert local.read_text() != original_content
+    assert local.read_text(encoding="utf-8") == _VALID_TOML
+    assert local.read_text(encoding="utf-8") != original_content
     _reset_cache()
 
 
@@ -332,7 +332,7 @@ def test_cost_is_decimal_deterministic() -> None:
 def test_local_pricing_oserror_warns(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     _reset_cache()
     local = tmp_path / "pricing.toml"
-    local.write_text("[models.x]\ninput=1\noutput=2\n")
+    local.write_text("[models.x]\ninput=1\noutput=2\n", encoding="utf-8")
     with (
         patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local),
         patch.object(pricing_mod.Path, "read_text", side_effect=OSError("boom")),
@@ -349,7 +349,8 @@ def test_local_multiplier_ceiling_rejected(
     _reset_cache()
     local = tmp_path / "pricing.toml"
     local.write_text(
-        "[models.claude-sonnet-4-6]\ninput=3.0\noutput=15.0\ncache_write_multiplier = 100000\n"
+        "[models.claude-sonnet-4-6]\ninput=3.0\noutput=15.0\ncache_write_multiplier = 100000\n",
+        encoding="utf-8",
     )
     with patch.object(pricing_mod, "_LOCAL_PRICING_FILE", local):
         cost = calculate_cost("claude-sonnet-4-6", 0, 0, cache_write=1_000_000)

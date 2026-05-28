@@ -9,8 +9,8 @@ from halyard.repl import run_repl
 
 
 def _project(tmp_path: Path) -> Path:
-    (tmp_path / "halyard.toml").write_text("[business]\n")
-    (tmp_path / "ai-sessions.log").write_text("; log\n")
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp_path / "ai-sessions.log").write_text("; log\n", encoding="utf-8")
     return tmp_path
 
 
@@ -159,8 +159,8 @@ def test_halyard_no_args_enters_repl(tmp_path: Path) -> None:
 
     from halyard.cli import app
 
-    (tmp_path / "halyard.toml").write_text("[business]\n")
-    (tmp_path / "ai-sessions.log").write_text("; log\n")
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp_path / "ai-sessions.log").write_text("; log\n", encoding="utf-8")
 
     runner = CliRunner()
     with (

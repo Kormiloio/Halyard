@@ -31,8 +31,8 @@ def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    (project_dir / "halyard.toml").write_text("[business]\n")
-    (project_dir / "time.timeclock").write_text("; timeclock\n")
+    (project_dir / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (project_dir / "time.timeclock").write_text("; timeclock\n", encoding="utf-8")
 
     server = HubServer(project_dir=project_dir, port=0)
     server.start()
@@ -92,8 +92,8 @@ def test_hub_start_updates_state_and_mirrors_active_file(hub) -> None:
     assert status == 200
     assert body["project"] == "acme:auth"
     assert body["timeclock"] == str(project_dir / "time.timeclock")
-    assert "i " in (project_dir / "time.timeclock").read_text()
-    assert "slug=acme:auth" in (home / ".halyard" / "active").read_text()
+    assert "i " in (project_dir / "time.timeclock").read_text(encoding="utf-8")
+    assert "slug=acme:auth" in (home / ".halyard" / "active").read_text(encoding="utf-8")
 
 
 def test_library_timer_calls_delegate_to_hub_then_stop(hub) -> None:
@@ -112,7 +112,7 @@ def test_library_timer_calls_delegate_to_hub_then_stop(hub) -> None:
     assert result.slug == "acme:auth"
     assert _get_state(port)["project"] is None
     assert not (home / ".halyard" / "active").exists()
-    assert "o " in (project_dir / "time.timeclock").read_text()
+    assert "o " in (project_dir / "time.timeclock").read_text(encoding="utf-8")
 
 
 def test_status_json_reads_active_timer_from_hub(hub) -> None:
@@ -137,13 +137,13 @@ def test_auto_timer_presence_is_hub_driven(hub) -> None:
     state = _get_state(port)
     assert state["auto_project"] == "acme:web"
     assert state["last_presence"] == t0.isoformat()
-    assert "i 2026-05-23 10:00:00 acme:web  ;auto" in timeclock.read_text()
+    assert "i 2026-05-23 10:00:00 acme:web  ;auto" in timeclock.read_text(encoding="utf-8")
 
     closed = auto_timer_close_if_stale(now=t0 + timedelta(minutes=31))
 
     assert closed is True
     assert _get_state(port)["auto_project"] is None
-    assert "o 2026-05-23 10:00:00" in timeclock.read_text()
+    assert "o 2026-05-23 10:00:00" in timeclock.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ def test_start_timer_surfaces_hub_error_without_local_write(
 
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
-    (project_dir / "time.timeclock").write_text("; tc\n")
+    (project_dir / "time.timeclock").write_text("; tc\n", encoding="utf-8")
     active = tmp_path / "active"
     monkeypatch.setattr("halyard.reports._HALYARD_ACTIVE", active)
     monkeypatch.setattr("halyard.orchestration._reports_mod._HALYARD_ACTIVE", active)
@@ -173,7 +173,7 @@ def test_start_timer_surfaces_hub_error_without_local_write(
         start_timer(project_dir, "acme:auth")
 
     assert not active.exists()
-    assert (project_dir / "time.timeclock").read_text() == "; tc\n"
+    assert (project_dir / "time.timeclock").read_text(encoding="utf-8") == "; tc\n"
 
 
 def test_stop_timer_hub_error_is_noop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -183,13 +183,13 @@ def test_stop_timer_hub_error_is_noop(tmp_path: Path, monkeypatch: pytest.Monkey
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
     tc = project_dir / "time.timeclock"
-    tc.write_text("i 2026-05-23 10:00:00 acme:auth\n")
+    tc.write_text("i 2026-05-23 10:00:00 acme:auth\n", encoding="utf-8")
     monkeypatch.setattr(hub_client, "stop_timer", lambda *a, **k: {"_hub_error": 500})
 
     result = stop_timer(project_dir)
 
     assert result.was_running is False
-    assert tc.read_text() == "i 2026-05-23 10:00:00 acme:auth\n"
+    assert tc.read_text(encoding="utf-8") == "i 2026-05-23 10:00:00 acme:auth\n"
 
 
 def test_auto_timer_activity_hub_error_no_local_write(
@@ -201,7 +201,7 @@ def test_auto_timer_activity_hub_error_no_local_write(
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
     tc = project_dir / "time.timeclock"
-    tc.write_text("; tc\n")
+    tc.write_text("; tc\n", encoding="utf-8")
     auto_file = tmp_path / "auto-timer"
     monkeypatch.setattr("halyard.auto_timer._AUTO_TIMER_FILE", auto_file)
     monkeypatch.setattr("halyard.reports._HALYARD_ACTIVE", tmp_path / "active")
@@ -210,4 +210,4 @@ def test_auto_timer_activity_hub_error_no_local_write(
     auto_timer_activity("acme:auth", tc)
 
     assert not auto_file.exists()
-    assert tc.read_text() == "; tc\n"
+    assert tc.read_text(encoding="utf-8") == "; tc\n"

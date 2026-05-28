@@ -51,7 +51,7 @@ def test_hub_ingest_direct_session(hub, tmp_path: Path):
         time.sleep(0.5)
 
     assert log_path.exists()
-    content = log_path.read_text()
+    content = log_path.read_text(encoding="utf-8")
     # v4.0 FIX: parse_sessions takes the PROJECT DIR, not the file path
     sessions = list(parse_sessions(tmp_path))
     assert len(sessions) == 1, f"Log content: {content!r}"
@@ -115,6 +115,6 @@ def test_hub_ingest_otlp_traces(hub, tmp_path: Path):
     assert log_path.exists()
     # v4.0 FIX: parse_sessions takes the PROJECT DIR
     sessions = list(parse_sessions(tmp_path))
-    assert len(sessions) == 1, f"Log content: {log_path.read_text()!r}"
+    assert len(sessions) == 1, f"Log content: {log_path.read_text(encoding='utf-8')!r}"
     assert sessions[0].input_tokens == 100
     assert sessions[0].output_tokens == 50

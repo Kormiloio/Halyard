@@ -160,7 +160,7 @@ def test_round_trip_all_optional_fields(tmp_path: Path) -> None:
 
 def test_parse_ignores_comments_and_blanks(tmp_path: Path) -> None:
     log = tmp_path / AI_LOG_FILENAME
-    log.write_text(HEADER + "\n\n; a comment\n")
+    log.write_text(HEADER + "\n\n; a comment\n", encoding="utf-8")
     assert parse_sessions(tmp_path) == []
 
 
@@ -168,7 +168,8 @@ def test_parse_ignores_unknown_kv(tmp_path: Path) -> None:
     log = tmp_path / AI_LOG_FILENAME
     log.write_text(
         HEADER + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-opus-4-7 "
-        "5000 1000 0.8250 future_field=xyz\n"
+        "5000 1000 0.8250 future_field=xyz\n",
+        encoding="utf-8",
     )
     sessions = parse_sessions(tmp_path)
     assert len(sessions) == 1
@@ -184,7 +185,7 @@ def test_from_log_line_negative_tokens_quarantines(
 
     quarantine = tmp_path / ".halyard" / "quarantine.log"
     assert quarantine.exists()
-    assert "input_tokens" in quarantine.read_text()
+    assert "input_tokens" in quarantine.read_text(encoding="utf-8")
 
 
 def test_from_log_line_missing_required_field_quarantines(
@@ -197,7 +198,7 @@ def test_from_log_line_missing_required_field_quarantines(
 
     quarantine = tmp_path / ".halyard" / "quarantine.log"
     assert quarantine.exists()
-    assert "expected session line" in quarantine.read_text()
+    assert "expected session line" in quarantine.read_text(encoding="utf-8")
 
 
 def test_from_log_line_bad_cost_quarantines(
@@ -210,7 +211,7 @@ def test_from_log_line_bad_cost_quarantines(
 
     quarantine = tmp_path / ".halyard" / "quarantine.log"
     assert quarantine.exists()
-    assert "invalid cost_usd: nope" in quarantine.read_text()
+    assert "invalid cost_usd: nope" in quarantine.read_text(encoding="utf-8")
 
 
 def test_log_line_error_does_not_write_quarantine(
@@ -231,15 +232,16 @@ def test_write_unattributed_session_creates_user_log(
     path = write_unattributed_session(_session(tool="codex"))
 
     assert path == tmp_path / ".halyard" / "unattributed.log"
-    assert "tool" not in path.read_text()
-    assert "codex" in path.read_text()
+    assert "tool" not in path.read_text(encoding="utf-8")
+    assert "codex" in path.read_text(encoding="utf-8")
 
 
 def test_assign_unattributed_sessions_adds_project(tmp_path: Path) -> None:
     log = tmp_path / AI_LOG_FILENAME
     log.write_text(
         HEADER + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 codex codex-local "
-        "5000 1000 0.0000 source=codex\n"
+        "5000 1000 0.0000 source=codex\n",
+        encoding="utf-8",
     )
 
     changed = assign_unattributed_sessions(tmp_path, "acme:auth")
@@ -271,12 +273,12 @@ def test_append_multiple_sessions(tmp_path: Path) -> None:
 
 
 def test_find_project_dir_finds_halyard_toml(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\n")
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
     assert find_project_dir(tmp_path) == tmp_path
 
 
 def test_find_project_dir_walks_up(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\n")
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
     subdir = tmp_path / "src" / "deep"
     subdir.mkdir(parents=True)
     assert find_project_dir(subdir) == tmp_path
@@ -404,7 +406,7 @@ def test_newline_injection_tool_sanitized(tmp_path: Path) -> None:
     s = _session(tool="cursor\ncost_usd=0.0000 project=evil:client")
     append_session(tmp_path, s)
 
-    raw = (tmp_path / AI_LOG_FILENAME).read_text()
+    raw = (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8")
     # The injected newline must not create extra lines in the log
     data_lines = [ln for ln in raw.splitlines() if ln.startswith("s ")]
     assert len(data_lines) == 1, "Newline injection created extra log lines"
@@ -415,7 +417,7 @@ def test_newline_injection_model_sanitized(tmp_path: Path) -> None:
     s = _session(model="bad model\n s 2026-01-01T00:00:00 2026-01-01T01:00:00 fake fake 0 0 0.0")
     append_session(tmp_path, s)
 
-    raw = (tmp_path / AI_LOG_FILENAME).read_text()
+    raw = (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8")
     data_lines = [ln for ln in raw.splitlines() if ln.startswith("s ")]
     assert len(data_lines) == 1, "Newline injection created extra log lines"
 
@@ -452,7 +454,7 @@ def test_metadata_injection_sanitized(tmp_path: Path, field: str, payload: str) 
     """Whitespace/= injection in any string metadata field must not corrupt the log."""
     s = _session(**{field: payload})
     append_session(tmp_path, s)
-    raw = (tmp_path / AI_LOG_FILENAME).read_text()
+    raw = (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8")
     data_lines = [ln for ln in raw.splitlines() if ln.startswith("s ")]
     assert len(data_lines) == 1
     sessions = parse_sessions(tmp_path)
@@ -532,7 +534,7 @@ def test_quarantine_error_newline_escaped(tmp_path: Path, monkeypatch: pytest.Mo
 
     quarantine = tmp_path / ".halyard" / "quarantine.log"
     assert quarantine.exists()
-    content = quarantine.read_text()
+    content = quarantine.read_text(encoding="utf-8")
     # Must have exactly one "; error=" line — the injected one must be stripped
     error_lines = [ln for ln in content.splitlines() if ln.startswith("; error=")]
     assert len(error_lines) == 1, f"Injected extra error header lines:\n{content!r}"
@@ -554,7 +556,7 @@ def test_quarantine_error_no_carriage_return(
     )
 
     quarantine = tmp_path / ".halyard" / "quarantine.log"
-    content = quarantine.read_text()
+    content = quarantine.read_text(encoding="utf-8")
     assert "\r" not in content
     error_lines = [ln for ln in content.splitlines() if ln.startswith("; error=")]
     assert len(error_lines) == 1
@@ -570,7 +572,8 @@ def test_assign_unattributed_sessions_atomic_write(tmp_path: Path) -> None:
     log = tmp_path / AI_LOG_FILENAME
     log.write_text(
         HEADER + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 codex codex-local "
-        "5000 1000 0.0000 source=codex\n"
+        "5000 1000 0.0000 source=codex\n",
+        encoding="utf-8",
     )
 
     tmp_file = log.with_suffix(".log.tmp")
@@ -634,7 +637,8 @@ def test_attr_method_backfill_set_by_assign_unattributed(tmp_path: Path) -> None
     log = tmp_path / AI_LOG_FILENAME
     log.write_text(
         HEADER + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-sonnet-4-6 "
-        "5000 1000 0.0500 source=hook\n"
+        "5000 1000 0.0500 source=hook\n",
+        encoding="utf-8",
     )
 
     assign_unattributed_sessions(tmp_path, "acme:auth")
@@ -650,7 +654,8 @@ def test_attr_method_backfill_set_by_backfill_window(tmp_path: Path) -> None:
     log = tmp_path / AI_LOG_FILENAME
     log.write_text(
         HEADER + "s 2026-05-06T10:00:00 2026-05-06T10:30:00 claude-code claude-sonnet-4-6 "
-        "5000 1000 0.0500 source=hook\n"
+        "5000 1000 0.0500 source=hook\n",
+        encoding="utf-8",
     )
 
     backfill_window(
@@ -700,7 +705,9 @@ def test_read_active_project_returns_slug(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     active = tmp_path / ".halyard" / "active"
     active.parent.mkdir(parents=True, exist_ok=True)
-    active.write_text("timeclock=/some/path\nslug=acme:auth\nstarted=2026-05-06 10:00:00\n")
+    active.write_text(
+        "timeclock=/some/path\nslug=acme:auth\nstarted=2026-05-06 10:00:00\n", encoding="utf-8"
+    )
 
     assert read_active_project() == "acme:auth"
 
@@ -721,7 +728,7 @@ def test_read_active_project_returns_none_when_no_slug_line(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     active = tmp_path / ".halyard" / "active"
     active.parent.mkdir(parents=True, exist_ok=True)
-    active.write_text("timeclock=/some/path\nstarted=2026-05-06 10:00:00\n")
+    active.write_text("timeclock=/some/path\nstarted=2026-05-06 10:00:00\n", encoding="utf-8")
 
     assert read_active_project() is None
 
@@ -733,7 +740,7 @@ def test_read_active_project_handles_partial_content(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     active = tmp_path / ".halyard" / "active"
     active.parent.mkdir(parents=True, exist_ok=True)
-    active.write_text("")  # simulates truncated write before rename completes
+    active.write_text("", encoding="utf-8")  # simulates truncated write before rename completes
 
     assert read_active_project() is None
 
@@ -753,7 +760,8 @@ def test_streaming_parse_matches_baseline(tmp_path: Path) -> None:
         "project=p1\n"
         "s 2026-05-09T11:00:00 2026-05-09T11:30:00 cursor sonnet 200 80 0.0020 "
         "project=p2\n"
-        "a 0000000bad00 project=spoof\n"  # amendment for nonexistent session — ignored
+        "a 0000000bad00 project=spoof\n",  # amendment for nonexistent session — ignored
+        encoding="utf-8",
     )
     sessions = parse_sessions(tmp_path)
     assert len(sessions) == 2
@@ -769,13 +777,14 @@ def test_streaming_parse_quarantines_malformed(
     log = tmp_path / AI_LOG_FILENAME
     log.write_text(
         "s 2026-05-09T10:00:00 2026-05-09T10:15:00 claude-code sonnet 100 50 0.0010\n"
-        "s not-a-real-line\n"
+        "s not-a-real-line\n",
+        encoding="utf-8",
     )
     sessions = parse_sessions(tmp_path)
     assert len(sessions) == 1
     quarantine = tmp_path / ".halyard" / "quarantine.log"
     assert quarantine.exists()
-    assert "s not-a-real-line" in quarantine.read_text()
+    assert "s not-a-real-line" in quarantine.read_text(encoding="utf-8")
 
 
 def test_streaming_parse_large_log_smoke(tmp_path: Path) -> None:
@@ -833,7 +842,8 @@ def test_legacy_underscore_note_still_decodes_to_spaces(tmp_path: Path) -> None:
     log = tmp_path / AI_LOG_FILENAME
     log.write_text(
         "s 2026-05-09T10:00:00 2026-05-09T10:15:00 claude-code sonnet 100 50 0.0010 "
-        "note=quick_check resume_command=halyard_resume_acme\n"
+        "note=quick_check resume_command=halyard_resume_acme\n",
+        encoding="utf-8",
     )
     parsed = parse_sessions(tmp_path)[0]
     assert parsed.note == "quick check"
@@ -853,6 +863,6 @@ def test_legacy_log_line_hash_stable(tmp_path: Path) -> None:
         "note=quick_check"
     )
     log = tmp_path / AI_LOG_FILENAME
-    log.write_text(legacy_line + "\n")
+    log.write_text(legacy_line + "\n", encoding="utf-8")
     parsed = parse_sessions(tmp_path)[0]
     assert parsed._raw_hash == session_hash(legacy_line)

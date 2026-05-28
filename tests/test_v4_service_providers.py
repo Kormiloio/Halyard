@@ -28,7 +28,7 @@ def test_systemd_provider_install(mock_subprocess, tmp_path):
 
         assert url == "http://127.0.0.1:8000/"
         assert provider.unit_path.exists()
-        content = provider.unit_path.read_text()
+        content = provider.unit_path.read_text(encoding="utf-8")
         assert "ExecStart=" in content
         assert "--port 8000" in content
 
@@ -49,7 +49,7 @@ def test_launchd_provider_install(mock_subprocess, tmp_path):
 
         assert url == "http://127.0.0.1:9000/"
         assert provider.plist_path.exists()
-        content = provider.plist_path.read_text()
+        content = provider.plist_path.read_text(encoding="utf-8")
         assert "<string>--port</string>" in content
         assert "<string>9000</string>" in content
 
@@ -63,7 +63,9 @@ def test_systemd_status_parsing(mock_subprocess, tmp_path):
     with patch("pathlib.Path.home", return_value=tmp_path):
         provider = SystemdProvider("halyard-test")
         provider.unit_path.parent.mkdir(parents=True)
-        provider.unit_path.write_text("ExecStart=/bin/halyard dashboard --port 1234")
+        provider.unit_path.write_text(
+            "ExecStart=/bin/halyard dashboard --port 1234", encoding="utf-8"
+        )
 
         assert provider.get_port() == 1234
 

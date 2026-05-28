@@ -53,9 +53,9 @@ _EXPECTED_PANELS = {
 
 
 def _init_project(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\n")
-    (tmp_path / "time.timeclock").write_text("; time\n")
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp_path / "time.timeclock").write_text("; time\n", encoding="utf-8")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
 
 
 def _render(tmp_path: Path) -> str:

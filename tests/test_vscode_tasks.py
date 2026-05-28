@@ -21,7 +21,7 @@ def test_install_vscode_tasks_creates_record_task(
     path = _do_install_vscode_tasks()
 
     assert path == tmp_path / ".vscode" / "tasks.json"
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     task = next(t for t in data["tasks"] if t["label"] == "Halyard: Record VS Code AI session")
     assert task["command"] == "/bin/halyard"
     assert task["args"][:3] == ["record-session", "--tool", "vscode"]
@@ -46,13 +46,14 @@ def test_install_vscode_tasks_preserves_existing_tasks(
                 "tasks": [{"label": "Existing", "type": "shell", "command": "true"}],
                 "inputs": [{"id": "existing", "type": "promptString"}],
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
     _do_install_vscode_tasks()
     _do_install_vscode_tasks()
 
-    data = json.loads((vscode / "tasks.json").read_text())
+    data = json.loads((vscode / "tasks.json").read_text(encoding="utf-8"))
     labels = [task["label"] for task in data["tasks"]]
     assert labels.count("Existing") == 1
     assert labels.count("Halyard: Record VS Code AI session") == 1

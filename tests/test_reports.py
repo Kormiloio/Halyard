@@ -20,9 +20,9 @@ from halyard.reports import (
 
 
 def _init_project(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\n")
-    (tmp_path / "time.timeclock").write_text("; time\n")
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp_path / "time.timeclock").write_text("; time\n", encoding="utf-8")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
 
 
 def _session(project: str | None, cost: float = 1.0) -> AiSession:
@@ -88,7 +88,8 @@ def test_health_checks_detect_project_hook(tmp_path: Path) -> None:
                     "Stop": [{"hooks": [{"type": "command", "command": "halyard cc-hook"}]}],
                 }
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
     with patch("halyard.reports.Path.home", return_value=tmp_path / "home"):
@@ -131,7 +132,8 @@ def test_health_checks_detect_hook_with_full_binary_path(tmp_path: Path) -> None
                     ],
                 }
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
     with patch("halyard.reports.Path.home", return_value=home):
@@ -144,7 +146,8 @@ def test_health_checks_detect_hook_with_full_binary_path(tmp_path: Path) -> None
 def test_read_active_timer(tmp_path: Path) -> None:
     active = tmp_path / "active"
     active.write_text(
-        "timeclock=/tmp/time.timeclock\nslug=acme:auth\nstarted=2026-05-07 10:00:00\n"
+        "timeclock=/tmp/time.timeclock\nslug=acme:auth\nstarted=2026-05-07 10:00:00\n",
+        encoding="utf-8",
     )
 
     timer = read_active_timer(active)
@@ -156,7 +159,8 @@ def test_read_active_timer(tmp_path: Path) -> None:
 def test_parse_timeclock_pairs_completed_and_open_entries(tmp_path: Path) -> None:
     timeclock = tmp_path / "time.timeclock"
     timeclock.write_text(
-        "i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 10:30:00\ni 2026-05-07 11:00:00 acme:auth\n"
+        "i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 10:30:00\ni 2026-05-07 11:00:00 acme:auth\n",
+        encoding="utf-8",
     )
 
     entries = parse_timeclock(timeclock, now=datetime(2026, 5, 7, 11, 45))
@@ -173,7 +177,8 @@ def test_build_human_time_report_summarizes_today_and_month(tmp_path: Path) -> N
         "i 2026-05-07 09:00:00 acme:auth\n"
         "o 2026-05-07 10:30:00\n"
         "i 2026-05-06 09:00:00 globex:reports\n"
-        "o 2026-05-06 10:00:00\n"
+        "o 2026-05-06 10:00:00\n",
+        encoding="utf-8",
     )
 
     report = build_human_time_report(tmp_path, now=datetime(2026, 5, 7, 12, 0))

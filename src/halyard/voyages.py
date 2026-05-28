@@ -73,7 +73,7 @@ def read_voyages(project_dir: Path) -> list[VoyageEntry]:
     import tomllib
 
     try:
-        data = tomllib.loads(path.read_text())
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError):
         return []
 

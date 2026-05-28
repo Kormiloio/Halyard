@@ -101,7 +101,7 @@ def _check_pricing_hash(body: bytes) -> bool:
         # First fetch — no baseline yet; accept silently.
         return True
 
-    stored = hash_path.read_text().strip()
+    stored = hash_path.read_text(encoding="utf-8").strip()
     if not stored:
         return True
 
@@ -152,7 +152,7 @@ def _load_local_raw() -> dict[str, object] | None:
     if not _LOCAL_PRICING_FILE.exists():
         return None
     try:
-        result: dict[str, object] = tomllib.loads(_LOCAL_PRICING_FILE.read_text())
+        result: dict[str, object] = tomllib.loads(_LOCAL_PRICING_FILE.read_text(encoding="utf-8"))
         return result
     except (tomllib.TOMLDecodeError, ValueError, OSError) as e:
         _warn(
@@ -346,7 +346,7 @@ def update_pricing(timeout: int = 5, accept_changed: bool = False) -> tuple[int,
     new_hash = hashlib.sha256(body).hexdigest()
     hash_path = _pricing_hash_path()
     hash_path.parent.mkdir(parents=True, exist_ok=True)
-    hash_path.write_text(new_hash + "\n")
+    hash_path.write_text(new_hash + "\n", encoding="utf-8")
 
     # Invalidate process cache (rates + multipliers together)
     invalidate_pricing_cache()

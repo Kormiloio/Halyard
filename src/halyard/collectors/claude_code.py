@@ -92,7 +92,7 @@ def record_session_start() -> int:
         "start": datetime.now().isoformat(timespec="seconds"),
         "sha_at_start": head_sha(cwd),
     }
-    _CC_SESSION_FILE.write_text(json.dumps(state))
+    _CC_SESSION_FILE.write_text(json.dumps(state), encoding="utf-8")
 
     # Auto human timer — close stale window, then open/refresh for this session
     try:
@@ -364,7 +364,7 @@ def _read_session_state() -> dict[str, Any]:
     if not _CC_SESSION_FILE.exists():
         return {}
     try:
-        raw = _CC_SESSION_FILE.read_text().strip()
+        raw = _CC_SESSION_FILE.read_text(encoding="utf-8").strip()
     except OSError:
         return {}
     try:
@@ -640,7 +640,7 @@ def _read_model_from_settings(project_dir: Path) -> str | None:
     ]:
         if path.exists():
             try:
-                data = json.loads(path.read_text())
+                data = json.loads(path.read_text(encoding="utf-8"))
                 model = data.get("model")
                 if model and model_is_known(model):
                     return str(model)

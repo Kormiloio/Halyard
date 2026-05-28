@@ -30,16 +30,17 @@ def hub_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("halyard.reports._HALYARD_ACTIVE", home / ".halyard" / "active")
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    (project_dir / "halyard.toml").write_text("[business]\n")
+    (project_dir / "halyard.toml").write_text("[business]\n", encoding="utf-8")
     tc = project_dir / "time.timeclock"
-    tc.write_text("; timeclock\n")
+    tc.write_text("; timeclock\n", encoding="utf-8")
     return project_dir, tc, home
 
 
 def _write_presence_file(home: Path, project: str, tc: Path, started: datetime, last: datetime):
     (home / ".halyard" / "auto-timer").write_text(
         f"project={project}\ntimeclock={tc}\n"
-        f"started={started.strftime(_FMT)}\nlast_activity={last.strftime(_FMT)}\n"
+        f"started={started.strftime(_FMT)}\nlast_activity={last.strftime(_FMT)}\n",
+        encoding="utf-8",
     )
 
 
@@ -48,7 +49,9 @@ def test_reconcile_resumes_recent_window(hub_env):
     now = datetime.now()
     started = now - timedelta(minutes=10)
     last = now - timedelta(minutes=5)
-    tc.write_text(f"; timeclock\ni {started.strftime(_FMT)} kormilo/halyard  ;auto\n")
+    tc.write_text(
+        f"; timeclock\ni {started.strftime(_FMT)} kormilo/halyard  ;auto\n", encoding="utf-8"
+    )
     _write_presence_file(home, "kormilo/halyard", tc, started, last)
 
     server = HubServer(project_dir=project_dir, port=0)  # __init__ reconciles
@@ -56,7 +59,7 @@ def test_reconcile_resumes_recent_window(hub_env):
     assert server.state.auto_project == "kormilo/halyard"
     assert server.state.auto_timeclock == tc
     # No new clock-out written; the file is preserved for the resumed window.
-    assert "o " not in tc.read_text()
+    assert "o " not in tc.read_text(encoding="utf-8")
     assert read_presence() != {}
 
 
@@ -65,20 +68,22 @@ def test_reconcile_closes_stale_window(hub_env):
     now = datetime.now()
     started = now - timedelta(minutes=90)
     last = now - timedelta(minutes=INACTIVITY_MINUTES + 20)
-    tc.write_text(f"; timeclock\ni {started.strftime(_FMT)} kormilo/halyard  ;auto\n")
+    tc.write_text(
+        f"; timeclock\ni {started.strftime(_FMT)} kormilo/halyard  ;auto\n", encoding="utf-8"
+    )
     _write_presence_file(home, "kormilo/halyard", tc, started, last)
 
     server = HubServer(project_dir=project_dir, port=0)
 
     assert server.state.auto_project is None
     # The orphaned open is closed at its last known activity.
-    assert f"o {last.strftime(_FMT)}" in tc.read_text()
+    assert f"o {last.strftime(_FMT)}" in tc.read_text(encoding="utf-8")
     assert read_presence() == {}
 
 
 def test_reconcile_clears_malformed_file(hub_env):
     project_dir, _tc, home = hub_env
-    (home / ".halyard" / "auto-timer").write_text("garbage=value\n")
+    (home / ".halyard" / "auto-timer").write_text("garbage=value\n", encoding="utf-8")
 
     server = HubServer(project_dir=project_dir, port=0)
 
@@ -95,16 +100,16 @@ def test_presence_persist_roundtrip(hub_env):
     state = read_presence()
     assert state["project"] == "kormilo/halyard"
     assert state["started"] == t0.strftime(_FMT)
-    assert tc.read_text().count("i ") == 1
+    assert tc.read_text(encoding="utf-8").count("i ") == 1
 
     server._record_presence_activity("kormilo/halyard", tc, now=t0 + timedelta(minutes=5))
     # Still one clock-in; only last_activity advanced.
-    assert tc.read_text().count("i ") == 1
+    assert tc.read_text(encoding="utf-8").count("i ") == 1
     assert read_presence()["last_activity"] == (t0 + timedelta(minutes=5)).strftime(_FMT)
 
     server._close_presence_now(now=t0 + timedelta(minutes=10))
     assert read_presence() == {}
-    assert "o 2026-05-20 10:10:00" in tc.read_text()
+    assert "o 2026-05-20 10:10:00" in tc.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +306,8 @@ def test_check_reports_anomalies(tmp_path: Path):
     tc.write_text(
         "i 2026-05-20 10:00:00 kormilo/halyard  ;auto\n"
         "i 2026-05-20 10:10:00 kormilo/halyard  ;auto\n"
-        "o 2026-05-20 10:30:00\n"
+        "o 2026-05-20 10:30:00\n",
+        encoding="utf-8",
     )
     result = CliRunner().invoke(app, ["timeclock", "check", "--timeclock", str(tc)])
     assert result.exit_code == 0
@@ -316,11 +322,11 @@ def test_repair_dry_run_does_not_write(tmp_path: Path):
         "i 2026-05-20 10:10:00 kormilo/halyard  ;auto\n"
         "o 2026-05-20 10:30:00\n"
     )
-    tc.write_text(body)
+    tc.write_text(body, encoding="utf-8")
     result = CliRunner().invoke(app, ["timeclock", "repair", "--timeclock", str(tc)])
     assert result.exit_code == 0
     assert "Dry run" in result.stdout
-    assert tc.read_text() == body  # untouched
+    assert tc.read_text(encoding="utf-8") == body  # untouched
 
 
 def test_repair_apply_writes_and_backs_up(tmp_path: Path):
@@ -329,10 +335,13 @@ def test_repair_apply_writes_and_backs_up(tmp_path: Path):
         "i 2026-05-20 10:00:00 kormilo/halyard  ;auto\n"
         "i 2026-05-20 10:10:00 kormilo/halyard  ;auto\n"
         "i 2026-05-20 10:25:00 kormilo/halyard  ;auto\n"
-        "o 2026-05-20 10:30:00\n"
+        "o 2026-05-20 10:30:00\n",
+        encoding="utf-8",
     )
     result = CliRunner().invoke(app, ["timeclock", "repair", "--timeclock", str(tc), "--apply"])
     assert result.exit_code == 0
-    assert _pairs(tc.read_text().splitlines()) == [("2026-05-20 10:00:00", "2026-05-20 10:30:00")]
+    assert _pairs(tc.read_text(encoding="utf-8").splitlines()) == [
+        ("2026-05-20 10:00:00", "2026-05-20 10:30:00")
+    ]
     backups = list(tmp_path.glob("time.timeclock.bak-*"))
     assert len(backups) == 1

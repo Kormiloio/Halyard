@@ -162,7 +162,7 @@ def test_v31_friction_does_not_leak_gh_freetext(trial: int, tmp_path: Path) -> N
     # 3. The log `a` amendment record must not contain the marker.
     proj = tmp_path / "p"
     proj.mkdir(parents=True, exist_ok=True)
-    (proj / "ai-sessions.log").write_text("; log\n")
+    (proj / "ai-sessions.log").write_text("; log\n", encoding="utf-8")
     result = ResolutionResult(
         session_hash="deadbeef",
         pr_ref="acme/repo#42",
@@ -174,7 +174,7 @@ def test_v31_friction_does_not_leak_gh_freetext(trial: int, tmp_path: Path) -> N
         review_decision=friction.review_decision,
     )
     _write_amendment(proj, result)
-    assert m not in (proj / "ai-sessions.log").read_text()
+    assert m not in (proj / "ai-sessions.log").read_text(encoding="utf-8")
 
     # 4. Rendered surfaces, with a session carrying the friction values.
     s = AiSession(
@@ -215,7 +215,8 @@ def test_shell_history_returns_only_an_integer(
     # Drop the same marker into shell history; the function must not echo it.
     bash_history = tmp_path / ".bash_history"
     bash_history.write_text(
-        "SECRET-A1B2=value pytest tests/\npytest tests/ # comment SECRET-C3D4\necho SECRET-E5F6\n"
+        "SECRET-A1B2=value pytest tests/\npytest tests/ # comment SECRET-C3D4\necho SECRET-E5F6\n",
+        encoding="utf-8",
     )
 
     now = datetime(2026, 5, 14, 12)

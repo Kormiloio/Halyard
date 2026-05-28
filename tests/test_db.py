@@ -44,11 +44,11 @@ i 2026-01-02 10:00:00 test:proj
 
 
 def _setup_project(tmp_path: Path, session_lines: list[str], tc_text: str = "") -> Path:
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
     log = "; header\n" + "\n".join(session_lines) + "\n"
-    (tmp_path / "ai-sessions.log").write_text(log)
+    (tmp_path / "ai-sessions.log").write_text(log, encoding="utf-8")
     if tc_text:
-        (tmp_path / "time.timeclock").write_text(tc_text)
+        (tmp_path / "time.timeclock").write_text(tc_text, encoding="utf-8")
     return tmp_path
 
 
@@ -134,7 +134,7 @@ def test_sync_all_writes_sync_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 def test_sync_all_no_log_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("halyard.db._DB_PATH", tmp_path / "cache.db")
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
 
     result = sync_all()
     assert result.sessions_added == 0
@@ -296,7 +296,7 @@ def test_sync_applies_amendment_on_resync(tmp_path: Path, monkeypatch: pytest.Mo
         f"a {line_hash} pr_ref=org/repo#7 pr_state=merged outcome_resolved_at=2026-01-01T12:00:00"
     )
     log_path = tmp_path / "ai-sessions.log"
-    log_path.write_text(log_path.read_text() + amendment + "\n")
+    log_path.write_text(log_path.read_text(encoding="utf-8") + amendment + "\n")
 
     # Re-sync — amended pr_ref should be reflected in the cache
     sync_all()

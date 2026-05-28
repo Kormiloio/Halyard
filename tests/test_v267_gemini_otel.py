@@ -74,7 +74,8 @@ def test_collector_enriches_and_leaves_agent_active_untouched(tmp_path: Path) ->
     (workspace / ".gemini").mkdir(parents=True)
     out = workspace / "tel.log"
     (workspace / ".gemini" / "settings.json").write_text(
-        json.dumps({"telemetry": {"enabled": True, "target": "local", "outfile": str(out)}})
+        json.dumps({"telemetry": {"enabled": True, "target": "local", "outfile": str(out)}}),
+        encoding="utf-8",
     )
     _write_outfile(
         out,
@@ -113,7 +114,7 @@ def test_bounded_read_malformed_and_oversized(
     # tool record — the bad region is skipped, the rest still parses.
     good = json.dumps(_rec("S1", "gemini_cli.api_response", 5000), indent=2)
     tool = json.dumps(_rec("S1", "gemini_cli.tool_call", 2000), indent=2)
-    out.write_text(good + "\n{ this is not json (((\n" + tool + "\n")
+    out.write_text(good + "\n{ this is not json (((\n" + tool + "\n", encoding="utf-8")
     assert gemini_otel.read_otel_durations(out, "S1") == (5, 2)
 
     # Oversized → fail closed to (None, None), no crash.
@@ -178,11 +179,12 @@ def test_install_gemini_telemetry_no_op_and_preserves_foreign(
             {"defaultModel": "x", "telemetry": {"otlpEndpoint": "http://foreign:4317"}},
             indent=2,
         )
-        + "\n"
+        + "\n",
+        encoding="utf-8",
     )
 
     cli_hooks._do_install_gemini_telemetry()
-    data = json.loads(settings.read_text())
+    data = json.loads(settings.read_text(encoding="utf-8"))
     assert data["telemetry"]["enabled"] is True
     assert data["telemetry"]["target"] == "local"
     assert data["telemetry"]["logPrompts"] is False
@@ -191,9 +193,9 @@ def test_install_gemini_telemetry_no_op_and_preserves_foreign(
     assert data["defaultModel"] == "x"
 
     # Byte-stable no-op on a second run.
-    before = settings.read_text()
+    before = settings.read_text(encoding="utf-8")
     cli_hooks._do_install_gemini_telemetry()
-    assert settings.read_text() == before
+    assert settings.read_text(encoding="utf-8") == before
 
 
 def test_install_gemini_telemetry_refuses_bad_settings(
@@ -206,11 +208,11 @@ def test_install_gemini_telemetry_refuses_bad_settings(
     monkeypatch.setattr(Path, "home", lambda: home)
     settings = home / ".gemini" / "settings.json"
 
-    settings.write_text("{ not valid json")
+    settings.write_text("{ not valid json", encoding="utf-8")
     with pytest.raises(cli_hooks.HookWriteError):
         cli_hooks._do_install_gemini_telemetry()
 
-    settings.write_text(json.dumps({"telemetry": "not-an-object"}))
+    settings.write_text(json.dumps({"telemetry": "not-an-object"}), encoding="utf-8")
     with pytest.raises(cli_hooks.HookWriteError):
         cli_hooks._do_install_gemini_telemetry()
 
@@ -238,7 +240,8 @@ def test_doctor_nudge_when_hook_on_telemetry_off(
                     ],
                 }
             }
-        )
+        ),
+        encoding="utf-8",
     )
     report = build_doctor_report(start=tmp_path, tool="gemini")
     tel = [c for c in report.checks if c.id == "telemetry.gemini"]

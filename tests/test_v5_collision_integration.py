@@ -17,9 +17,9 @@ from halyard.hub_server import HubServer
 @pytest.fixture()
 def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # Initialize a Halyard project in tmp_path
-    (tmp_path / "halyard.toml").write_text("[project]\nslug='test-proj'")
-    (tmp_path / "projects.toml").write_text("[[project]]\nslug='test-proj'")
-    (tmp_path / "ai-sessions.log").write_text("")
+    (tmp_path / "halyard.toml").write_text("[project]\nslug='test-proj'", encoding="utf-8")
+    (tmp_path / "projects.toml").write_text("[[project]]\nslug='test-proj'", encoding="utf-8")
+    (tmp_path / "ai-sessions.log").write_text("", encoding="utf-8")
 
     # Mock DB path so tests don't touch the real user cache
     monkeypatch.setattr("halyard.db._DB_PATH", tmp_path / "cache.db")

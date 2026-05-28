@@ -33,7 +33,7 @@ def test_worker_tick_swallows_and_logs_errors(
     # Must not raise — the daemon thread has to survive a bad tick.
     server._worker_tick()
 
-    logged = diag.read_text()
+    logged = diag.read_text(encoding="utf-8")
     assert "hub_server: worker tick failed" in logged
     assert "malformed session blew up flush" in logged
 

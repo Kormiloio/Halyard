@@ -96,7 +96,8 @@ def test_count_test_runs_counts_canonical_test_commands(
         "echo hello\n"
         "cargo test\n"
         "cargo build\n"  # not a test
-        "make test\n"
+        "make test\n",
+        encoding="utf-8",
     )
 
     now = datetime(2026, 5, 14, 12)
@@ -118,7 +119,8 @@ def test_count_test_runs_respects_zsh_timestamps(
     zsh_history.write_text(
         f": {in_window}:0;pytest\n"
         f": {out_window}:0;pytest\n"  # excluded by window
-        f": {in_window}:0;npm test\n"
+        f": {in_window}:0;npm test\n",
+        encoding="utf-8",
     )
 
     now = datetime(2026, 5, 14, 12)
@@ -138,7 +140,7 @@ def test_count_test_runs_never_returns_raw_lines(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.delenv("HISTFILE", raising=False)
     bash_history = tmp_path / ".bash_history"
-    bash_history.write_text("OPENAI_API_KEY=sk-SECRETSECRETSECRET pytest\n")
+    bash_history.write_text("OPENAI_API_KEY=sk-SECRETSECRETSECRET pytest\n", encoding="utf-8")
 
     now = datetime(2026, 5, 14, 12)
     result = count_test_runs_in_window(now - timedelta(hours=1), now)
@@ -155,7 +157,7 @@ def test_count_test_runs_handles_unreadable_file(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.delenv("HISTFILE", raising=False)
     bash_history = tmp_path / ".bash_history"
-    bash_history.write_text("pytest tests/")
+    bash_history.write_text("pytest tests/", encoding="utf-8")
 
     # Patch the candidate-paths function to return a path whose open() raises.
     real_open = Path.open

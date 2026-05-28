@@ -172,7 +172,7 @@ def _transcript(tmp: Path, names: list[str]) -> str:
         },
     ]
     p = tmp / "t.jsonl"
-    p.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    p.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     return str(p)
 
 

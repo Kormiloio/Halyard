@@ -13,9 +13,9 @@ from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
 
 def _proj(p: Path) -> Path:
     p.mkdir(parents=True, exist_ok=True)
-    (p / "halyard.toml").write_text("[business]\n")
-    (p / "time.timeclock").write_text("; t\n")
-    (p / AI_LOG_FILENAME).write_text(HEADER)
+    (p / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (p / "time.timeclock").write_text("; t\n", encoding="utf-8")
+    (p / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     return p
 
 
@@ -59,7 +59,7 @@ def test_aggregate_dirs_unions_registry_and_hub_skips_logless(
     b = _proj(tmp_path / "b")
     logless = tmp_path / "c"
     logless.mkdir()
-    (logless / "halyard.toml").write_text("[business]\n")  # no ai-sessions.log
+    (logless / "halyard.toml").write_text("[business]\n", encoding="utf-8")  # no ai-sessions.log
     monkeypatch.setattr("halyard.registry.read_registry", lambda: [a, logless])
     monkeypatch.setattr("halyard.hub.find_hub", lambda: b)
 
@@ -124,7 +124,7 @@ def test_cursor_drops_implausible_synthetic(
 
     proj = _proj(tmp_path / "proj")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text("2026-05-07T10:00:00")  # frozen ancient start
+    state_file.write_text("2026-05-07T10:00:00", encoding="utf-8")  # frozen ancient start
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
     payload = {
@@ -146,4 +146,4 @@ def test_register_project_refuses_tempdir(tmp_path: Path) -> None:
     # tmp_path is under the system temp dir -> must be ignored.
     registry.register_project(tmp_path)
     raw = registry.REGISTRY_PATH
-    assert (not raw.exists()) or str(tmp_path.resolve()) not in raw.read_text()
+    assert (not raw.exists()) or str(tmp_path.resolve()) not in raw.read_text(encoding="utf-8")

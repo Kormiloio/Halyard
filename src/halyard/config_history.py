@@ -202,7 +202,7 @@ def _parse_invoice_meta(
     or "inferred" when parsed from the rendered markdown table (pre-v2.18).
     """
     try:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
     except OSError:
         return None
 

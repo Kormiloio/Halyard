@@ -253,7 +253,7 @@ def read_active_timer(
     # Derive that mode, but never let a (tamperable) in-file path
     # downgrade verification below an existing sidecar — sidecar
     # presence proves integrity was enabled.
-    raw_first = active_path.read_text()
+    raw_first = active_path.read_text(encoding="utf-8")
     tc = next(
         (ln.split("=", 1)[1] for ln in raw_first.splitlines() if ln.startswith("timeclock=")),
         None,
@@ -384,7 +384,7 @@ def parse_timeclock(
     entries: list[tuple[datetime, datetime, str]] = []
     open_entry: tuple[datetime, str] | None = None
 
-    for raw_line in path.read_text().splitlines():
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith(";"):
             continue
@@ -428,7 +428,7 @@ def timeclock_anomalies(path: Path) -> tuple[int, int]:
     orphan_closes = 0
     is_open = False
     try:
-        lines = path.read_text().splitlines()
+        lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
         return (0, 0)
     for raw_line in lines:
@@ -853,7 +853,7 @@ def _cursor_hook_check() -> HealthCheck:
             "Cursor hook", "neutral", "N · not installed — run halyard install-cursor-hook"
         )
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, ValueError):
         return HealthCheck("Cursor hook", "error", "hooks.json is malformed")
     hooks: dict[str, object] = data.get("hooks", {})
@@ -878,7 +878,7 @@ def _gemini_hook_check() -> HealthCheck:
             "Gemini CLI hook", "neutral", "N · not installed — run halyard install-gemini-hook"
         )
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, ValueError):
         return HealthCheck("Gemini CLI hook", "error", "settings.json is malformed")
     hooks: dict[str, object] = data.get("hooks", {})
@@ -901,7 +901,7 @@ def _settings_has_halyard_hooks(path: Path) -> bool:
     if not path.exists():
         return False
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, ValueError):
         return False
 

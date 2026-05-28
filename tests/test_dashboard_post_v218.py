@@ -24,9 +24,9 @@ def _isolate_active_timer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def _init_project(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
-    (tmp_path / "time.timeclock").write_text("; time\n")
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
+    (tmp_path / "time.timeclock").write_text("; time\n", encoding="utf-8")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
 
 
 def _make_server(tmp_path: Path) -> tuple[ThreadingHTTPServer, int]:
@@ -84,7 +84,7 @@ def test_api_start_writes_timeclock(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
     # Server redirects to / after success
     assert status in (302, 200, 303)
-    tc = (tmp_path / "time.timeclock").read_text()
+    tc = (tmp_path / "time.timeclock").read_text(encoding="utf-8")
     assert "acme:auth" in tc
 
 
@@ -95,7 +95,7 @@ def test_api_start_converts_slash_to_colon(tmp_path: Path, monkeypatch: pytest.M
 
     _post(server, port, "/api/start", b"project=client/project")
 
-    tc = (tmp_path / "time.timeclock").read_text()
+    tc = (tmp_path / "time.timeclock").read_text(encoding="utf-8")
     assert "client:project" in tc
 
 
@@ -110,16 +110,18 @@ def test_api_stop_closes_timeclock(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
     # Open a timer first — write both the timeclock entry and the active-timer state file
     tc_path = tmp_path / "time.timeclock"
-    tc_path.write_text("; time\ni 2026-05-01 09:00:00 acme:auth\n")
+    tc_path.write_text("; time\ni 2026-05-01 09:00:00 acme:auth\n", encoding="utf-8")
     active_path = tmp_path / ".halyard" / "active"
     active_path.parent.mkdir(parents=True, exist_ok=True)
-    active_path.write_text(f"timeclock={tc_path}\nslug=acme:auth\nstarted=2026-05-01 09:00:00\n")
+    active_path.write_text(
+        f"timeclock={tc_path}\nslug=acme:auth\nstarted=2026-05-01 09:00:00\n", encoding="utf-8"
+    )
 
     server, port = _make_server(tmp_path)
     status = _post(server, port, "/api/stop", b"")
 
     assert status in (302, 200, 303)
-    tc = tc_path.read_text()
+    tc = tc_path.read_text(encoding="utf-8")
     # An "o" clock-out line should have been appended
     assert "o " in tc
 
@@ -135,9 +137,9 @@ def test_api_start_noslash_slug_ignored(tmp_path: Path, monkeypatch: pytest.Monk
     _init_project(tmp_path)
     server, port = _make_server(tmp_path)
 
-    tc_before = (tmp_path / "time.timeclock").read_text()
+    tc_before = (tmp_path / "time.timeclock").read_text(encoding="utf-8")
     _post(server, port, "/api/start", b"project=noslug")
-    tc_after = (tmp_path / "time.timeclock").read_text()
+    tc_after = (tmp_path / "time.timeclock").read_text(encoding="utf-8")
 
     # No new timeclock entry should have been written
     assert tc_before == tc_after
@@ -149,8 +151,8 @@ def test_api_start_leading_slash_ignored(tmp_path: Path, monkeypatch: pytest.Mon
     _init_project(tmp_path)
     server, port = _make_server(tmp_path)
 
-    tc_before = (tmp_path / "time.timeclock").read_text()
+    tc_before = (tmp_path / "time.timeclock").read_text(encoding="utf-8")
     _post(server, port, "/api/start", b"project=/leading/path")
-    tc_after = (tmp_path / "time.timeclock").read_text()
+    tc_after = (tmp_path / "time.timeclock").read_text(encoding="utf-8")
 
     assert tc_before == tc_after

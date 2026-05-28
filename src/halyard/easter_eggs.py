@@ -220,12 +220,16 @@ _COST_LORE: dict[int, str] = {
 def _load_seen() -> set[str]:
     if not _MILESTONES_FILE.exists():
         return set()
-    return {line.strip() for line in _MILESTONES_FILE.read_text().splitlines() if line.strip()}
+    return {
+        line.strip()
+        for line in _MILESTONES_FILE.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
 
 
 def _save_seen(seen: set[str]) -> None:
     _MILESTONES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _MILESTONES_FILE.write_text("\n".join(sorted(seen)) + "\n")
+    _MILESTONES_FILE.write_text("\n".join(sorted(seen)) + "\n", encoding="utf-8")
 
 
 def check_milestones(session_count: int, total_cost: float) -> list[str]:

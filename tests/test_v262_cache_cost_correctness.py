@@ -101,10 +101,11 @@ def _patch_gemini_stdin(payload: dict) -> patch:  # type: ignore[type-arg]
 
 def _halyard_project(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
-    (path / "halyard.toml").write_text("[project]\nslug = 'test'\n")
+    (path / "halyard.toml").write_text("[project]\nslug = 'test'\n", encoding="utf-8")
     (path / "ai-sessions.log").write_text(
         "; Halyard AI session log\n"
-        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n"
+        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n",
+        encoding="utf-8",
     )
     return path
 
@@ -194,7 +195,7 @@ def test_codex_gross_input_normalised_and_cache_write_none(tmp_path: Path) -> No
         },
     ]
     path = tmp_path / f"rollout-2026-05-06T19-40-14-{uuid}.jsonl"
-    path.write_text("\n".join(json.dumps(e) for e in events))
+    path.write_text("\n".join(json.dumps(e) for e in events), encoding="utf-8")
 
     result = _parse_session_file(path)
     assert result is not None

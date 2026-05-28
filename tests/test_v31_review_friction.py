@@ -304,7 +304,7 @@ def test_friction_amendment_does_not_mutate_original_s_line(tmp_path: Path) -> N
     proj.mkdir(parents=True)
     log = proj / "ai-sessions.log"
     original = "s 2026-05-01T10:00 2026-05-01T11:00 claude-code sonnet 10 10 1.0\n"
-    log.write_text("; log\n" + original)
+    log.write_text("; log\n" + original, encoding="utf-8")
     _write_amendment(
         proj,
         ResolutionResult(
@@ -318,7 +318,7 @@ def test_friction_amendment_does_not_mutate_original_s_line(tmp_path: Path) -> N
             review_decision="APPROVED",
         ),
     )
-    text = log.read_text()
+    text = log.read_text(encoding="utf-8")
     assert original in text  # s line byte-intact
     assert "a abc123" in text
     assert "review_comments=3" in text and "review_rounds=1" in text
@@ -365,8 +365,8 @@ def test_outcomes_disabled_makes_no_gh_calls(tmp_path: Path) -> None:
     from halyard.cli_outcome import app
 
     proj = tmp_path
-    (proj / "halyard.toml").write_text("[outcomes]\nenabled = false\n")
-    (proj / "ai-sessions.log").write_text("; log\n")
+    (proj / "halyard.toml").write_text("[outcomes]\nenabled = false\n", encoding="utf-8")
+    (proj / "ai-sessions.log").write_text("; log\n", encoding="utf-8")
 
     with (
         patch("halyard.ai_log.find_project_dir", return_value=proj),

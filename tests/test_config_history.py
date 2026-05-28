@@ -82,8 +82,8 @@ total: 1500.00
 
 
 def _setup_project(tmp_path: Path, clients_toml: str = _CLIENTS_TOML_WITH_HISTORY) -> Path:
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
-    (tmp_path / "clients.toml").write_text(clients_toml)
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
+    (tmp_path / "clients.toml").write_text(clients_toml, encoding="utf-8")
     (tmp_path / "invoices").mkdir()
     return tmp_path
 
@@ -151,14 +151,16 @@ total: 50.00
 
 def test_audit_invoices_clean(tmp_path: Path) -> None:
     _setup_project(tmp_path)
-    (tmp_path / "invoices" / "2025-06-001-acme.md").write_text(_INVOICE_MD)
+    (tmp_path / "invoices" / "2025-06-001-acme.md").write_text(_INVOICE_MD, encoding="utf-8")
     mismatches = audit_invoices(tmp_path)
     assert mismatches == []
 
 
 def test_audit_invoices_detects_mismatch(tmp_path: Path) -> None:
     _setup_project(tmp_path)
-    (tmp_path / "invoices" / "2026-03-001-acme.md").write_text(_INVOICE_MD_WRONG_RATE)
+    (tmp_path / "invoices" / "2026-03-001-acme.md").write_text(
+        _INVOICE_MD_WRONG_RATE, encoding="utf-8"
+    )
     mismatches = audit_invoices(tmp_path)
     assert len(mismatches) == 1
     m = mismatches[0]
@@ -170,14 +172,18 @@ def test_audit_invoices_detects_mismatch(tmp_path: Path) -> None:
 
 def test_audit_invoices_client_filter(tmp_path: Path) -> None:
     _setup_project(tmp_path)
-    (tmp_path / "invoices" / "2026-03-001-acme.md").write_text(_INVOICE_MD_WRONG_RATE)
+    (tmp_path / "invoices" / "2026-03-001-acme.md").write_text(
+        _INVOICE_MD_WRONG_RATE, encoding="utf-8"
+    )
     assert audit_invoices(tmp_path, client_filter="beta") == []
     assert len(audit_invoices(tmp_path, client_filter="acme")) == 1
 
 
 def test_audit_invoices_period_filter(tmp_path: Path) -> None:
     _setup_project(tmp_path)
-    (tmp_path / "invoices" / "2026-03-001-acme.md").write_text(_INVOICE_MD_WRONG_RATE)
+    (tmp_path / "invoices" / "2026-03-001-acme.md").write_text(
+        _INVOICE_MD_WRONG_RATE, encoding="utf-8"
+    )
     assert audit_invoices(tmp_path, period_filter="2026-02") == []
     assert len(audit_invoices(tmp_path, period_filter="2026-03")) == 1
 
@@ -228,7 +234,7 @@ def test_config_history_cli_no_history(tmp_path: Path, monkeypatch: pytest.Monke
 def test_config_audit_cli_clean(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _setup_project(tmp_path)
-    (tmp_path / "invoices" / "2025-06-001-acme.md").write_text(_INVOICE_MD)
+    (tmp_path / "invoices" / "2025-06-001-acme.md").write_text(_INVOICE_MD, encoding="utf-8")
     result = runner.invoke(app, ["config", "audit"], catch_exceptions=False)
     assert result.exit_code == 0
     assert "Audit clean" in result.output
@@ -237,7 +243,9 @@ def test_config_audit_cli_clean(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 def test_config_audit_cli_mismatch_exits_1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     _setup_project(tmp_path)
-    (tmp_path / "invoices" / "2026-03-001-acme.md").write_text(_INVOICE_MD_WRONG_RATE)
+    (tmp_path / "invoices" / "2026-03-001-acme.md").write_text(
+        _INVOICE_MD_WRONG_RATE, encoding="utf-8"
+    )
     result = runner.invoke(app, ["config", "audit"], catch_exceptions=False)
     assert result.exit_code == 1
     assert "mismatch" in result.output.lower()

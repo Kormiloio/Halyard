@@ -115,19 +115,19 @@ def test_infer_project_no_remote(tmp_path: Path) -> None:
 
 
 def test_infer_project_halyard_toml_in_cwd(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text('[project]\nslug = "acme:core"\n')
+    (tmp_path / "halyard.toml").write_text('[project]\nslug = "acme:core"\n', encoding="utf-8")
     assert infer_project(tmp_path) == "acme:core"
 
 
 def test_infer_project_halyard_toml_in_parent(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text('[project]\nslug = "acme:core"\n')
+    (tmp_path / "halyard.toml").write_text('[project]\nslug = "acme:core"\n', encoding="utf-8")
     sub = tmp_path / "app" / "src"
     sub.mkdir(parents=True)
     assert infer_project(sub) == "acme:core"
 
 
 def test_infer_project_halyard_toml_beats_repos(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text('[project]\nslug = "local:override"\n')
+    (tmp_path / "halyard.toml").write_text('[project]\nslug = "local:override"\n', encoding="utf-8")
     with (
         _mock_remote("https://github.com/acme/auth.git"),
         _mock_repos({"github.com/acme/auth": "acme:auth"}),
@@ -136,7 +136,7 @@ def test_infer_project_halyard_toml_beats_repos(tmp_path: Path) -> None:
 
 
 def test_infer_project_halyard_toml_no_slug_falls_through(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Acme'\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Acme'\n", encoding="utf-8")
     with (
         _mock_remote("https://github.com/acme/auth.git"),
         _mock_repos({"github.com/acme/auth": "acme:auth"}),
@@ -156,18 +156,18 @@ def test_register_repo_creates_file(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     register_repo("github.com/acme/auth", "acme:auth")
 
     assert config.exists()
-    text = config.read_text()
+    text = config.read_text(encoding="utf-8")
     assert '"github.com/acme/auth" = "acme:auth"' in text
 
 
 def test_register_repo_updates_existing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = tmp_path / "repos.toml"
-    config.write_text('[repos]\n"github.com/acme/auth" = "acme:old"\n')
+    config.write_text('[repos]\n"github.com/acme/auth" = "acme:old"\n', encoding="utf-8")
     monkeypatch.setattr("halyard.git_context._REPOS_CONFIG", config)
 
     register_repo("github.com/acme/auth", "acme:new")
 
-    text = config.read_text()
+    text = config.read_text(encoding="utf-8")
     assert '"acme:new"' in text
     assert '"acme:old"' not in text
 

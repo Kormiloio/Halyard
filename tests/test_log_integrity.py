@@ -56,8 +56,8 @@ def _session(
 
 
 def _init_project(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\n")
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +76,9 @@ def test_100_concurrent_appenders_produce_exactly_100_lines(tmp_path: Path) -> N
         list(pool.map(_append, range(100)))
 
     log_path = tmp_path / AI_LOG_FILENAME
-    lines = [line for line in log_path.read_text().splitlines() if line.startswith("s ")]
+    lines = [
+        line for line in log_path.read_text(encoding="utf-8").splitlines() if line.startswith("s ")
+    ]
     assert len(lines) == 100, f"Expected 100 session lines, got {len(lines)}"
 
 
@@ -89,7 +91,7 @@ def test_locked_file_writes_content(tmp_path: Path) -> None:
     path = tmp_path / "sub" / "test.log"
     with locked_file(path, "w") as f:
         f.write("hello\n")  # type: ignore[union-attr]
-    assert path.read_text() == "hello\n"
+    assert path.read_text(encoding="utf-8") == "hello\n"
 
 
 def test_locked_file_creates_parent_dirs(tmp_path: Path) -> None:
@@ -183,7 +185,9 @@ def test_round_trip_attribution_change_via_amendment(tmp_path: Path) -> None:
     append_session(tmp_path, session)
 
     # Compute the hash of the raw line just written
-    raw_lines = [line for line in log_path.read_text().splitlines() if line.startswith("s ")]
+    raw_lines = [
+        line for line in log_path.read_text(encoding="utf-8").splitlines() if line.startswith("s ")
+    ]
     assert len(raw_lines) == 1
     s_line = raw_lines[0]
     h = session_hash(s_line)
@@ -212,7 +216,9 @@ def test_multiple_amendments_last_write_wins(tmp_path: Path) -> None:
     # Write original session
     append_session(tmp_path, _session(project=None))
 
-    raw_lines = [line for line in log_path.read_text().splitlines() if line.startswith("s ")]
+    raw_lines = [
+        line for line in log_path.read_text(encoding="utf-8").splitlines() if line.startswith("s ")
+    ]
     h = session_hash(raw_lines[0])
 
     # First amendment: project=acme:auth
@@ -238,7 +244,9 @@ def test_multiple_amendments_partial_key_override(tmp_path: Path) -> None:
     log_path = tmp_path / AI_LOG_FILENAME
 
     append_session(tmp_path, _session(project=None))
-    raw_lines = [line for line in log_path.read_text().splitlines() if line.startswith("s ")]
+    raw_lines = [
+        line for line in log_path.read_text(encoding="utf-8").splitlines() if line.startswith("s ")
+    ]
     h = session_hash(raw_lines[0])
 
     # First amendment sets both project and source
@@ -289,7 +297,7 @@ def test_50_concurrent_start_timer_exactly_one_succeeds(
     from halyard.orchestration import TimerAlreadyRunning, start_timer
 
     _init_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("")
+    (tmp_path / "time.timeclock").write_text("", encoding="utf-8")
 
     # Redirect _HALYARD_ACTIVE to a temp path so we don't touch the real one.
     active_path = tmp_path / ".halyard" / "active"
@@ -315,7 +323,7 @@ def test_50_concurrent_start_timer_exactly_one_succeeds(
     # Exactly one clock-in entry in the timeclock
     i_lines = [
         line
-        for line in (tmp_path / "time.timeclock").read_text().splitlines()
+        for line in (tmp_path / "time.timeclock").read_text(encoding="utf-8").splitlines()
         if line.startswith("i ")
     ]
     assert len(i_lines) == 1, f"Expected 1 clock-in line, got {len(i_lines)}"
@@ -333,7 +341,7 @@ def test_concurrent_stop_timer_produces_exactly_one_o_line(
     from halyard.orchestration import start_timer, stop_timer
 
     _init_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("")
+    (tmp_path / "time.timeclock").write_text("", encoding="utf-8")
 
     active_path = tmp_path / ".halyard" / "active"
     active_path.parent.mkdir(parents=True, exist_ok=True)
@@ -352,7 +360,7 @@ def test_concurrent_stop_timer_produces_exactly_one_o_line(
 
     o_lines = [
         line
-        for line in (tmp_path / "time.timeclock").read_text().splitlines()
+        for line in (tmp_path / "time.timeclock").read_text(encoding="utf-8").splitlines()
         if line.startswith("o ")
     ]
     assert len(o_lines) == 1, f"Expected exactly 1 clock-out line, got {len(o_lines)}"
@@ -373,7 +381,7 @@ def test_concurrent_invoice_allocation_unique_numbers(tmp_path: Path) -> None:
 
     # Minimal halyard.toml with an invoicing section.
     toml_path = tmp_path / "halyard.toml"
-    toml_path.write_text(tomli_w.dumps({"invoicing": {"counter": 0}}))
+    toml_path.write_text(tomli_w.dumps({"invoicing": {"counter": 0}}), encoding="utf-8")
 
     allocated: list[int] = []
 
@@ -388,7 +396,7 @@ def test_concurrent_invoice_allocation_unique_numbers(tmp_path: Path) -> None:
     assert len(set(allocated)) == 20, f"Duplicate invoice numbers: {sorted(allocated)}"
 
     # The on-disk counter must equal 20 after 20 allocations.
-    final = tomllib.loads(toml_path.read_text())
+    final = tomllib.loads(toml_path.read_text(encoding="utf-8"))
     assert final["invoicing"]["counter"] == 20  # type: ignore[index]
 
 
@@ -434,7 +442,9 @@ def test_concurrent_backfill_and_append_no_lost_sessions(tmp_path: Path) -> None
             f.result()
 
     log_path = tmp_path / AI_LOG_FILENAME
-    s_lines = [line for line in log_path.read_text().splitlines() if line.startswith("s ")]
+    s_lines = [
+        line for line in log_path.read_text(encoding="utf-8").splitlines() if line.startswith("s ")
+    ]
     # 10 seeded sessions + 20 concurrent appends = 30 total
     assert len(s_lines) == 30, f"Expected 30 session lines, got {len(s_lines)}"
 
@@ -451,7 +461,7 @@ def test_backfill_error_logs_to_halyard_log_and_warns(
     from halyard.orchestration import start_timer, stop_timer
 
     _init_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("")
+    (tmp_path / "time.timeclock").write_text("", encoding="utf-8")
 
     active_path = tmp_path / ".halyard" / "active"
     active_path.parent.mkdir(parents=True, exist_ok=True)
@@ -485,6 +495,6 @@ def test_backfill_error_logs_to_halyard_log_and_warns(
 
     # The halyard.log must contain the error entry.
     assert halyard_log.exists(), "halyard.log was not created"
-    log_content = halyard_log.read_text()
+    log_content = halyard_log.read_text(encoding="utf-8")
     assert "backfill_window failed" in log_content
     assert "injected backfill failure" in log_content

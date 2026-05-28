@@ -24,7 +24,7 @@ def test_locked_file_posix_uses_flock(tmp_path: Path) -> None:
     path = tmp_path / "test.log"
     with locked_file(path, "w") as f:
         f.write("hello")
-    assert path.read_text() == "hello"
+    assert path.read_text(encoding="utf-8") == "hello"
 
 
 def test_locked_file_with_noop_lock_backend(
@@ -40,7 +40,7 @@ def test_locked_file_with_noop_lock_backend(
     path = tmp_path / "test.log"
     with locked_file(path, "w") as f:
         f.write("noop-lock")
-    assert path.read_text() == "noop-lock"
+    assert path.read_text(encoding="utf-8") == "noop-lock"
 
 
 def test_locked_file_releases_on_exception(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -85,7 +85,7 @@ _A_LINE_TPL = (
 
 def _write_log(log_dir: Path, lines: list[str]) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
-    (log_dir / "ai-sessions.log").write_text("\n".join(lines) + "\n")
+    (log_dir / "ai-sessions.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def test_raw_hash_set_on_parse(tmp_path: Path) -> None:

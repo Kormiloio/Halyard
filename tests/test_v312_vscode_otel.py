@@ -316,8 +316,8 @@ def test_receiver_binds_localhost_and_records_row(
 
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
-    (project_dir / "halyard.toml").write_text('[project]\nslug = "acme:proj"')
-    (project_dir / AI_LOG_FILENAME).write_text("")
+    (project_dir / "halyard.toml").write_text('[project]\nslug = "acme:proj"', encoding="utf-8")
+    (project_dir / AI_LOG_FILENAME).write_text("", encoding="utf-8")
 
     # Don't pollute the real ~/.halyard during the flush.
     monkeypatch.setattr("halyard.ai_log.maybe_show_dashboard_hint", lambda: None)
@@ -392,7 +392,7 @@ def test_start_receiver_gated_on_opt_in(tmp_path: Path, monkeypatch: pytest.Monk
     # Marker absent → no listener started.
     assert otel_receiver.start_receiver(None, port=0) is None
     # Marker present → a receiver is started; clean it up.
-    marker.write_text("enabled\n")
+    marker.write_text("enabled\n", encoding="utf-8")
     assert otel_capture_enabled() is True
     rec = otel_receiver.start_receiver(None, port=0)
     assert rec is not None
@@ -423,8 +423,8 @@ def test_importer_skips_otel_captured_via_ledger(
 
     project_dir = tmp_path / "halyard"
     project_dir.mkdir()
-    (project_dir / "halyard.toml").write_text('[project]\nslug = "acme:halyard"')
-    (project_dir / AI_LOG_FILENAME).write_text("")
+    (project_dir / "halyard.toml").write_text('[project]\nslug = "acme:halyard"', encoding="utf-8")
+    (project_dir / AI_LOG_FILENAME).write_text("", encoding="utf-8")
 
     # An OTel row for session-123 is already in the ledger.
     payload = _payload(
@@ -457,12 +457,14 @@ def test_importer_end_to_end_skips_otel_row(
     storage.mkdir()
     project_dir = tmp_path / "halyard"
     project_dir.mkdir()
-    (project_dir / "halyard.toml").write_text('[project]\nslug = "acme:halyard"')
-    (project_dir / AI_LOG_FILENAME).write_text("")
+    (project_dir / "halyard.toml").write_text('[project]\nslug = "acme:halyard"', encoding="utf-8")
+    (project_dir / AI_LOG_FILENAME).write_text("", encoding="utf-8")
 
     ws = storage / "ws1"
     ws.mkdir()
-    (ws / "workspace.json").write_text(json.dumps({"folder": project_dir.as_uri()}))
+    (ws / "workspace.json").write_text(
+        json.dumps({"folder": project_dir.as_uri()}), encoding="utf-8"
+    )
     chat = ws / "chatSessions"
     chat.mkdir()
     sid = "dup-session"
@@ -482,7 +484,8 @@ def test_importer_end_to_end_skips_otel_row(
                     ],
                 },
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
     monkeypatch.setattr(copilot, "_VSCODE_STORAGE_DIR", storage)
@@ -523,16 +526,16 @@ def test_install_writes_keys_and_marker_then_no_op(
     monkeypatch.setattr(vscode_otel, "MARKER_PATH", marker)
 
     cli_hooks._do_install_vscode_otel()
-    data = json.loads(settings.read_text())
+    data = json.loads(settings.read_text(encoding="utf-8"))
     assert data["github.copilot.chat.otel.enabled"] is True
     assert data["github.copilot.chat.otel.otlpEndpoint"] == "http://localhost:4318"
     assert data["github.copilot.chat.otel.exporterType"] == "http"
     assert marker.exists()
 
     # Byte-stable no-op on re-run.
-    before = settings.read_text()
+    before = settings.read_text(encoding="utf-8")
     cli_hooks._do_install_vscode_otel()
-    assert settings.read_text() == before
+    assert settings.read_text(encoding="utf-8") == before
 
 
 def test_install_preserves_foreign_settings(
@@ -542,12 +545,14 @@ def test_install_preserves_foreign_settings(
     from halyard.collectors import vscode_otel
 
     settings = tmp_path / "settings.json"
-    settings.write_text(json.dumps({"editor.fontSize": 14, "files.autoSave": "off"}))
+    settings.write_text(
+        json.dumps({"editor.fontSize": 14, "files.autoSave": "off"}), encoding="utf-8"
+    )
     monkeypatch.setattr(cli_hooks, "_VSCODE_USER_SETTINGS", settings)
     monkeypatch.setattr(vscode_otel, "MARKER_PATH", tmp_path / "marker")
 
     cli_hooks._do_install_vscode_otel()
-    data = json.loads(settings.read_text())
+    data = json.loads(settings.read_text(encoding="utf-8"))
     assert data["editor.fontSize"] == 14
     assert data["files.autoSave"] == "off"
     assert data["github.copilot.chat.otel.enabled"] is True
@@ -565,7 +570,7 @@ def test_uninstall_removes_keys_and_marker(tmp_path: Path, monkeypatch: pytest.M
     cli_hooks._do_install_vscode_otel()
     assert marker.exists()
     cli_hooks._do_uninstall_vscode_otel()
-    data = json.loads(settings.read_text())
+    data = json.loads(settings.read_text(encoding="utf-8"))
     assert "github.copilot.chat.otel.enabled" not in data
     assert not marker.exists()
 
@@ -598,7 +603,7 @@ def test_doctor_ok_when_otel_configured(tmp_path: Path, monkeypatch: pytest.Monk
     from halyard.collectors import vscode_otel
 
     marker = tmp_path / "marker"
-    marker.write_text("enabled\n")
+    marker.write_text("enabled\n", encoding="utf-8")
     monkeypatch.setattr("halyard.collectors.copilot.copilot_history_present", lambda: True)
     monkeypatch.setattr(vscode_otel, "MARKER_PATH", marker)
 

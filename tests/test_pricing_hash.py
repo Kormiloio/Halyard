@@ -100,7 +100,7 @@ def test_matching_hash_no_warning(
     # Write the hash first
     hash_file = tmp_path / ".halyard" / "pricing-hash.txt"
     hash_file.parent.mkdir(parents=True, exist_ok=True)
-    hash_file.write_text(_sha256(_VALID_TOML) + "\n")
+    hash_file.write_text(_sha256(_VALID_TOML) + "\n", encoding="utf-8")
 
     result = _check_pricing_hash(_VALID_TOML)
 
@@ -120,7 +120,7 @@ def test_changed_pricing_table_warning(
     # Store hash of original
     hash_file = tmp_path / ".halyard" / "pricing-hash.txt"
     hash_file.parent.mkdir(parents=True, exist_ok=True)
-    hash_file.write_text(_sha256(_VALID_TOML) + "\n")
+    hash_file.write_text(_sha256(_VALID_TOML) + "\n", encoding="utf-8")
 
     result = _check_pricing_hash(_CHANGED_TOML)
 
@@ -140,7 +140,7 @@ def test_truncated_response_no_overwrite(tmp_path: Path) -> None:
     _reset_cache()
     local = tmp_path / "pricing.toml"
     original_content = "[models.existing]\ninput = 5.0\noutput = 20.0\n"
-    local.write_text(original_content)
+    local.write_text(original_content, encoding="utf-8")
 
     truncated_body = b"[models.only-one]\ninput = 1.0\noutput = 4.0\n"
     mock = _mock_resp(truncated_body)
@@ -153,7 +153,7 @@ def test_truncated_response_no_overwrite(tmp_path: Path) -> None:
         update_pricing()
 
     # Local table must be unchanged
-    assert local.read_text() == original_content
+    assert local.read_text(encoding="utf-8") == original_content
     _reset_cache()
 
 
@@ -169,14 +169,15 @@ def test_truncated_response_hash_not_updated(
     local.write_text(
         "[models.a]\ninput=1.0\noutput=4.0\n"
         "[models.b]\ninput=2.0\noutput=8.0\n"
-        "[models.c]\ninput=0.5\noutput=2.0\n"
+        "[models.c]\ninput=0.5\noutput=2.0\n",
+        encoding="utf-8",
     )
 
     # Pre-populate the hash file with the known-good hash
     hash_file = tmp_path / ".halyard" / "pricing-hash.txt"
     hash_file.parent.mkdir(parents=True, exist_ok=True)
     original_hash = "aabbccdd" * 8  # fake known-good hash
-    hash_file.write_text(original_hash + "\n")
+    hash_file.write_text(original_hash + "\n", encoding="utf-8")
 
     truncated_body = b"[models.only-one]\ninput = 1.0\noutput = 4.0\n"
     mock = _mock_resp(truncated_body)
@@ -189,7 +190,7 @@ def test_truncated_response_hash_not_updated(
         update_pricing()
 
     # Hash file must be unchanged
-    assert hash_file.read_text().strip() == original_hash
+    assert hash_file.read_text(encoding="utf-8").strip() == original_hash
     _reset_cache()
 
 
@@ -217,7 +218,7 @@ def test_successful_fetch_writes_hash(
 
     hash_file = tmp_path / ".halyard" / "pricing-hash.txt"
     assert hash_file.exists()
-    assert hash_file.read_text().strip() == _sha256(_VALID_TOML)
+    assert hash_file.read_text(encoding="utf-8").strip() == _sha256(_VALID_TOML)
     _reset_cache()
 
 
@@ -234,7 +235,7 @@ def test_changed_table_warning_on_update(
     # Pre-populate stored hash for original table
     hash_file = tmp_path / ".halyard" / "pricing-hash.txt"
     hash_file.parent.mkdir(parents=True, exist_ok=True)
-    hash_file.write_text(_sha256(_VALID_TOML) + "\n")
+    hash_file.write_text(_sha256(_VALID_TOML) + "\n", encoding="utf-8")
 
     # Serve the changed table
     mock = _mock_resp(_CHANGED_TOML)
@@ -264,7 +265,7 @@ def test_changed_pricing_table_does_not_overwrite_without_accept(
 
     hash_file = tmp_path / ".halyard" / "pricing-hash.txt"
     hash_file.parent.mkdir(parents=True, exist_ok=True)
-    hash_file.write_text(_sha256(_VALID_TOML) + "\n")  # baseline matches local
+    hash_file.write_text(_sha256(_VALID_TOML) + "\n", encoding="utf-8")  # baseline matches local
 
     mock = _mock_resp(_CHANGED_TOML)  # remote serves a different table
 
@@ -278,7 +279,7 @@ def test_changed_pricing_table_does_not_overwrite_without_accept(
     # Local table must still match the original — NOT the changed remote body.
     assert local.read_bytes() == _VALID_TOML
     # Stored hash must still be the original — not the new one.
-    assert hash_file.read_text().strip() == _sha256(_VALID_TOML)
+    assert hash_file.read_text(encoding="utf-8").strip() == _sha256(_VALID_TOML)
     _reset_cache()
 
 
@@ -294,7 +295,7 @@ def test_changed_pricing_table_accept_flag_overwrites_and_updates_hash(
 
     hash_file = tmp_path / ".halyard" / "pricing-hash.txt"
     hash_file.parent.mkdir(parents=True, exist_ok=True)
-    hash_file.write_text(_sha256(_VALID_TOML) + "\n")
+    hash_file.write_text(_sha256(_VALID_TOML) + "\n", encoding="utf-8")
 
     mock = _mock_resp(_CHANGED_TOML)
 
@@ -307,5 +308,5 @@ def test_changed_pricing_table_accept_flag_overwrites_and_updates_hash(
     # Local table is now the changed body.
     assert local.read_bytes() == _CHANGED_TOML
     # And the stored hash has been refreshed.
-    assert hash_file.read_text().strip() == _sha256(_CHANGED_TOML)
+    assert hash_file.read_text(encoding="utf-8").strip() == _sha256(_CHANGED_TOML)
     _reset_cache()

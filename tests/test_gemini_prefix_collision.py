@@ -34,10 +34,11 @@ _PREFIX = "aabbccdd"
 
 def _halyard_project(path: Path, slug: str) -> Path:
     path.mkdir(parents=True, exist_ok=True)
-    (path / "halyard.toml").write_text(f"[project]\nslug = '{slug}'\n")
+    (path / "halyard.toml").write_text(f"[project]\nslug = '{slug}'\n", encoding="utf-8")
     (path / AI_LOG_FILENAME).write_text(
         "; Halyard AI session log\n"
-        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n"
+        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n",
+        encoding="utf-8",
     )
     return path
 
@@ -67,7 +68,7 @@ def _make_session_file(
             }
         ],
     }
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
     return path
 
 
@@ -132,7 +133,7 @@ def test_prefix_collision_sessions_attributed_independently(
     from halyard.collectors.gemini_cli import handle_agent_stop
 
     # --- Session A ---
-    state_file.write_text(_hook_state(proj_a, _SESSION_A))
+    state_file.write_text(_hook_state(proj_a, _SESSION_A), encoding="utf-8")
     with patch(
         "halyard.collectors.gemini_cli.sys.stdin.read",
         return_value=_after_agent_payload(str(proj_a)),
@@ -144,7 +145,7 @@ def test_prefix_collision_sessions_attributed_independently(
     s_a = sessions_a[0]
 
     # --- Session B ---
-    state_file.write_text(_hook_state(proj_b, _SESSION_B))
+    state_file.write_text(_hook_state(proj_b, _SESSION_B), encoding="utf-8")
     with patch(
         "halyard.collectors.gemini_cli.sys.stdin.read",
         return_value=_after_agent_payload(str(proj_b)),

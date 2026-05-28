@@ -22,14 +22,14 @@ def _load_or_create_token() -> str:
     path = _token_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
-        token = path.read_text().strip()
+        token = path.read_text(encoding="utf-8").strip()
         if len(token) == 64 and all(c in "0123456789abcdef" for c in token):
             with suppress(OSError):
                 os.chmod(path, 0o600)
             return token
     token = secrets.token_hex(32)
     tmp = path.with_suffix(".token.tmp")
-    tmp.write_text(token)
+    tmp.write_text(token, encoding="utf-8")
     os.chmod(tmp, 0o600)
     tmp.replace(path)
     return token

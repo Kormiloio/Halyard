@@ -185,7 +185,7 @@ def _cc_hook_commands_from_path(path: Path) -> set[str]:
     if not path.exists():
         return set()
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, ValueError, OSError):
         return set()
     keys: set[str] = set()
@@ -234,7 +234,7 @@ def _write_settings(settings_path: Path, content: str) -> None:
     ``write_text`` would crash with a raw traceback.
     """
     try:
-        settings_path.write_text(content)
+        settings_path.write_text(content, encoding="utf-8")
     except OSError as exc:
         raise HookWriteError(settings_path, exc) from exc
 
@@ -252,7 +252,7 @@ def _load_existing_settings(settings_path: Path) -> dict[str, Any]:
     if not settings_path.exists():
         return {}
     try:
-        text = settings_path.read_text()
+        text = settings_path.read_text(encoding="utf-8")
     except OSError as exc:
         raise HookWriteError(settings_path, exc) from exc
     if not text.strip():
@@ -284,7 +284,7 @@ def _settings_unchanged(settings_path: Path, new_text: str) -> bool:
     to change, instead of rewriting identical content every run.
     """
     try:
-        return settings_path.exists() and settings_path.read_text() == new_text
+        return settings_path.exists() and settings_path.read_text(encoding="utf-8") == new_text
     except OSError:
         return False
 
@@ -482,7 +482,7 @@ def _do_install_vscode_otel() -> None:
         _write_settings(settings_path, new_text)
 
     MARKER_PATH.parent.mkdir(parents=True, exist_ok=True)
-    MARKER_PATH.write_text("enabled\n")
+    MARKER_PATH.write_text("enabled\n", encoding="utf-8")
     console.print(
         f"[bold green]VS Code Copilot OTel configured[/] "
         f"(endpoint [bold]http://localhost:4318[/]) in [bold]{settings_path}[/]\n"

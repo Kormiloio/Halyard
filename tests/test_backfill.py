@@ -39,7 +39,7 @@ def _write_timeclock(path: Path, entries: list[tuple[datetime, datetime, str]]) 
     for start, end, account in entries:
         lines.append(f"i {start:%Y-%m-%d %H:%M:%S} {account}")
         lines.append(f"o {end:%Y-%m-%d %H:%M:%S}")
-    path.write_text("\n".join(lines) + "\n")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ def test_backfill_window_attributes_sessions_in_range(tmp_path: Path) -> None:
     count = backfill_window(tmp_path, t0, t1, "acme:auth")
     assert count == 1
 
-    log = (tmp_path / AI_LOG_FILENAME).read_text()
+    log = (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8")
     assert "project=acme:auth" in log
 
 
@@ -79,7 +79,7 @@ def test_backfill_window_skips_already_attributed(tmp_path: Path) -> None:
     count = backfill_window(tmp_path, t0, t1, "acme:auth")
     assert count == 0
 
-    log = (tmp_path / AI_LOG_FILENAME).read_text()
+    log = (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8")
     assert "project=acme:other" in log
     assert "project=acme:auth" not in log
 
@@ -89,11 +89,11 @@ def test_backfill_window_dry_run_does_not_write(tmp_path: Path) -> None:
     t1 = datetime(2026, 5, 8, 12, 0)
     session = _session(start=datetime(2026, 5, 8, 10, 30))
     append_session(tmp_path, session)
-    original = (tmp_path / AI_LOG_FILENAME).read_text()
+    original = (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8")
 
     count = backfill_window(tmp_path, t0, t1, "acme:auth", dry_run=True)
     assert count == 1
-    assert (tmp_path / AI_LOG_FILENAME).read_text() == original
+    assert (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8") == original
 
 
 def test_backfill_window_boundary_start_inclusive(tmp_path: Path) -> None:
@@ -128,14 +128,14 @@ def test_backfill_window_no_log_file(tmp_path: Path) -> None:
 
 
 def test_stop_attributes_sessions_in_window(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
     tc = tmp_path / "time.timeclock"
-    tc.write_text("; timeclock\n")
+    tc.write_text("; timeclock\n", encoding="utf-8")
 
     # Write an unattributed session that started during the timer window
     session_start = datetime(2026, 5, 8, 10, 15)
     session = _session(start=session_start)
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "\n")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "\n", encoding="utf-8")
     append_session(tmp_path, session)
 
     from halyard.reports import _HALYARD_ACTIVE
@@ -143,20 +143,21 @@ def test_stop_attributes_sessions_in_window(tmp_path: Path) -> None:
     timer_start = datetime(2026, 5, 8, 10, 0)
     _HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
     _HALYARD_ACTIVE.write_text(
-        f"timeclock={tc}\nslug=acme:auth\nstarted={timer_start:%Y-%m-%d %H:%M:%S}\n"
+        f"timeclock={tc}\nslug=acme:auth\nstarted={timer_start:%Y-%m-%d %H:%M:%S}\n",
+        encoding="utf-8",
     )
-    tc.write_text(f"; timeclock\ni {timer_start:%Y-%m-%d %H:%M:%S} acme:auth\n")
+    tc.write_text(f"; timeclock\ni {timer_start:%Y-%m-%d %H:%M:%S} acme:auth\n", encoding="utf-8")
 
     result = runner.invoke(app, ["stop"], catch_exceptions=False)
     assert result.exit_code == 0
     assert "logged to manifest" in result.output
 
-    log = (tmp_path / AI_LOG_FILENAME).read_text()
+    log = (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8")
     assert "project=acme:auth" in log
 
 
 def test_stop_silent_when_no_sessions_in_window(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
     tc = tmp_path / "time.timeclock"
 
     from halyard.reports import _HALYARD_ACTIVE
@@ -164,9 +165,10 @@ def test_stop_silent_when_no_sessions_in_window(tmp_path: Path) -> None:
     timer_start = datetime(2026, 5, 8, 10, 0)
     _HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
     _HALYARD_ACTIVE.write_text(
-        f"timeclock={tc}\nslug=acme:auth\nstarted={timer_start:%Y-%m-%d %H:%M:%S}\n"
+        f"timeclock={tc}\nslug=acme:auth\nstarted={timer_start:%Y-%m-%d %H:%M:%S}\n",
+        encoding="utf-8",
     )
-    tc.write_text(f"; timeclock\ni {timer_start:%Y-%m-%d %H:%M:%S} acme:auth\n")
+    tc.write_text(f"; timeclock\ni {timer_start:%Y-%m-%d %H:%M:%S} acme:auth\n", encoding="utf-8")
 
     result = runner.invoke(app, ["stop"], catch_exceptions=False)
     assert result.exit_code == 0
@@ -180,32 +182,32 @@ def test_stop_silent_when_no_sessions_in_window(tmp_path: Path) -> None:
 
 def test_backfill_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
 
     t0 = datetime(2026, 5, 8, 10, 0)
     t1 = datetime(2026, 5, 8, 12, 0)
     _write_timeclock(tmp_path / "time.timeclock", [(t0, t1, "acme:auth")])
 
     session = _session(start=datetime(2026, 5, 8, 10, 30))
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "\n")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "\n", encoding="utf-8")
     append_session(tmp_path, session)
-    original = (tmp_path / AI_LOG_FILENAME).read_text()
+    original = (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8")
 
     result = runner.invoke(app, ["backfill", "--dry-run"], catch_exceptions=False)
     assert result.exit_code == 0
     assert "would be attributed" in result.output
-    assert (tmp_path / AI_LOG_FILENAME).read_text() == original
+    assert (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8") == original
 
 
 def test_backfill_attributes_unambiguous(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
 
     t0 = datetime(2026, 5, 8, 10, 0)
     t1 = datetime(2026, 5, 8, 12, 0)
     _write_timeclock(tmp_path / "time.timeclock", [(t0, t1, "acme:auth")])
 
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "\n")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "\n", encoding="utf-8")
     append_session(tmp_path, _session(start=datetime(2026, 5, 8, 10, 30)))
     append_session(tmp_path, _session(start=datetime(2026, 5, 8, 11, 0)))
 
@@ -213,13 +215,13 @@ def test_backfill_attributes_unambiguous(tmp_path: Path, monkeypatch: pytest.Mon
     assert result.exit_code == 0
     assert "Attributed 2" in result.output
 
-    log = (tmp_path / AI_LOG_FILENAME).read_text()
+    log = (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8")
     assert log.count("project=acme:auth") == 2
 
 
 def test_backfill_skips_ambiguous_sessions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
 
     t0 = datetime(2026, 5, 8, 10, 0)
     t1 = datetime(2026, 5, 8, 12, 0)
@@ -229,22 +231,22 @@ def test_backfill_skips_ambiguous_sessions(tmp_path: Path, monkeypatch: pytest.M
         [(t0, t1, "acme:auth"), (t0, t1, "acme:other")],
     )
 
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "\n")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "\n", encoding="utf-8")
     append_session(tmp_path, _session(start=datetime(2026, 5, 8, 10, 30)))
 
     result = runner.invoke(app, ["backfill"], catch_exceptions=False)
     assert result.exit_code == 0
     assert "ambiguous" in result.output
 
-    log = (tmp_path / AI_LOG_FILENAME).read_text()
+    log = (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8")
     assert "project=" not in log
 
 
 def test_backfill_no_timeclock_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
-    (tmp_path / "time.timeclock").write_text("; empty\n")
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "\n", encoding="utf-8")
 
     result = runner.invoke(app, ["backfill"], catch_exceptions=False)
     assert result.exit_code == 0

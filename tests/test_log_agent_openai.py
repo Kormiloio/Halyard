@@ -62,7 +62,7 @@ def test_run_openai_log_query_local_no_key_required(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    (tmp_path / "ai-sessions.log").write_text("")
+    (tmp_path / "ai-sessions.log").write_text("", encoding="utf-8")
 
     # Build a mock openai module that returns a plain-text answer directly
     mock_openai = MagicMock()
@@ -106,7 +106,7 @@ def test_run_openai_log_query_local_no_key_required(
 
 def test_run_openai_log_query_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    (tmp_path / "ai-sessions.log").write_text("")
+    (tmp_path / "ai-sessions.log").write_text("", encoding="utf-8")
 
     mock_openai = MagicMock()
     mock_openai.OpenAIError = Exception

@@ -51,12 +51,12 @@ def _write_timeclock(path: Path, entries: list[tuple[datetime, datetime, str]]) 
     for start, end, account in entries:
         lines.append(f"i {start:%Y-%m-%d %H:%M:%S} {account}")
         lines.append(f"o {end:%Y-%m-%d %H:%M:%S}")
-    path.write_text("\n".join(lines) + "\n")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _make_project(tmp_path: Path) -> Path:
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "\n", encoding="utf-8")
     return tmp_path
 
 
@@ -177,7 +177,7 @@ def test_clean_watch_streak_counts_consecutive() -> None:
 
 def test_extract_watches_empty_timeclock(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
     watches = _extract_watches(tmp_path)
     assert watches == []
 
@@ -247,7 +247,7 @@ def test_signal_master_requires_three_tools(tmp_path: Path) -> None:
 def test_harbor_master_medal_with_invoice(tmp_path: Path) -> None:
     invoices = tmp_path / "invoices"
     invoices.mkdir()
-    (invoices / "invoice-2026-04.md").write_text("# Invoice")
+    (invoices / "invoice-2026-04.md").write_text("# Invoice", encoding="utf-8")
     medals = _evaluate_medals(tmp_path, [], [], set())
     assert any(m.key == "harbor_master" for m in medals)
 
@@ -264,7 +264,7 @@ def test_harbor_master_not_earned_without_invoice(tmp_path: Path) -> None:
 
 def test_service_record_civilian_no_data(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
     record = build_service_record(tmp_path, [])
     assert record.rank.name == "Civilian"
     assert record.total_sessions == 0
@@ -274,7 +274,7 @@ def test_service_record_civilian_no_data(tmp_path: Path) -> None:
 
 def test_service_record_deckhand_after_one_session(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
     s = _session(start=datetime(2026, 5, 8, 10, 0), project="acme:auth")
     append_session(tmp_path, s)
     sessions = [s]
@@ -298,7 +298,7 @@ def test_service_record_watch_streak_computed(tmp_path: Path) -> None:
 
 def test_service_record_proof_score_all_attributed(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
     sessions = [
         _session(start=datetime(2026, 5, 8, 10, i * 10), project="acme:auth") for i in range(5)
     ]
@@ -308,7 +308,7 @@ def test_service_record_proof_score_all_attributed(tmp_path: Path) -> None:
 
 def test_service_record_proof_score_mixed(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
     # 5 attributed + tokens, 5 unattributed + no tokens
     sessions = [
         _session(start=datetime(2026, 5, 8, 10, i), project="acme:auth") for i in range(5)
@@ -334,7 +334,7 @@ def test_service_record_gold_stripe_not_earned_below_30(tmp_path: Path) -> None:
 
 def test_service_record_next_rank_none_at_commodore(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
     sessions = [
         _session(start=datetime(2026, 5, 1, 10, 0) + timedelta(hours=i), project="acme:auth")
         for i in range(1000)
@@ -352,14 +352,14 @@ def test_service_record_next_rank_none_at_commodore(tmp_path: Path) -> None:
 
 def test_passport_empty_when_no_sessions(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
     record = build_service_record(tmp_path, [])
     assert record.passport == []
 
 
 def test_passport_single_known_tool(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
     sessions = [_session(start=datetime(2026, 5, 1, 10, 0), tool="claude-code")]
     record = build_service_record(tmp_path, sessions)
     assert len(record.passport) == 1
@@ -371,7 +371,7 @@ def test_passport_single_known_tool(tmp_path: Path) -> None:
 
 def test_passport_deduplicates_same_tool(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
     sessions = [
         _session(start=datetime(2026, 5, 1, 10, 0) + timedelta(hours=i), tool="cursor")
         for i in range(5)
@@ -383,7 +383,7 @@ def test_passport_deduplicates_same_tool(tmp_path: Path) -> None:
 
 def test_passport_multiple_tools(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
     sessions = [
         _session(start=datetime(2026, 5, 1, 10, 0), tool="claude-code"),
         _session(start=datetime(2026, 5, 1, 11, 0), tool="cursor"),
@@ -396,7 +396,7 @@ def test_passport_multiple_tools(tmp_path: Path) -> None:
 
 def test_passport_unknown_tool_gets_default_icon(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
     sessions = [_session(start=datetime(2026, 5, 1, 10, 0), tool="some-new-tool")]
     record = build_service_record(tmp_path, sessions)
     assert len(record.passport) == 1
@@ -407,7 +407,7 @@ def test_passport_unknown_tool_gets_default_icon(tmp_path: Path) -> None:
 
 def test_passport_vscode_stamp(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
     sessions = [_session(start=datetime(2026, 5, 1, 10, 0), tool="vscode")]
     record = build_service_record(tmp_path, sessions)
 

@@ -34,8 +34,8 @@ def clean_state() -> None:  # type: ignore[misc]
 
 
 def _init_project(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\nname='Test'\n")
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp_path / "halyard.toml").write_text("[business]\nname='Test'\n", encoding="utf-8")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -48,16 +48,16 @@ def test_cc_session_writes_start_file() -> None:
 
     record_session_start()
     assert CC_SESSION_FILE.exists()
-    data = json.loads(CC_SESSION_FILE.read_text())
+    data = json.loads(CC_SESSION_FILE.read_text(encoding="utf-8"))
     ts = datetime.fromisoformat(data["start"])
     assert isinstance(ts, datetime)
 
 
 def test_cc_session_does_not_overwrite_existing() -> None:
     CC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CC_SESSION_FILE.write_text("2026-05-06T09:00:00")
+    CC_SESSION_FILE.write_text("2026-05-06T09:00:00", encoding="utf-8")
     record_session_start()
-    assert CC_SESSION_FILE.read_text().strip() == "2026-05-06T09:00:00"
+    assert CC_SESSION_FILE.read_text(encoding="utf-8").strip() == "2026-05-06T09:00:00"
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ def _run_stop_hook(tmp_path: Path, payload: dict) -> int:  # type: ignore[type-a
 def test_stop_hook_writes_session_record(tmp_path: Path) -> None:
     _init_project(tmp_path)
     CC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CC_SESSION_FILE.write_text(_RECENT_START)
+    CC_SESSION_FILE.write_text(_RECENT_START, encoding="utf-8")
 
     payload = {
         "model": "claude-sonnet-4-6",
@@ -99,7 +99,7 @@ def test_stop_hook_writes_session_record(tmp_path: Path) -> None:
 def test_stop_hook_clears_session_file(tmp_path: Path) -> None:
     _init_project(tmp_path)
     CC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CC_SESSION_FILE.write_text(_RECENT_START)
+    CC_SESSION_FILE.write_text(_RECENT_START, encoding="utf-8")
 
     _run_stop_hook(tmp_path, {"model": "claude-sonnet-4-6", "usage": {}})
 
@@ -151,7 +151,8 @@ def test_stop_hook_picks_up_active_project(tmp_path: Path) -> None:
     _init_project(tmp_path)
     HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
     HALYARD_ACTIVE.write_text(
-        f"timeclock={tmp_path}/time.timeclock\nslug=acme:auth\nstarted=2026-05-06 10:00:00\n"
+        f"timeclock={tmp_path}/time.timeclock\nslug=acme:auth\nstarted=2026-05-06 10:00:00\n",
+        encoding="utf-8",
     )
 
     _run_stop_hook(
@@ -221,7 +222,7 @@ def test_install_hook_creates_settings(tmp_path: Path, monkeypatch: pytest.Monke
     result = runner.invoke(app, ["install-hook"])
 
     assert result.exit_code == 0
-    settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+    settings = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
     assert "Stop" in settings["hooks"]
     assert "UserPromptSubmit" in settings["hooks"]
 
@@ -232,7 +233,7 @@ def test_install_hook_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     runner.invoke(app, ["install-hook"])
     runner.invoke(app, ["install-hook"])
 
-    settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+    settings = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
     assert len(settings["hooks"]["Stop"]) == 1
 
 
@@ -244,11 +245,13 @@ def test_install_hook_preserves_existing_settings(
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
     settings_dir = tmp_path / ".claude"
     settings_dir.mkdir()
-    (settings_dir / "settings.json").write_text(json.dumps({"model": "claude-opus-4-7"}))
+    (settings_dir / "settings.json").write_text(
+        json.dumps({"model": "claude-opus-4-7"}), encoding="utf-8"
+    )
 
     runner.invoke(app, ["install-hook"])
 
-    settings = json.loads((settings_dir / "settings.json").read_text())
+    settings = json.loads((settings_dir / "settings.json").read_text(encoding="utf-8"))
     assert settings["model"] == "claude-opus-4-7"
     assert "hooks" in settings
 
@@ -273,7 +276,8 @@ def test_stop_hook_timer_attribution_sets_attr_method_timer(tmp_path: Path) -> N
     _init_project(tmp_path)
     HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
     HALYARD_ACTIVE.write_text(
-        f"timeclock={tmp_path}/time.timeclock\nslug=acme:auth\nstarted=2026-05-06 10:00:00\n"
+        f"timeclock={tmp_path}/time.timeclock\nslug=acme:auth\nstarted=2026-05-06 10:00:00\n",
+        encoding="utf-8",
     )
 
     _run_stop_hook(
@@ -346,7 +350,7 @@ def _make_transcript(tmp_path: Path, turns: list[dict]) -> str:  # type: ignore[
     """Write a JSONL transcript and return its path string."""
     lines = [json.dumps(t) for t in turns]
     p = tmp_path / "transcript.jsonl"
-    p.write_text("\n".join(lines) + "\n")
+    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return str(p)
 
 
@@ -445,7 +449,7 @@ def test_read_session_state_utc_format() -> None:
     from halyard.collectors.claude_code import _read_session_state
 
     state = {"start": "2026-05-09T14:30:00Z", "sha_at_start": "abc123"}
-    CC_SESSION_FILE.write_text(json.dumps(state))
+    CC_SESSION_FILE.write_text(json.dumps(state), encoding="utf-8")
     result = _read_session_state()
     expected = (
         datetime.fromisoformat("2026-05-09T14:30:00+00:00").astimezone(tz=None).replace(tzinfo=None)
@@ -463,7 +467,7 @@ def test_record_session_start_writes_local_iso(tmp_path: Path) -> None:
     ):
         record_session_start()
 
-    raw = json.loads(CC_SESSION_FILE.read_text())
+    raw = json.loads(CC_SESSION_FILE.read_text(encoding="utf-8"))
     assert not raw["start"].endswith("Z"), f"Expected no Z suffix, got: {raw['start']}"
     dt = datetime.fromisoformat(raw["start"])
     assert dt.tzinfo is None

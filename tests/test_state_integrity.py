@@ -35,7 +35,7 @@ def test_default_mode_is_off() -> None:
 
 
 def test_mode_from_toml(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text('state_integrity = "hash"\n')
+    (tmp_path / "halyard.toml").write_text('state_integrity = "hash"\n', encoding="utf-8")
     assert current_mode(tmp_path) == "hash"
 
 
@@ -45,7 +45,7 @@ def test_env_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_invalid_mode_in_toml_falls_back(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text('state_integrity = "bogus"\n')
+    (tmp_path / "halyard.toml").write_text('state_integrity = "bogus"\n', encoding="utf-8")
     assert current_mode(tmp_path) == "off"
 
 
@@ -56,7 +56,7 @@ def test_invalid_mode_in_toml_falls_back(tmp_path: Path) -> None:
 
 def test_read_off_mode_returns_content_verbatim(tmp_path: Path) -> None:
     p = tmp_path / "active"
-    p.write_text("slug=acme:auth\n")
+    p.write_text("slug=acme:auth\n", encoding="utf-8")
     assert read_trusted_state(p, mode="off") == "slug=acme:auth\n"
 
 
@@ -118,7 +118,7 @@ def test_verify_all_returns_first_failure(tmp_path: Path, monkeypatch: pytest.Mo
     b = tmp_path / "b"
     write_trusted_state(a, "good\n", mode="hash")
     write_trusted_state(b, "good\n", mode="hash")
-    b.write_text("tampered\n")  # break b
+    b.write_text("tampered\n", encoding="utf-8")  # break b
 
     ok, failure = verify_all([a, b])
     assert not ok

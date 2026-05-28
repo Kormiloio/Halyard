@@ -47,7 +47,7 @@ def test_install_service_writes_plist(
     url = install_service(tmp_path, port=7432)
 
     assert provider.plist_path.exists()
-    assert "halyard" in provider.plist_path.read_text()
+    assert "halyard" in provider.plist_path.read_text(encoding="utf-8")
     assert url == "http://127.0.0.1:7432/"
 
 
@@ -78,7 +78,7 @@ def test_install_service_calls_launchctl_load(
 def test_uninstall_removes_plist(
     provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    provider.plist_path.write_text("<plist/>")
+    provider.plist_path.write_text("<plist/>", encoding="utf-8")
     calls: list[list[str]] = []
 
     def _record(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -120,7 +120,7 @@ def test_service_status_not_installed(provider: LaunchdProvider) -> None:
 def test_service_status_installed_and_running(
     provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    provider.plist_path.write_text("<plist/>")
+    provider.plist_path.write_text("<plist/>", encoding="utf-8")
     monkeypatch.setattr(
         subprocess,
         "run",
@@ -136,7 +136,7 @@ def test_service_status_installed_and_running(
 def test_service_status_installed_not_running(
     provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    provider.plist_path.write_text("<plist/>")
+    provider.plist_path.write_text("<plist/>", encoding="utf-8")
     monkeypatch.setattr(
         subprocess,
         "run",

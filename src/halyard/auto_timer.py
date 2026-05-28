@@ -38,13 +38,15 @@ def _read_state() -> dict[str, str]:
     if not _AUTO_TIMER_FILE.exists():
         return {}
     return dict(
-        line.split("=", 1) for line in _AUTO_TIMER_FILE.read_text().splitlines() if "=" in line
+        line.split("=", 1)
+        for line in _AUTO_TIMER_FILE.read_text(encoding="utf-8").splitlines()
+        if "=" in line
     )
 
 
 def _write_state(state: dict[str, str]) -> None:
     _AUTO_TIMER_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _AUTO_TIMER_FILE.write_text("".join(f"{k}={v}\n" for k, v in state.items()))
+    _AUTO_TIMER_FILE.write_text("".join(f"{k}={v}\n" for k, v in state.items()), encoding="utf-8")
 
 
 def _clear_state() -> None:

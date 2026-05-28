@@ -16,7 +16,9 @@ from halyard.dashboard import render_dashboard
 
 
 def _init_project(tmp_path: Path) -> Path:
-    (tmp_path / "halyard.toml").write_text("[project]\nslug = 'test'\nname = 'Test'\n")
+    (tmp_path / "halyard.toml").write_text(
+        "[project]\nslug = 'test'\nname = 'Test'\n", encoding="utf-8"
+    )
     return tmp_path
 
 
@@ -37,7 +39,7 @@ def _seed_sessions(tmp_path: Path, now: datetime) -> None:
                 f"{end.strftime('%Y-%m-%dT%H:%M:%S')} "
                 f"cursor-cli gpt-4o 500 100 0.0010 project=acme:web\n"
             )
-    (tmp_path / AI_LOG_FILENAME).write_text("".join(lines))
+    (tmp_path / AI_LOG_FILENAME).write_text("".join(lines), encoding="utf-8")
 
 
 def test_default_render_shows_overview(tmp_path: Path) -> None:

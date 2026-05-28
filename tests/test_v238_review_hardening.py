@@ -77,7 +77,9 @@ def test_adopt_accepts_clean_slug(tmp_path: Path) -> None:
     target.mkdir()
     result = CliRunner().invoke(app, ["adopt", str(target), "--slug", "kormilo:halyard"])
     assert result.exit_code == 0
-    assert (target / "halyard.toml").read_text() == '[project]\nslug = "kormilo:halyard"\n'
+    assert (target / "halyard.toml").read_text(
+        encoding="utf-8"
+    ) == '[project]\nslug = "kormilo:halyard"\n'
 
 
 def test_gemini_find_session_file_rejects_glob_metachars() -> None:
@@ -98,7 +100,7 @@ def test_mode_cache_not_poisoned_across_projects(tmp_path: Path) -> None:
     si._reset_cache_for_tests()
     hash_proj = tmp_path / "h"
     hash_proj.mkdir()
-    (hash_proj / "halyard.toml").write_text('state_integrity = "hash"\n')
+    (hash_proj / "halyard.toml").write_text('state_integrity = "hash"\n', encoding="utf-8")
     plain_proj = tmp_path / "p"
     plain_proj.mkdir()  # no halyard.toml
 

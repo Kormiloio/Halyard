@@ -27,10 +27,11 @@ _RECENT_START = (datetime.now() - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%
 
 def _halyard_project(tmp_path: Path, slug: str = "test:proj") -> Path:
     tmp_path.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "halyard.toml").write_text(f"[project]\nslug = '{slug}'\n")
+    (tmp_path / "halyard.toml").write_text(f"[project]\nslug = '{slug}'\n", encoding="utf-8")
     (tmp_path / AI_LOG_FILENAME).write_text(
         "; Halyard AI session log\n"
-        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n"
+        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n",
+        encoding="utf-8",
     )
     return tmp_path
 
@@ -66,7 +67,7 @@ def test_timer_takes_precedence_over_ws_root(
     """When active timer AND workspace_root both resolve a project, attr_method=timer."""
     project = _halyard_project(tmp_path / "project", slug="acme:web")
     session_file = tmp_path / "cursor-session"
-    session_file.write_text(_RECENT_START)
+    session_file.write_text(_RECENT_START, encoding="utf-8")
 
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", session_file)
     # Timer is active → read_active_project returns a slug
@@ -103,7 +104,7 @@ def test_timer_takes_precedence_over_git(tmp_path: Path, monkeypatch: pytest.Mon
     """When active timer AND git both resolve a project, attr_method=timer."""
     project = _halyard_project(tmp_path / "project", slug="globex:api")
     session_file = tmp_path / "cc-session"
-    session_file.write_text(_RECENT_START)
+    session_file.write_text(_RECENT_START, encoding="utf-8")
 
     monkeypatch.setattr("halyard.collectors.claude_code._CC_SESSION_FILE", session_file)
     # Timer active
@@ -140,7 +141,7 @@ def test_ws_root_takes_precedence_over_git(tmp_path: Path, monkeypatch: pytest.M
     """When no active timer but workspace_root resolves a project, attr_method=ws_root (not git)."""
     project = _halyard_project(tmp_path / "project", slug="vcti:site")
     session_file = tmp_path / "cursor-session"
-    session_file.write_text(_RECENT_START)
+    session_file.write_text(_RECENT_START, encoding="utf-8")
 
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", session_file)
     # No active timer

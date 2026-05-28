@@ -34,8 +34,8 @@ class MagicPathMock:
 
 def _project(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
-    (path / "halyard.toml").write_text("[project]\n")
-    (path / AI_LOG_FILENAME).write_text("; header\n")
+    (path / "halyard.toml").write_text("[project]\n", encoding="utf-8")
+    (path / AI_LOG_FILENAME).write_text("; header\n", encoding="utf-8")
     return path
 
 
@@ -55,7 +55,7 @@ def _session(*, end: datetime, project: str | None = "acme:auth") -> AiSession:
 def _write_home_hub(home: Path, project_dir: Path) -> None:
     state = home / ".halyard"
     state.mkdir(parents=True, exist_ok=True)
-    (state / "hub").write_text(str(project_dir) + "\n")
+    (state / "hub").write_text(str(project_dir) + "\n", encoding="utf-8")
 
 
 def _write_claude_hooks(root: Path) -> None:
@@ -71,7 +71,8 @@ def _write_claude_hooks(root: Path) -> None:
                     "Stop": [{"hooks": [{"type": "command", "command": "/bin/halyard cc-hook"}]}],
                 }
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
 
@@ -87,7 +88,8 @@ def _write_cursor_hooks(home: Path) -> None:
                     "stop": [{"command": "/bin/halyard cursor-hook"}],
                 },
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
 
@@ -114,7 +116,8 @@ def _write_gemini_hooks(home: Path) -> None:
                     ],
                 },
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
 
@@ -138,7 +141,8 @@ def test_doctor_healthy_project(tmp_path: Path, monkeypatch) -> None:  # type: i
                     "PostCascadeResponse": [{"command": "/bin/halyard windsurf-session-stop"}],
                 }
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
     report = build_doctor_report(start=project)
@@ -197,8 +201,10 @@ def test_doctor_unattributed_and_quarantine_warnings(tmp_path: Path, monkeypatch
     project = _project(tmp_path / "project")
     state = home / ".halyard"
     state.mkdir(parents=True)
-    (state / "unattributed.log").write_text(_session(end=datetime.now()).to_log_line() + "\n")
-    (state / "quarantine.log").write_text("; error=bad\nnot a session\n")
+    (state / "unattributed.log").write_text(
+        _session(end=datetime.now()).to_log_line() + "\n", encoding="utf-8"
+    )
+    (state / "quarantine.log").write_text("; error=bad\nnot a session\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", lambda: home)
 
     report = build_doctor_report(start=project)
@@ -216,7 +222,7 @@ def test_doctor_integrity_uses_project_mode(tmp_path: Path, monkeypatch) -> None
 
     home = tmp_path / "home"
     project = _project(tmp_path / "project")
-    (project / "halyard.toml").write_text('state_integrity = "hash"\n')
+    (project / "halyard.toml").write_text('state_integrity = "hash"\n', encoding="utf-8")
     active = home / ".halyard" / "active"
     write_trusted_state(
         active,
@@ -237,7 +243,7 @@ def test_doctor_first_capture_recent_project_session(tmp_path: Path, monkeypatch
     now = datetime(2026, 5, 8, 12, 0)
     home = tmp_path / "home"
     project = _project(tmp_path / "project")
-    (project / AI_LOG_FILENAME).write_text(_session(end=now).to_log_line() + "\n")
+    (project / AI_LOG_FILENAME).write_text(_session(end=now).to_log_line() + "\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", lambda: home)
 
     report = build_doctor_report(start=project, first_capture=True, now=now)
@@ -253,7 +259,9 @@ def test_doctor_first_capture_unattributed_warning(tmp_path: Path, monkeypatch) 
     project = _project(tmp_path / "project")
     state = home / ".halyard"
     state.mkdir(parents=True)
-    (state / "unattributed.log").write_text(_session(end=now, project=None).to_log_line() + "\n")
+    (state / "unattributed.log").write_text(
+        _session(end=now, project=None).to_log_line() + "\n", encoding="utf-8"
+    )
     monkeypatch.setattr(Path, "home", lambda: home)
 
     report = build_doctor_report(start=project, first_capture=True, now=now)
@@ -336,9 +344,9 @@ def test_duplicate_check_warns_when_hooks_in_both_files(
     monkeypatch.setattr(Path, "home", lambda: home)
 
     (home / ".claude").mkdir(parents=True)
-    (home / ".claude" / "settings.json").write_text(_hook_settings_content())
+    (home / ".claude" / "settings.json").write_text(_hook_settings_content(), encoding="utf-8")
     (project / ".claude").mkdir(parents=True)
-    (project / ".claude" / "settings.json").write_text(_hook_settings_content())
+    (project / ".claude" / "settings.json").write_text(_hook_settings_content(), encoding="utf-8")
 
     result = _claude_hook_duplicate_check(project)
 
@@ -356,7 +364,7 @@ def test_duplicate_check_clean_when_only_global(
     monkeypatch.setattr(Path, "home", lambda: home)
 
     (home / ".claude").mkdir(parents=True)
-    (home / ".claude" / "settings.json").write_text(_hook_settings_content())
+    (home / ".claude" / "settings.json").write_text(_hook_settings_content(), encoding="utf-8")
 
     result = _claude_hook_duplicate_check(project)
 

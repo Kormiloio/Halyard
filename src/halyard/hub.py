@@ -81,7 +81,7 @@ def get_hub_status() -> HubStatus:
 
     log_path = hub_dir / AI_LOG_FILENAME
     lines = (
-        sum(1 for ln in log_path.read_text().splitlines() if ln.startswith("s "))
+        sum(1 for ln in log_path.read_text(encoding="utf-8").splitlines() if ln.startswith("s "))
         if log_path.exists()
         else 0
     )

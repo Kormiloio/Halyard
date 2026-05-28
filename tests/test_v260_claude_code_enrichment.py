@@ -23,8 +23,8 @@ _E1 = _NOW - timedelta(minutes=1)  # 8 min after _E0
 
 def _init(tmp: Path) -> Path:
     tmp.mkdir(parents=True, exist_ok=True)
-    (tmp / "halyard.toml").write_text("[business]\n")
-    (tmp / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     return tmp
 
 
@@ -37,13 +37,13 @@ def _utc(local_naive: datetime) -> str:
 
 def _transcript(tmp: Path, lines: list[dict]) -> Path:  # type: ignore[type-arg]
     p = tmp / "transcript.jsonl"
-    p.write_text("\n".join(json.dumps(o) for o in lines) + "\n")
+    p.write_text("\n".join(json.dumps(o) for o in lines) + "\n", encoding="utf-8")
     return p
 
 
 def _run(tmp: Path, payload: dict) -> int:  # type: ignore[type-arg]
     _CC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _CC_SESSION_FILE.write_text(json.dumps({"start": _START.isoformat()}))
+    _CC_SESSION_FILE.write_text(json.dumps({"start": _START.isoformat()}), encoding="utf-8")
     with (
         patch("halyard.collectors.claude_code.find_project_dir", return_value=tmp),
         patch("halyard.collectors.claude_code._transcript_roots", return_value=[tmp]),
@@ -166,9 +166,9 @@ def test_log_round_trips(tmp_path: Path) -> None:
     proj = _init(tmp_path / "p")
     tp = _full_transcript(proj)
     _run(proj, {"transcript_path": str(tp)})
-    before = (proj / AI_LOG_FILENAME).read_text()
+    before = (proj / AI_LOG_FILENAME).read_text(encoding="utf-8")
     again = parse_sessions(proj)
-    assert (proj / AI_LOG_FILENAME).read_text() == before
+    assert (proj / AI_LOG_FILENAME).read_text(encoding="utf-8") == before
     assert again[0].session_id == "sess-abc"
     assert again[0].tool_calls == 2
 

@@ -52,8 +52,8 @@ def test_gemini_import_dedup_is_cwd_independent(tmp_path: Path) -> None:
 
     target = tmp_path / "projA"
     target.mkdir()
-    (target / "halyard.toml").write_text("[business]\n")
-    (target / AI_LOG_FILENAME).write_text(HEADER)
+    (target / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (target / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     # Already imported into the target log.
     append_session(
         target,

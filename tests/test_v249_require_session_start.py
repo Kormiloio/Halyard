@@ -60,8 +60,8 @@ def test_gemini_afteragent_with_state_records(
 
     proj = tmp_path / "proj"
     proj.mkdir()
-    (proj / "halyard.toml").write_text("[business]\n")
-    (proj / AI_LOG_FILENAME).write_text(HEADER)
+    (proj / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (proj / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     gc = tmp_path / "gc-session"
     recent = (datetime.now() - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
     gc.write_text(
@@ -73,7 +73,8 @@ def test_gemini_afteragent_with_state_records(
                 "prompt_tokens": 1200,
                 "output_tokens": 300,
             }
-        )
+        ),
+        encoding="utf-8",
     )
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", gc)
     monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)

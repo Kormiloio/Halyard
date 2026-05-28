@@ -88,11 +88,11 @@ def test_project_evidence_joins_outcomes_and_confidence(tmp_path: Path) -> None:
 
 def test_leakage_proposes_command_writes_nothing(tmp_path: Path) -> None:
     log = tmp_path / "unattributed.log"
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
     s = _s(project=None, attr=None, cost=0.4, remote="git@github.com:acme/web.git")
     with log.open("a") as fh:
         fh.write(s.to_log_line() + "\n")
-    before = log.read_text()
+    before = log.read_text(encoding="utf-8")
 
     rows = leakage(log)
     assert len(rows) == 1
@@ -100,7 +100,7 @@ def test_leakage_proposes_command_writes_nothing(tmp_path: Path) -> None:
     assert rows[0].cost_usd == 0.4
     assert rows[0].fix_command.startswith("halyard link-repo client:")
     assert "--remote git@github.com:acme/web.git" in rows[0].fix_command
-    assert log.read_text() == before  # read-only
+    assert log.read_text(encoding="utf-8") == before  # read-only
 
 
 def test_leakage_absent_log() -> None:
@@ -120,9 +120,9 @@ def test_moat_panel_renders_above_commodity(tmp_path: Path) -> None:
 
     proj = tmp_path / "p"
     proj.mkdir()
-    (proj / "halyard.toml").write_text("[business]\n")
-    (proj / "time.timeclock").write_text("; t\n")
-    (proj / AI_LOG_FILENAME).write_text(HEADER)
+    (proj / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (proj / "time.timeclock").write_text("; t\n", encoding="utf-8")
+    (proj / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     append_session(proj, _s(project="acme:web", attr="timer", cost=2.0))
 
     html = render_dashboard(proj)

@@ -29,7 +29,7 @@ def test_install_hook_claude_creates_settings(
     _do_install_hook_claude(global_=True)
 
     assert _settings(tmp_path).exists()
-    data = json.loads(_settings(tmp_path).read_text())
+    data = json.loads(_settings(tmp_path).read_text(encoding="utf-8"))
     assert "hooks" in data
 
 
@@ -48,7 +48,7 @@ def test_auto_install_writes_claude_hooks(tmp_path: Path, monkeypatch: pytest.Mo
         _auto_install_detected_hooks()
 
     assert _settings(tmp_path).exists()
-    hooks = json.loads(_settings(tmp_path).read_text()).get("hooks", {})
+    hooks = json.loads(_settings(tmp_path).read_text(encoding="utf-8")).get("hooks", {})
     assert len(hooks) >= 1
 
 
@@ -75,11 +75,11 @@ def test_install_hook_claude_preserves_existing_settings(
 
     path = _settings(tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"theme": "dark", "fontSize": 14}))
+    path.write_text(json.dumps({"theme": "dark", "fontSize": 14}), encoding="utf-8")
 
     _do_install_hook_claude(global_=True)
 
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     assert data["theme"] == "dark"
     assert data["fontSize"] == 14
     assert "hooks" in data
@@ -96,7 +96,7 @@ def test_install_hook_claude_idempotent(tmp_path: Path, monkeypatch: pytest.Monk
     _do_install_hook_claude(global_=True)
     _do_install_hook_claude(global_=True)
 
-    data = json.loads(_settings(tmp_path).read_text())
+    data = json.loads(_settings(tmp_path).read_text(encoding="utf-8"))
     for event, entries in data.get("hooks", {}).items():
         commands = [h.get("command") for entry in entries for h in entry.get("hooks", [])]
         assert len(commands) == len(set(commands)), f"Duplicate hook commands in event '{event}'"
@@ -119,7 +119,8 @@ def _write_hook_settings(path: Path) -> None:
                     "Stop": [{"hooks": [{"type": "command", "command": "/bin/halyard cc-hook"}]}],
                 }
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
 
@@ -168,7 +169,7 @@ def test_install_proceeds_when_other_file_absent(
 
     settings = project / ".claude" / "settings.json"
     assert settings.exists()
-    assert "hooks" in json.loads(settings.read_text())
+    assert "hooks" in json.loads(settings.read_text(encoding="utf-8"))
 
 
 def test_install_proceeds_when_other_file_has_no_hooks(
@@ -182,10 +183,10 @@ def test_install_proceeds_when_other_file_has_no_hooks(
 
     global_settings = home / ".claude" / "settings.json"
     global_settings.parent.mkdir(parents=True, exist_ok=True)
-    global_settings.write_text(json.dumps({"theme": "dark"}))
+    global_settings.write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
 
     _do_install_hook_claude(global_=False)
 
     local_settings = project / ".claude" / "settings.json"
     assert local_settings.exists()
-    assert "hooks" in json.loads(local_settings.read_text())
+    assert "hooks" in json.loads(local_settings.read_text(encoding="utf-8"))

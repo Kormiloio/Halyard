@@ -23,8 +23,8 @@ def test_run_claude_log_query_no_api_key(monkeypatch):
 
 def test_run_claude_log_query_success(mock_anthropic, tmp_path):
     # Setup project dir
-    (tmp_path / "ai-sessions.log").write_text("; header\n")
-    (tmp_path / "time.timeclock").write_text("; clock\n")
+    (tmp_path / "ai-sessions.log").write_text("; header\n", encoding="utf-8")
+    (tmp_path / "time.timeclock").write_text("; clock\n", encoding="utf-8")
 
     # Mock responses
     # Turn 1: Claude asks for a summary

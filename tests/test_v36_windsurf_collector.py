@@ -17,8 +17,8 @@ def test_v36_windsurf_session_lifecycle(tmp_path: Path, monkeypatch: pytest.Monk
     home = tmp_path / "home"
     project = tmp_path / "project"
     project.mkdir(parents=True)
-    (project / "halyard.toml").write_text('[project]\nslug = "acme:auth"\n')
-    (project / "ai-sessions.log").write_text("; Halyard\n")
+    (project / "halyard.toml").write_text('[project]\nslug = "acme:auth"\n', encoding="utf-8")
+    (project / "ai-sessions.log").write_text("; Halyard\n", encoding="utf-8")
 
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.chdir(project)
@@ -36,7 +36,7 @@ def test_v36_windsurf_session_lifecycle(tmp_path: Path, monkeypatch: pytest.Monk
     # THEN state file should exist
     state_file = home / ".halyard" / "ws-sessions" / f"{tid}.json"
     assert state_file.exists()
-    state = json.loads(state_file.read_text())
+    state = json.loads(state_file.read_text(encoding="utf-8"))
     assert state["user_count"] == 1
     assert state["assistant_count"] == 0
     assert state["model"] == "SWE-1.6 Slow"
@@ -49,7 +49,7 @@ def test_v36_windsurf_session_lifecycle(tmp_path: Path, monkeypatch: pytest.Monk
     record_turn(payload_stop, is_start=False)
 
     # THEN counts should be updated
-    state = json.loads(state_file.read_text())
+    state = json.loads(state_file.read_text(encoding="utf-8"))
     assert state["user_count"] == 1
     assert state["assistant_count"] == 1
 
@@ -98,7 +98,7 @@ def test_v36_windsurf_install_hook(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     # THEN hooks.json should be correctly configured
     hooks_file = home / ".codeium" / "windsurf" / "hooks.json"
     assert hooks_file.exists()
-    data = json.loads(hooks_file.read_text())
+    data = json.loads(hooks_file.read_text(encoding="utf-8"))
 
     pre = data["hooks"]["pre_user_prompt"]
     assert any("halyard windsurf-session-start" in h["command"] for h in pre)

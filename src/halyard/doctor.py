@@ -1037,7 +1037,7 @@ def _latest_recent_session_file(path: Path, cutoff: datetime) -> AiSession | Non
     if not path.exists():
         return None
     sessions: list[AiSession] = []
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith(";"):
             continue
@@ -1129,7 +1129,7 @@ def _read_json(path: Path) -> object:
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, ValueError):
         return {}
 
@@ -1149,12 +1149,14 @@ def _is_writable(path: Path) -> bool:
 def _count_session_lines(path: Path) -> int:
     if not path.exists():
         return 0
-    return sum(1 for line in path.read_text().splitlines() if line.strip().startswith("s "))
+    return sum(
+        1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip().startswith("s ")
+    )
 
 
 def _active_slug(path: Path) -> str | None:
     try:
-        for line in path.read_text().splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             if line.startswith("slug="):
                 return line[5:]
     except OSError:

@@ -29,7 +29,7 @@ def install_import_timer(interval_seconds: int = DEFAULT_INTERVAL_SECONDS) -> st
     halyard_exe = _halyard_exe()
     PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
     LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    PLIST_PATH.write_text(_plist(halyard_exe, interval_seconds))
+    PLIST_PATH.write_text(_plist(halyard_exe, interval_seconds), encoding="utf-8")
     # Reload idempotently: unload first (ignore failure), then load.
     subprocess.run(["launchctl", "unload", str(PLIST_PATH)], capture_output=True, text=True)
     subprocess.run(["launchctl", "load", "-w", str(PLIST_PATH)], check=True)

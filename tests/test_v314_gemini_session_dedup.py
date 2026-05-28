@@ -185,8 +185,10 @@ def test_parse_sessions_applies_collapse(tmp_path: Path) -> None:
     surfaces one canonical session (the choke point all surfaces share)."""
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
-    (project_dir / "halyard.toml").write_text('[project]\nslug = "kormilo/halyard"')
-    (project_dir / AI_LOG_FILENAME).write_text("")
+    (project_dir / "halyard.toml").write_text(
+        '[project]\nslug = "kormilo/halyard"', encoding="utf-8"
+    )
+    (project_dir / AI_LOG_FILENAME).write_text("", encoding="utf-8")
     for r in (
         _gem(
             start=_T,

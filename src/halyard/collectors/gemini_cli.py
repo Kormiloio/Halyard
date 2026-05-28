@@ -106,7 +106,7 @@ def record_session_start() -> int:
         "cache_tokens": 0,
     }
     _GC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _GC_SESSION_FILE.write_text(json.dumps(state))
+    _GC_SESSION_FILE.write_text(json.dumps(state), encoding="utf-8")
     return 0
 
 
@@ -134,7 +134,7 @@ def record_model_usage() -> int:
     # Keep the largest cumulative cached token count
     state["cache_tokens"] = max(int(state.get("cache_tokens", 0)), cached_tokens)
 
-    _GC_SESSION_FILE.write_text(json.dumps(state))
+    _GC_SESSION_FILE.write_text(json.dumps(state), encoding="utf-8")
     return 0
 
 
@@ -363,7 +363,7 @@ def _read_state() -> dict[str, Any] | None:
     if not _GC_SESSION_FILE.exists():
         return None
     try:
-        result: dict[str, Any] = json.loads(_GC_SESSION_FILE.read_text())
+        result: dict[str, Any] = json.loads(_GC_SESSION_FILE.read_text(encoding="utf-8"))
         return result
     except (json.JSONDecodeError, ValueError, OSError):
         return None
@@ -380,7 +380,7 @@ def _reset_state(payload: dict) -> None:  # type: ignore[type-arg]
     state["prompt_tokens"] = 0
     state["output_tokens"] = 0
     state["cache_tokens"] = 0
-    _GC_SESSION_FILE.write_text(json.dumps(state))
+    _GC_SESSION_FILE.write_text(json.dumps(state), encoding="utf-8")
 
 
 def _model_segs(model_stats: list[GeminiModelStats]) -> list[ModelSeg]:

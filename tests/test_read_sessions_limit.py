@@ -36,7 +36,7 @@ def _build_large_log(project_dir: Path, n: int = _SESSION_COUNT) -> None:
         "; Halyard AI session log\n"
         "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n"
     )
-    log.write_text(header + _SESSION_LINE * n)
+    log.write_text(header + _SESSION_LINE * n, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

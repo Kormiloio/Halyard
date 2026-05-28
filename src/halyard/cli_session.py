@@ -238,7 +238,7 @@ def register(app: typer.Typer) -> None:
                 console.print(f"[yellow]No timeclock windows found for [bold]{slug}[/].[/]")
                 return
 
-        raw_lines = log_path.read_text().splitlines()
+        raw_lines = log_path.read_text(encoding="utf-8").splitlines()
         unambiguous: list[tuple[str, str]] = []
         ambiguous: list[tuple[str, AiSession, list[str]]] = []
         skipped_no_window = 0
@@ -855,7 +855,9 @@ def register(app: typer.Typer) -> None:
 
         valid = 0
         invalid = 0
-        for lineno, raw_line in enumerate(resolved_log_path.read_text().splitlines(), start=1):
+        for lineno, raw_line in enumerate(
+            resolved_log_path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
             line = raw_line.strip()
             if not line or line.startswith(";"):
                 continue

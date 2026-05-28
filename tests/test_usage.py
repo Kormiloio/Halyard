@@ -182,17 +182,18 @@ def test_cli_usage_json_output(
     # Set up a minimal hub project so the command resolves to a real dir.
     hub = tmp_path / "hub"
     hub.mkdir()
-    (hub / "halyard.toml").write_text("[project]\nslug = 'test'\n")
+    (hub / "halyard.toml").write_text("[project]\nslug = 'test'\n", encoding="utf-8")
     (hub / AI_LOG_FILENAME).write_text(
         "; halyard log\n"
         "s 2026-05-14T10:00:00 2026-05-14T10:30:00 claude-code sonnet 1000 200 0.0030 "
-        "project=acme:web\n"
+        "project=acme:web\n",
+        encoding="utf-8",
     )
 
     # Point hub-pointer and HOME at tmp_path.
     monkeypatch.setattr(_Path, "home", lambda: tmp_path)
     (tmp_path / ".halyard").mkdir(parents=True, exist_ok=True)
-    (tmp_path / ".halyard" / "hub").write_text(str(hub) + "\n")
+    (tmp_path / ".halyard" / "hub").write_text(str(hub) + "\n", encoding="utf-8")
 
     runner = CliRunner()
     result = runner.invoke(app, ["usage", "--json", "--range", "all"])

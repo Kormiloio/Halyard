@@ -60,7 +60,7 @@ def test_hmac_key_holder_can_forge_documented_limitation(tmp_path: Path) -> None
 
     p = tmp_path / "active"
     write_trusted_state(p, "slug=acme\n", mode="hmac")
-    key = bytes.fromhex((tmp_path / "integrity.key").read_text().strip())
+    key = bytes.fromhex((tmp_path / "integrity.key").read_text(encoding="utf-8").strip())
     p.write_text("slug=evil\n", encoding="utf-8")
     (tmp_path / "active.hmac").write_text(
         _hmac.new(key, b"slug=evil\n", hashlib.sha256).hexdigest() + "\n",
@@ -93,7 +93,7 @@ def test_hash_mode_still_works(tmp_path: Path) -> None:
 def test_hmac_mode_resolves_from_toml_and_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "halyard.toml").write_text('state_integrity = "hmac"\n')
+    (tmp_path / "halyard.toml").write_text('state_integrity = "hmac"\n', encoding="utf-8")
     state_integrity._reset_cache_for_tests()
     assert state_integrity.current_mode(tmp_path) == "hmac"
     monkeypatch.setenv("HALYARD_STATE_INTEGRITY", "hmac")

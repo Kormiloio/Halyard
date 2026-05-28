@@ -22,8 +22,8 @@ def _project(tmp_path: Path, mode: str | None) -> Path:
     proj.mkdir(parents=True, exist_ok=True)
     # Top-level key MUST precede any table header to stay top-level.
     toml = (f'state_integrity = "{mode}"\n' if mode else "") + "[business]\n"
-    (proj / "halyard.toml").write_text(toml)
-    (proj / "time.timeclock").write_text("; t\n")
+    (proj / "halyard.toml").write_text(toml, encoding="utf-8")
+    (proj / "time.timeclock").write_text("; t\n", encoding="utf-8")
     return proj
 
 
@@ -56,7 +56,9 @@ def test_tampered_active_file_is_rejected(tmp_path: Path, monkeypatch: pytest.Mo
     write_active_timer(proj / "time.timeclock", "acme:web", "2026-05-16 09:00:00")
 
     # Attacker rewrites the slug without updating the sidecar.
-    active.write_text(active.read_text().replace("acme:web", "evil:exfil"), encoding="utf-8")
+    active.write_text(
+        active.read_text(encoding="utf-8").replace("acme:web", "evil:exfil"), encoding="utf-8"
+    )
 
     # Fail closed: verification now applies, so the tampered timer is
     # not trusted (previously this returned the forged slug).

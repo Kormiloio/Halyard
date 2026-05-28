@@ -43,10 +43,11 @@ def _stop_payload(
 
 def _halyard_project(tmp_path: Path) -> Path:
     tmp_path.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "halyard.toml").write_text("[project]\nslug = 'test'\n")
+    (tmp_path / "halyard.toml").write_text("[project]\nslug = 'test'\n", encoding="utf-8")
     (tmp_path / "ai-sessions.log").write_text(
         "; Halyard AI session log\n"
-        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n"
+        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n",
+        encoding="utf-8",
     )
     return tmp_path
 
@@ -68,7 +69,7 @@ def test_record_session_start_creates_state_file(
 
     assert result == 0
     assert state_file.exists()
-    data = json.loads(state_file.read_text())
+    data = json.loads(state_file.read_text(encoding="utf-8"))
     ts = datetime.fromisoformat(data["start"])
     assert ts.year == datetime.now().year
 
@@ -77,13 +78,13 @@ def test_record_session_start_is_idempotent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(_RECENT_START)
+    state_file.write_text(_RECENT_START, encoding="utf-8")
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
 
     record_session_start()
 
     # Should not overwrite existing timestamp
-    assert state_file.read_text().strip() == _RECENT_START
+    assert state_file.read_text(encoding="utf-8").strip() == _RECENT_START
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +95,7 @@ def test_record_session_start_is_idempotent(
 def test_handle_stop_hook_writes_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(_RECENT_START)
+    state_file.write_text(_RECENT_START, encoding="utf-8")
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: "acme:web")
 
@@ -103,7 +104,7 @@ def test_handle_stop_hook_writes_session(tmp_path: Path, monkeypatch: pytest.Mon
         result = handle_stop_hook()
 
     assert result == 0
-    log_text = (project / "ai-sessions.log").read_text()
+    log_text = (project / "ai-sessions.log").read_text(encoding="utf-8")
     data_lines = [ln for ln in log_text.splitlines() if ln.startswith("s ")]
     assert len(data_lines) == 1
     parts = data_lines[0].split()
@@ -120,7 +121,7 @@ def test_handle_stop_hook_clears_state_file(
 ) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(_RECENT_START)
+    state_file.write_text(_RECENT_START, encoding="utf-8")
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
 
@@ -136,7 +137,7 @@ def test_handle_stop_hook_uses_workspace_root_for_project(
     # Project is not the cwd — discovered via workspace_roots
     project = _halyard_project(tmp_path / "deep" / "workspace")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(_RECENT_START)
+    state_file.write_text(_RECENT_START, encoding="utf-8")
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
 
@@ -144,7 +145,9 @@ def test_handle_stop_hook_uses_workspace_root_for_project(
         handle_stop_hook()
 
     data_lines = [
-        ln for ln in (project / "ai-sessions.log").read_text().splitlines() if ln.startswith("s ")
+        ln
+        for ln in (project / "ai-sessions.log").read_text(encoding="utf-8").splitlines()
+        if ln.startswith("s ")
     ]
     assert len(data_lines) == 1
 
@@ -153,7 +156,7 @@ def test_handle_stop_hook_skips_when_no_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(_RECENT_START)
+    state_file.write_text(_RECENT_START, encoding="utf-8")
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
 
     with _patch_stdin(_stop_payload(workspace_roots=["/nonexistent/path"])):
@@ -180,7 +183,9 @@ def test_handle_stop_hook_skips_when_no_start_file(
 
     assert rc == 0
     data_lines = [
-        ln for ln in (project / "ai-sessions.log").read_text().splitlines() if ln.startswith("s ")
+        ln
+        for ln in (project / "ai-sessions.log").read_text(encoding="utf-8").splitlines()
+        if ln.startswith("s ")
     ]
     assert data_lines == []
 
@@ -188,7 +193,7 @@ def test_handle_stop_hook_skips_when_no_start_file(
 def test_handle_stop_hook_cache_tokens(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(_RECENT_START)
+    state_file.write_text(_RECENT_START, encoding="utf-8")
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
 
@@ -206,7 +211,9 @@ def test_handle_stop_hook_cache_tokens(tmp_path: Path, monkeypatch: pytest.Monke
         handle_stop_hook()
 
     data_lines = [
-        ln for ln in (project / "ai-sessions.log").read_text().splitlines() if ln.startswith("s ")
+        ln
+        for ln in (project / "ai-sessions.log").read_text(encoding="utf-8").splitlines()
+        if ln.startswith("s ")
     ]
     assert "cache_read=500" in data_lines[0]
     assert "cache_write=100" in data_lines[0]
@@ -217,7 +224,7 @@ def test_handle_stop_hook_records_safe_metadata_counts(
 ) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(_RECENT_START)
+    state_file.write_text(_RECENT_START, encoding="utf-8")
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
 
@@ -252,7 +259,9 @@ def test_handle_stop_hook_records_safe_metadata_counts(
     assert session.interaction_data_available is True
     assert session.telemetry_source == "cursor-hook"
     assert session.telemetry_trust == "observed"
-    assert "do not log this content" not in (project / "ai-sessions.log").read_text()
+    assert "do not log this content" not in (project / "ai-sessions.log").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_handle_stop_hook_skips_evidence_free_fire(
@@ -263,7 +272,7 @@ def test_handle_stop_hook_skips_evidence_free_fire(
     # without a Cursor turn) — it must NOT become a ledger row.
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(_RECENT_START)
+    state_file.write_text(_RECENT_START, encoding="utf-8")
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
 
@@ -287,7 +296,7 @@ def test_cursor_timer_attribution_sets_attr_method_timer(
     """When active timer is running, attr_method=timer and no attribution:inferred tag."""
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(_RECENT_START)
+    state_file.write_text(_RECENT_START, encoding="utf-8")
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     # Patch on the collector module so the `from … import` binding is replaced
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: "acme:auth")
@@ -314,7 +323,7 @@ def test_cursor_ws_root_attribution_sets_attr_method_ws_root(
     """
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(_RECENT_START)
+    state_file.write_text(_RECENT_START, encoding="utf-8")
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
     # Simulate infer_project returning a slug for the workspace root path
@@ -355,6 +364,6 @@ def test_install_cursor_hook_writes_hooks_json(
     runner.invoke(app, ["install-cursor-hook"])
     cursor_hooks = tmp_path / ".cursor" / "hooks.json"
     if cursor_hooks.exists():
-        data = json.loads(cursor_hooks.read_text())
+        data = json.loads(cursor_hooks.read_text(encoding="utf-8"))
         assert "beforeSubmitPrompt" in data["hooks"]
         assert "stop" in data["hooks"]

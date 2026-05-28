@@ -30,12 +30,12 @@ def clean_active(tmp_path: Path) -> None:  # type: ignore[misc]
 
 def test_start_writes_i_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER)
+    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER, encoding="utf-8")
 
     result = runner.invoke(app, ["start", "acme/auth-migration"])
 
     assert result.exit_code == 0, result.output
-    lines = (tmp_path / "time.timeclock").read_text().splitlines()
+    lines = (tmp_path / "time.timeclock").read_text(encoding="utf-8").splitlines()
     i_lines = [line for line in lines if line.startswith("i ")]
     assert len(i_lines) == 1
     assert "acme:auth-migration" in i_lines[0]
@@ -43,12 +43,12 @@ def test_start_writes_i_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 
 def test_start_creates_active_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER)
+    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER, encoding="utf-8")
 
     runner.invoke(app, ["start", "acme/auth-migration"])
 
     assert _HALYARD_ACTIVE.exists()
-    content = _HALYARD_ACTIVE.read_text()
+    content = _HALYARD_ACTIVE.read_text(encoding="utf-8")
     assert "acme:auth-migration" in content
     assert "timeclock=" in content
     assert "started=" in content
@@ -65,7 +65,7 @@ def test_start_no_timeclock_exits_nonzero(tmp_path: Path, monkeypatch: pytest.Mo
 
 def test_start_while_active_exits_nonzero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER)
+    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER, encoding="utf-8")
 
     runner.invoke(app, ["start", "acme/auth-migration"])
     result = runner.invoke(app, ["start", "globex/new-work"])
@@ -76,7 +76,7 @@ def test_start_while_active_exits_nonzero(tmp_path: Path, monkeypatch: pytest.Mo
 
 def test_start_bad_slug_exits_nonzero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER)
+    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER, encoding="utf-8")
 
     for bad in ("acme", "/auth-migration", "acme/"):
         result = runner.invoke(app, ["start", bad])
@@ -90,20 +90,20 @@ def test_start_bad_slug_exits_nonzero(tmp_path: Path, monkeypatch: pytest.Monkey
 
 def test_stop_writes_o_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER)
+    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER, encoding="utf-8")
 
     runner.invoke(app, ["start", "acme/auth-migration"])
     result = runner.invoke(app, ["stop"])
 
     assert result.exit_code == 0, result.output
-    lines = (tmp_path / "time.timeclock").read_text().splitlines()
+    lines = (tmp_path / "time.timeclock").read_text(encoding="utf-8").splitlines()
     o_lines = [line for line in lines if line.startswith("o ")]
     assert len(o_lines) == 1
 
 
 def test_stop_clears_active_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER)
+    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER, encoding="utf-8")
 
     runner.invoke(app, ["start", "acme/auth-migration"])
     runner.invoke(app, ["stop"])
@@ -124,14 +124,14 @@ def test_start_stop_timeclock_is_hledger_compatible(
 ) -> None:
     """The i/o lines must match hledger timeclock format exactly."""
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER)
+    (tmp_path / "time.timeclock").write_text(TIMECLOCK_HEADER, encoding="utf-8")
 
     runner.invoke(app, ["start", "acme/auth-migration"])
     runner.invoke(app, ["stop"])
 
     lines = [
         line
-        for line in (tmp_path / "time.timeclock").read_text().splitlines()
+        for line in (tmp_path / "time.timeclock").read_text(encoding="utf-8").splitlines()
         if line and not line.startswith(";")
     ]
     assert lines[0].startswith("i ")

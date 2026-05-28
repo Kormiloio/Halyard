@@ -27,7 +27,7 @@ def _make_session_file(
     tmp_path: Path, events: list[dict], filename: str = _SESSION_FILENAME
 ) -> Path:  # type: ignore[type-arg]
     path = tmp_path / filename
-    path.write_text("\n".join(json.dumps(e) for e in events))
+    path.write_text("\n".join(json.dumps(e) for e in events), encoding="utf-8")
     return path
 
 
@@ -170,7 +170,7 @@ def test_parse_skips_zero_output_tokens(tmp_path: Path) -> None:
 
 def test_parse_returns_none_for_empty_file(tmp_path: Path) -> None:
     path = tmp_path / _SESSION_FILENAME
-    path.write_text("")
+    path.write_text("", encoding="utf-8")
     assert _parse_session_file(path) is None
 
 
@@ -262,10 +262,11 @@ def test_parse_session_file_records_safe_metadata_counts(tmp_path: Path) -> None
 def _halyard_project(tmp_path: Path) -> Path:
     """Create a minimal Halyard project directory."""
     tmp_path.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "halyard.toml").write_text("[project]\nslug = 'test'\n")
+    (tmp_path / "halyard.toml").write_text("[project]\nslug = 'test'\n", encoding="utf-8")
     (tmp_path / "ai-sessions.log").write_text(
         "; Halyard AI session log\n"
-        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd> [key=value ...]\n"
+        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd> [key=value ...]\n",
+        encoding="utf-8",
     )
     return tmp_path
 
@@ -292,7 +293,7 @@ def test_import_writes_session_to_log(tmp_path: Path, monkeypatch: pytest.Monkey
     sessions = import_codex_sessions(project_dir=project)
 
     assert len(sessions) == 1
-    log_lines = (project / "ai-sessions.log").read_text().splitlines()
+    log_lines = (project / "ai-sessions.log").read_text(encoding="utf-8").splitlines()
     data_lines = [ln for ln in log_lines if ln.startswith("s ")]
     assert len(data_lines) == 1
     assert "codex" in data_lines[0]
@@ -321,7 +322,7 @@ def test_import_dry_run_does_not_write(tmp_path: Path, monkeypatch: pytest.Monke
     assert len(sessions) == 1
     # Nothing written to state file
     assert not state_file.exists()
-    log_lines = (project / "ai-sessions.log").read_text().splitlines()
+    log_lines = (project / "ai-sessions.log").read_text(encoding="utf-8").splitlines()
     assert not any(ln.startswith("s ") for ln in log_lines)
 
 

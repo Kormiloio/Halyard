@@ -24,8 +24,8 @@ _RECENT_START = (datetime.now() - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%
 
 def _halyard_project(tmp_path: Path) -> Path:
     tmp_path.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "halyard.toml").write_text("[project]\nslug = 'test'\n")
-    (tmp_path / "ai-sessions.log").write_text("; Halyard AI session log\n")
+    (tmp_path / "halyard.toml").write_text("[project]\nslug = 'test'\n", encoding="utf-8")
+    (tmp_path / "ai-sessions.log").write_text("; Halyard AI session log\n", encoding="utf-8")
     return tmp_path
 
 
@@ -58,7 +58,9 @@ def _stop_payload_cc(
 def test_cc_stop_captures_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cc-session"
-    state_file.write_text(json.dumps({"start": _RECENT_START, "sha_at_start": None}))
+    state_file.write_text(
+        json.dumps({"start": _RECENT_START, "sha_at_start": None}), encoding="utf-8"
+    )
     monkeypatch.setattr("halyard.collectors.claude_code._CC_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.claude_code.find_project_dir", lambda **_kw: project)
     monkeypatch.setattr("halyard.collectors.claude_code.current_branch", lambda _: "feature/auth")
@@ -78,7 +80,9 @@ def test_cc_stop_captures_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def test_cc_stop_captures_commit_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cc-session"
-    state_file.write_text(json.dumps({"start": _RECENT_START, "sha_at_start": None}))
+    state_file.write_text(
+        json.dumps({"start": _RECENT_START, "sha_at_start": None}), encoding="utf-8"
+    )
     monkeypatch.setattr("halyard.collectors.claude_code._CC_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.claude_code.find_project_dir", lambda **_kw: project)
     monkeypatch.setattr("halyard.collectors.claude_code.current_branch", lambda _: "main")
@@ -97,7 +101,9 @@ def test_cc_stop_captures_commit_count(tmp_path: Path, monkeypatch: pytest.Monke
 def test_cc_stop_captures_code_delta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cc-session"
-    state_file.write_text(json.dumps({"start": _RECENT_START, "sha_at_start": "abc123"}))
+    state_file.write_text(
+        json.dumps({"start": _RECENT_START, "sha_at_start": "abc123"}), encoding="utf-8"
+    )
     monkeypatch.setattr("halyard.collectors.claude_code._CC_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.claude_code.find_project_dir", lambda **_kw: project)
     monkeypatch.setattr("halyard.collectors.claude_code.current_branch", lambda _: "main")
@@ -118,7 +124,9 @@ def test_cc_stop_no_delta_when_no_sha(tmp_path: Path, monkeypatch: pytest.Monkey
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cc-session"
     # sha_at_start is None — numstat should not be called
-    state_file.write_text(json.dumps({"start": _RECENT_START, "sha_at_start": None}))
+    state_file.write_text(
+        json.dumps({"start": _RECENT_START, "sha_at_start": None}), encoding="utf-8"
+    )
     monkeypatch.setattr("halyard.collectors.claude_code._CC_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.claude_code.find_project_dir", lambda **_kw: project)
     monkeypatch.setattr("halyard.collectors.claude_code.current_branch", lambda _: "main")
@@ -172,7 +180,9 @@ def _stop_payload_cursor(
 def test_cursor_stop_captures_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(json.dumps({"start": _RECENT_START, "sha_at_start": None}))
+    state_file.write_text(
+        json.dumps({"start": _RECENT_START, "sha_at_start": None}), encoding="utf-8"
+    )
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
     monkeypatch.setattr("halyard.collectors.cursor.current_branch", lambda _: "fix/login")
@@ -192,7 +202,9 @@ def test_cursor_stop_captures_branch(tmp_path: Path, monkeypatch: pytest.MonkeyP
 def test_cursor_stop_captures_commit_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(json.dumps({"start": _RECENT_START, "sha_at_start": None}))
+    state_file.write_text(
+        json.dumps({"start": _RECENT_START, "sha_at_start": None}), encoding="utf-8"
+    )
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
     monkeypatch.setattr("halyard.collectors.cursor.current_branch", lambda _: "main")
@@ -211,7 +223,9 @@ def test_cursor_stop_captures_commit_count(tmp_path: Path, monkeypatch: pytest.M
 def test_cursor_stop_captures_code_delta(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "cursor-session"
-    state_file.write_text(json.dumps({"start": _RECENT_START, "sha_at_start": "deadbeef"}))
+    state_file.write_text(
+        json.dumps({"start": _RECENT_START, "sha_at_start": "deadbeef"}), encoding="utf-8"
+    )
     monkeypatch.setattr("halyard.collectors.cursor._CURSOR_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.cursor.read_active_project", lambda: None)
     monkeypatch.setattr("halyard.collectors.cursor.current_branch", lambda _: "main")
@@ -262,7 +276,7 @@ def _gemini_stop_payload(cwd: str) -> str:
 def test_gemini_stop_captures_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "gc-session"
-    state_file.write_text(_gemini_hook_state(project))
+    state_file.write_text(_gemini_hook_state(project), encoding="utf-8")
 
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)
@@ -287,7 +301,7 @@ def test_gemini_stop_captures_branch(tmp_path: Path, monkeypatch: pytest.MonkeyP
 def test_gemini_stop_captures_commit_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _halyard_project(tmp_path / "project")
     state_file = tmp_path / "gc-session"
-    state_file.write_text(_gemini_hook_state(project))
+    state_file.write_text(_gemini_hook_state(project), encoding="utf-8")
 
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)

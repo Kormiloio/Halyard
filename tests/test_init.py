@@ -31,7 +31,7 @@ def test_init_halyard_toml_content(tmp_path: Path, monkeypatch: object) -> None:
     monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
     runner.invoke(app, ["init"])
 
-    content = (tmp_path / "halyard.toml").read_text()
+    content = (tmp_path / "halyard.toml").read_text(encoding="utf-8")
     assert "[business]" in content
     assert "[invoicing]" in content
     assert "counter = 0" in content
@@ -48,7 +48,7 @@ def test_init_prints_next_steps(tmp_path: Path, monkeypatch: object) -> None:
 
 def test_init_existing_project_exits_nonzero(tmp_path: Path, monkeypatch: object) -> None:
     monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
 
     result = runner.invoke(app, ["init"])
 
@@ -58,7 +58,7 @@ def test_init_existing_project_exits_nonzero(tmp_path: Path, monkeypatch: object
 
 def test_init_existing_project_writes_no_files(tmp_path: Path, monkeypatch: object) -> None:
     monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
-    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname = 'Test'\n", encoding="utf-8")
 
     runner.invoke(app, ["init"])
 
@@ -72,7 +72,7 @@ def test_init_creates_gitignore_when_missing(tmp_path: Path, monkeypatch: object
     result = runner.invoke(app, ["init"])
 
     assert result.exit_code == 0, result.output
-    content = (tmp_path / ".gitignore").read_text()
+    content = (tmp_path / ".gitignore").read_text(encoding="utf-8")
     assert ".halyard-cache/" in content
     assert ".DS_Store" in content
 
@@ -80,12 +80,12 @@ def test_init_creates_gitignore_when_missing(tmp_path: Path, monkeypatch: object
 def test_init_preserves_existing_gitignore(tmp_path: Path, monkeypatch: object) -> None:
     monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
     existing = "# Python\n__pycache__/\ndist/\n"
-    (tmp_path / ".gitignore").write_text(existing)
+    (tmp_path / ".gitignore").write_text(existing, encoding="utf-8")
 
     result = runner.invoke(app, ["init"])
 
     assert result.exit_code == 0, result.output
-    content = (tmp_path / ".gitignore").read_text()
+    content = (tmp_path / ".gitignore").read_text(encoding="utf-8")
     assert content.startswith(existing)
     assert "__pycache__/" in content
     assert "dist/" in content
@@ -106,5 +106,5 @@ def test_init_gitignore_includes_halyard_dir(tmp_path: Path, monkeypatch: object
     result = runner.invoke(app, ["init"])
 
     assert result.exit_code == 0, result.output
-    content = (tmp_path / ".gitignore").read_text()
+    content = (tmp_path / ".gitignore").read_text(encoding="utf-8")
     assert ".halyard/" in content

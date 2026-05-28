@@ -30,7 +30,7 @@ def _slug_from_halyard_toml(cwd: Path) -> str | None:
         candidate = directory / "halyard.toml"
         if candidate.is_file():
             try:
-                data = tomllib.loads(candidate.read_text())
+                data = tomllib.loads(candidate.read_text(encoding="utf-8"))
                 slug = data.get("project", {}).get("slug")
                 if slug:
                     return str(slug)
@@ -233,7 +233,7 @@ def _load_repos_config() -> dict[str, str]:
     if not _REPOS_CONFIG.exists():
         return {}
     try:
-        data = tomllib.loads(_REPOS_CONFIG.read_text())
+        data = tomllib.loads(_REPOS_CONFIG.read_text(encoding="utf-8"))
         repos = data.get("repos", {})
         return {k: v for k, v in repos.items() if isinstance(k, str) and isinstance(v, str)}
     except tomllib.TOMLDecodeError as e:

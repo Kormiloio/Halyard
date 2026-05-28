@@ -21,12 +21,12 @@ def _ts(dt: datetime) -> str:
 
 
 def _read_state() -> dict[str, str]:
-    lines = auto_timer._AUTO_TIMER_FILE.read_text().splitlines()
+    lines = auto_timer._AUTO_TIMER_FILE.read_text(encoding="utf-8").splitlines()
     return dict(line.split("=", 1) for line in lines if "=" in line)
 
 
 def _read_tc(path: Path) -> list[str]:
-    return [line for line in path.read_text().splitlines() if line.strip()]
+    return [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 # ---------------------------------------------------------------------------
@@ -36,7 +36,7 @@ def _read_tc(path: Path) -> list[str]:
 
 def test_opens_new_timer(tmp_path):
     tc = tmp_path / "time.timeclock"
-    tc.write_text("")
+    tc.write_text("", encoding="utf-8")
     t0 = datetime(2026, 5, 9, 14, 0, 0)
 
     with patch("halyard.reports.read_active_timer", return_value=None):
@@ -54,7 +54,7 @@ def test_opens_new_timer(tmp_path):
 
 def test_updates_last_activity_when_already_open(tmp_path):
     tc = tmp_path / "time.timeclock"
-    tc.write_text("")
+    tc.write_text("", encoding="utf-8")
     t0 = datetime(2026, 5, 9, 14, 0, 0)
     t1 = datetime(2026, 5, 9, 14, 20, 0)
 
@@ -72,7 +72,7 @@ def test_skips_when_manual_timer_running(tmp_path):
     from halyard.reports import ActiveTimer
 
     tc = tmp_path / "time.timeclock"
-    tc.write_text("")
+    tc.write_text("", encoding="utf-8")
     t0 = datetime(2026, 5, 9, 14, 0, 0)
     fake_active = ActiveTimer(slug="manual:proj", timeclock=tc, started=_ts(t0))
 
@@ -100,7 +100,7 @@ def test_skips_when_timeclock_missing(tmp_path):
 
 def test_closes_stale_timer(tmp_path):
     tc = tmp_path / "time.timeclock"
-    tc.write_text("")
+    tc.write_text("", encoding="utf-8")
     t0 = datetime(2026, 5, 9, 14, 0, 0)
 
     with patch("halyard.reports.read_active_timer", return_value=None):
@@ -117,7 +117,7 @@ def test_closes_stale_timer(tmp_path):
 
 def test_does_not_close_active_timer(tmp_path):
     tc = tmp_path / "time.timeclock"
-    tc.write_text("")
+    tc.write_text("", encoding="utf-8")
     t0 = datetime(2026, 5, 9, 14, 0, 0)
 
     with patch("halyard.reports.read_active_timer", return_value=None):
@@ -139,7 +139,7 @@ def test_noop_when_no_state():
 def test_stale_check_uses_last_activity_not_started(tmp_path):
     """A session with recent last_activity should stay open even if started long ago."""
     tc = tmp_path / "time.timeclock"
-    tc.write_text("")
+    tc.write_text("", encoding="utf-8")
     t0 = datetime(2026, 5, 9, 10, 0, 0)
     t_recent = datetime(2026, 5, 9, 14, 55, 0)
 
@@ -160,7 +160,7 @@ def test_stale_check_uses_last_activity_not_started(tmp_path):
 
 def test_close_now_writes_clockout(tmp_path):
     tc = tmp_path / "time.timeclock"
-    tc.write_text("")
+    tc.write_text("", encoding="utf-8")
     t0 = datetime(2026, 5, 9, 14, 0, 0)
     t_stop = datetime(2026, 5, 9, 15, 30, 0)
 
@@ -187,7 +187,7 @@ def test_close_now_noop_when_nothing_open():
 
 def test_update_activity_refreshes_timestamp(tmp_path):
     tc = tmp_path / "time.timeclock"
-    tc.write_text("")
+    tc.write_text("", encoding="utf-8")
     t0 = datetime(2026, 5, 9, 14, 0, 0)
     t1 = datetime(2026, 5, 9, 14, 45, 0)
 
@@ -213,7 +213,7 @@ def test_update_activity_noop_when_nothing_open():
 
 def test_new_session_after_gap_closes_old_and_opens_new(tmp_path):
     tc = tmp_path / "time.timeclock"
-    tc.write_text("")
+    tc.write_text("", encoding="utf-8")
     t0 = datetime(2026, 5, 9, 10, 0, 0)
     t_gap = t0 + timedelta(minutes=35)  # > 30 min
 

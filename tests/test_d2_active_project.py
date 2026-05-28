@@ -28,9 +28,9 @@ from halyard.dashboard import _handler_for
 
 
 def _init_project(project_dir: Path) -> None:
-    (project_dir / "halyard.toml").write_text("[business]\n")
-    (project_dir / "time.timeclock").write_text("; timeclock\n")
-    (project_dir / AI_LOG_FILENAME).write_text(HEADER)
+    (project_dir / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (project_dir / "time.timeclock").write_text("; timeclock\n", encoding="utf-8")
+    (project_dir / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
 
 
 _TEST_TOKEN = "b" * 64  # fixed 64-char hex token for tests
@@ -150,7 +150,7 @@ def test_dashboard_start_writes_active_file_atomically(
 
     # Active file written with correct content
     assert active.exists(), "~/.halyard/active was not created by /api/start"
-    content = active.read_text()
+    content = active.read_text(encoding="utf-8")
     assert "slug=acme:auth" in content
 
     # No stale tmp file left behind (atomic rename completed)
@@ -193,7 +193,9 @@ def test_dashboard_stop_removes_active_file(
     # Place a pre-written active file at a redirected location
     active = tmp_path / ".halyard" / "active"
     active.parent.mkdir(parents=True, exist_ok=True)
-    active.write_text(f"timeclock={timeclock}\nslug=acme:auth\nstarted=2026-05-06 10:00:00\n")
+    active.write_text(
+        f"timeclock={timeclock}\nslug=acme:auth\nstarted=2026-05-06 10:00:00\n", encoding="utf-8"
+    )
     monkeypatch.setattr("halyard.reports._HALYARD_ACTIVE", active)
 
     # Return a real ActiveTimer so the stop handler's guard passes

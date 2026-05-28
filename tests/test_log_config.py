@@ -21,7 +21,8 @@ def test_load_log_config_valid(tmp_path: Path) -> None:
         '[log]\ndefault_agent = "openai"\n'
         'openai_base_url = "http://localhost:11434/v1"\n'
         'openai_model = "llama3.3"\n'
-        'claude_model = "claude-3-haiku-20240307"\n'
+        'claude_model = "claude-3-haiku-20240307"\n',
+        encoding="utf-8",
     )
     cfg = load_log_config(config_file=config)
     assert cfg.default_agent == "openai"
@@ -32,7 +33,7 @@ def test_load_log_config_valid(tmp_path: Path) -> None:
 
 def test_load_log_config_unknown_agent_warns(tmp_path: Path) -> None:
     config = tmp_path / "config.toml"
-    config.write_text('[log]\ndefault_agent = "xyz"\n')
+    config.write_text('[log]\ndefault_agent = "xyz"\n', encoding="utf-8")
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         cfg = load_log_config(config_file=config)
@@ -42,7 +43,7 @@ def test_load_log_config_unknown_agent_warns(tmp_path: Path) -> None:
 
 def test_load_log_config_partial_section(tmp_path: Path) -> None:
     config = tmp_path / "config.toml"
-    config.write_text('[log]\ndefault_agent = "claude"\n')
+    config.write_text('[log]\ndefault_agent = "claude"\n', encoding="utf-8")
     cfg = load_log_config(config_file=config)
     assert cfg.default_agent == "claude"
     # unset fields use defaults
@@ -52,6 +53,6 @@ def test_load_log_config_partial_section(tmp_path: Path) -> None:
 
 def test_load_log_config_empty_toml(tmp_path: Path) -> None:
     config = tmp_path / "config.toml"
-    config.write_text("")
+    config.write_text("", encoding="utf-8")
     cfg = load_log_config(config_file=config)
     assert cfg == LogConfig()

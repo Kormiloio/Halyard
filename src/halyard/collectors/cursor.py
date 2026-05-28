@@ -73,7 +73,7 @@ def record_session_start() -> int:
         "start": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "sha_at_start": head_sha(cwd),
     }
-    _CURSOR_SESSION_FILE.write_text(json.dumps(state))
+    _CURSOR_SESSION_FILE.write_text(json.dumps(state), encoding="utf-8")
     return 0
 
 
@@ -325,7 +325,7 @@ def _read_session_state() -> dict[str, Any]:
     if not _CURSOR_SESSION_FILE.exists():
         return {}
     try:
-        raw = _CURSOR_SESSION_FILE.read_text().strip()
+        raw = _CURSOR_SESSION_FILE.read_text(encoding="utf-8").strip()
     except OSError:
         return {}
     try:

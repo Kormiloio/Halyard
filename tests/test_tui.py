@@ -132,7 +132,7 @@ def test_tui_hub_flag_uses_configured_hub(tmp_path: Path, monkeypatch: pytest.Mo
 def test_session_store_load(tmp_path: Path) -> None:
     from halyard.tui.store import SessionStore
 
-    (tmp_path / "ai-sessions.log").write_text(HEADER)
+    (tmp_path / "ai-sessions.log").write_text(HEADER, encoding="utf-8")
     append_session(tmp_path, _session(project="acme:auth"))
 
     store = SessionStore(tmp_path / "ai-sessions.log")
@@ -206,7 +206,7 @@ def test_session_store_read_new_lines_appends_and_sorts(tmp_path: Path) -> None:
     from halyard.tui.store import SessionStore
 
     proj = tmp_path
-    (proj / AI_LOG_FILENAME).write_text(HEADER)
+    (proj / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     append_session(proj, _session(start=datetime(2026, 5, 7, 9)))
 
     store = SessionStore(proj / AI_LOG_FILENAME)
@@ -230,14 +230,14 @@ def test_session_store_read_new_lines_truncation_resets(tmp_path: Path) -> None:
 
     log = tmp_path / AI_LOG_FILENAME
     proj = tmp_path
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
     append_session(proj, _session())
 
     store = SessionStore(log)
     store.load()
     assert store._offset > 0
 
-    log.write_text(HEADER)  # rotated/truncated smaller than offset
+    log.write_text(HEADER, encoding="utf-8")  # rotated/truncated smaller than offset
     assert store.read_new_lines() == []
     assert store._offset == log.stat().st_size
     assert store.sessions == []
@@ -248,7 +248,7 @@ def test_session_store_read_new_lines_amendment_reloads(tmp_path: Path) -> None:
     from halyard.tui.store import SessionStore
 
     log = tmp_path / AI_LOG_FILENAME
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
     store = SessionStore(log)
     store.load()
 
@@ -360,8 +360,10 @@ def test_watch_pane_active_shows_current_watch(
 
     active_path = tmp_path / "active"
     timeclock = tmp_path / "time.timeclock"
-    timeclock.write_text("")
-    active_path.write_text(f"slug=acme:auth\ntimeclock={timeclock}\nstarted=2026-05-07 10:00:00\n")
+    timeclock.write_text("", encoding="utf-8")
+    active_path.write_text(
+        f"slug=acme:auth\ntimeclock={timeclock}\nstarted=2026-05-07 10:00:00\n", encoding="utf-8"
+    )
     monkeypatch.setattr(reports, "_HALYARD_ACTIVE", active_path)
 
     pane = WatchPane()
@@ -382,7 +384,7 @@ def test_captain_pane_shows_rank_passport_and_medals(tmp_path: Path) -> None:
     from halyard.tui.widgets.captain_pane import CaptainPane
 
     (tmp_path / "time.timeclock").write_text(
-        "i 2026-05-07 10:00:00 acme:auth\no 2026-05-07 11:45:00\n"
+        "i 2026-05-07 10:00:00 acme:auth\no 2026-05-07 11:45:00\n", encoding="utf-8"
     )
     pane = CaptainPane()
     pane.render_record(
@@ -712,7 +714,7 @@ def test_store_reload_after_log_rotation(tmp_path: Path) -> None:
     from halyard.tui.store import SessionStore
 
     log = tmp_path / "ai-sessions.log"
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
     append_session(tmp_path, _session(project="acme:before"))
 
     store = SessionStore(log)
@@ -721,7 +723,7 @@ def test_store_reload_after_log_rotation(tmp_path: Path) -> None:
 
     # simulate rotation: delete and recreate with new session
     log.unlink()
-    log.write_text(HEADER)
+    log.write_text(HEADER, encoding="utf-8")
     append_session(tmp_path, _session(project="acme:after"))
 
     # app's _watch_events does: clear, then store.load() if file exists
@@ -797,7 +799,7 @@ def test_log_present_on_mount_clears_flag(tmp_path: Path) -> None:
     from halyard.tui.store import SessionStore
 
     log = tmp_path / "ai-sessions.log"
-    log.write_text("; empty\n")
+    log.write_text("; empty\n", encoding="utf-8")
 
     async def run() -> None:
         store = SessionStore(log)
@@ -826,7 +828,7 @@ def test_store_clears_sessions_on_log_deletion(tmp_path: Path) -> None:
         output_tokens=50,
         cost_usd=0.01,
     )
-    log.write_text(s.to_log_line() + "\n")
+    log.write_text(s.to_log_line() + "\n", encoding="utf-8")
 
     store = SessionStore(log)
     store.load()

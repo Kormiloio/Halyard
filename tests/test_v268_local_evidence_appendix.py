@@ -23,9 +23,9 @@ runner = CliRunner()
 
 
 def _init(tmp: Path) -> None:
-    (tmp / "halyard.toml").write_text("[business]\nname = 'Acme'\n")
-    (tmp / "time.timeclock").write_text("; time\n")
-    (tmp / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp / "halyard.toml").write_text("[business]\nname = 'Acme'\n", encoding="utf-8")
+    (tmp / "time.timeclock").write_text("; time\n", encoding="utf-8")
+    (tmp / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
 
 
 def _add(tmp: Path, *, note: str | None = None) -> None:
@@ -157,17 +157,17 @@ def test_cli_stdout_out_force_and_verify(tmp_path: Path, monkeypatch: pytest.Mon
 
     out = tmp_path / "evidence.md"
     assert runner.invoke(app, ["evidence", "--all", "--out", str(out)]).exit_code == 0
-    first = out.read_text()
+    first = out.read_text(encoding="utf-8")
     assert verify_evidence_artifact(first)
 
     # Refuses to overwrite without --force.
     blocked = runner.invoke(app, ["evidence", "--all", "--out", str(out)])
     assert blocked.exit_code == 1
-    assert out.read_text() == first
+    assert out.read_text(encoding="utf-8") == first
 
     assert runner.invoke(app, ["evidence", "--all", "--out", str(out), "--force"]).exit_code == 0
 
     # --verify on the written artifact succeeds; fails after a tamper.
     assert runner.invoke(app, ["evidence", "--verify", str(out)]).exit_code == 0
-    out.write_text(first.replace("Sessions | 1", "Sessions | 7"))
+    out.write_text(first.replace("Sessions | 1", "Sessions | 7"), encoding="utf-8")
     assert runner.invoke(app, ["evidence", "--verify", str(out)]).exit_code == 1

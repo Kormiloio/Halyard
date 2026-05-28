@@ -16,9 +16,9 @@ runner = CliRunner()
 
 
 def _init_project(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\n")
-    (tmp_path / "time.timeclock").write_text("; time\n")
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp_path / "time.timeclock").write_text("; time\n", encoding="utf-8")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
 
 
 def test_dashboard_command_registered() -> None:
@@ -80,7 +80,7 @@ def test_render_dashboard_shows_surface_panel(tmp_path: Path) -> None:
 def test_render_dashboard_shows_human_time(tmp_path: Path) -> None:
     _init_project(tmp_path)
     (tmp_path / "time.timeclock").write_text(
-        "i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 10:00:00\n"
+        "i 2026-05-07 09:00:00 acme:auth\no 2026-05-07 10:00:00\n", encoding="utf-8"
     )
 
     html = render_dashboard(tmp_path)
@@ -479,7 +479,7 @@ def test_csrf_allows_same_origin_post(tmp_path: Path) -> None:
     """A POST from the dashboard's own origin must be processed (not 403)."""
     _init_project(tmp_path)
     # Write a minimal timeclock file so the endpoint has something to work with
-    (tmp_path / "time.timeclock").write_text("; timeclock\n")
+    (tmp_path / "time.timeclock").write_text("; timeclock\n", encoding="utf-8")
     body = b"project=acme/auth"
 
     import http.client
@@ -745,7 +745,8 @@ def test_voyage_panel_active_shows_making_way(
     _init_project(tmp_path)
     _HALYARD_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
     _HALYARD_ACTIVE.write_text(
-        "timeclock=/tmp/t.timeclock\nslug=acme:auth\nstarted=2026-05-09 10:00:00\n"
+        "timeclock=/tmp/t.timeclock\nslug=acme:auth\nstarted=2026-05-09 10:00:00\n",
+        encoding="utf-8",
     )
     try:
         html = render_dashboard(tmp_path)

@@ -153,7 +153,7 @@ def test_schedule_cli_writes_file(tmp_path: Any) -> None:
 
     assert result.exit_code == 0
     assert "Exported" in result.output
-    ics_content = (tmp_path / "out.ics").read_text()
+    ics_content = (tmp_path / "out.ics").read_text(encoding="utf-8")
     assert "BEGIN:VCALENDAR" in ics_content
 
 
@@ -196,10 +196,11 @@ def test_seed_demo_writes_sessions(tmp_path: Any) -> None:
     from halyard.ai_log import AI_LOG_FILENAME, parse_sessions
     from halyard.cli import app
 
-    (tmp_path / "halyard.toml").write_text("[project]\n")
+    (tmp_path / "halyard.toml").write_text("[project]\n", encoding="utf-8")
     (tmp_path / AI_LOG_FILENAME).write_text(
         "; Halyard AI session log\n"
-        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n"
+        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n",
+        encoding="utf-8",
     )
 
     runner = CliRunner()
@@ -216,11 +217,12 @@ def test_seed_demo_warns_without_yes(tmp_path: Any) -> None:
     from halyard.ai_log import AI_LOG_FILENAME
     from halyard.cli import app
 
-    (tmp_path / "halyard.toml").write_text("[project]\n")
+    (tmp_path / "halyard.toml").write_text("[project]\n", encoding="utf-8")
     # Pre-populate with one fake session line
     (tmp_path / AI_LOG_FILENAME).write_text(
         "; header\n"
-        "s 2026-05-01T10:00:00 2026-05-01T10:30:00 claude-code claude-sonnet 1000 200 0.1000\n"
+        "s 2026-05-01T10:00:00 2026-05-01T10:30:00 claude-code claude-sonnet 1000 200 0.1000\n",
+        encoding="utf-8",
     )
 
     runner = CliRunner()

@@ -73,10 +73,11 @@ def _recent_ts(minutes_ago: int = 30) -> str:
 
 def _halyard_project(tmp_path: Path) -> Path:
     tmp_path.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "halyard.toml").write_text("[project]\nslug = 'test'\n")
+    (tmp_path / "halyard.toml").write_text("[project]\nslug = 'test'\n", encoding="utf-8")
     (tmp_path / "ai-sessions.log").write_text(
         "; Halyard AI session log\n"
-        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n"
+        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n",
+        encoding="utf-8",
     )
     return tmp_path
 
@@ -95,7 +96,7 @@ def test_record_session_start_writes_state(tmp_path: Path, monkeypatch: pytest.M
 
     assert result == 0
     assert state_file.exists()
-    state = json.loads(state_file.read_text())
+    state = json.loads(state_file.read_text(encoding="utf-8"))
     assert state["session_id"] == "sess-1"
     assert state["cwd"] == "/some/project"
     assert state["turn_start"] == "2026-05-07T10:00:00"
@@ -108,13 +109,15 @@ def test_record_session_start_resets_counters(
 ) -> None:
     state_file = tmp_path / "gc-session"
     # Pre-existing state with stale token counts
-    state_file.write_text(json.dumps({"prompt_tokens": 999, "output_tokens": 500}))
+    state_file.write_text(
+        json.dumps({"prompt_tokens": 999, "output_tokens": 500}), encoding="utf-8"
+    )
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
 
     with _patch_stdin(_session_start_payload()):
         record_session_start()
 
-    state = json.loads(state_file.read_text())
+    state = json.loads(state_file.read_text(encoding="utf-8"))
     assert state["prompt_tokens"] == 0
     assert state["output_tokens"] == 0
 
@@ -137,7 +140,8 @@ def test_record_model_usage_accumulates_output_tokens(
                 "prompt_tokens": 0,
                 "output_tokens": 0,
             }
-        )
+        ),
+        encoding="utf-8",
     )
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
 
@@ -145,7 +149,7 @@ def test_record_model_usage_accumulates_output_tokens(
     with _patch_stdin(_after_model_payload(prompt_tokens=1000, candidates_tokens=100)):
         record_model_usage()
 
-    state = json.loads(state_file.read_text())
+    state = json.loads(state_file.read_text(encoding="utf-8"))
     assert state["prompt_tokens"] == 1000
     assert state["output_tokens"] == 100
     assert state["model"] == "gemini-2.0-pro"
@@ -154,7 +158,7 @@ def test_record_model_usage_accumulates_output_tokens(
     with _patch_stdin(_after_model_payload(prompt_tokens=1200, candidates_tokens=150)):
         record_model_usage()
 
-    state = json.loads(state_file.read_text())
+    state = json.loads(state_file.read_text(encoding="utf-8"))
     assert state["prompt_tokens"] == 1200  # latest (largest) cumulative
     assert state["output_tokens"] == 250  # 100 + 150
 
@@ -188,7 +192,8 @@ def test_handle_agent_stop_writes_session(tmp_path: Path, monkeypatch: pytest.Mo
                 "prompt_tokens": 1500,
                 "output_tokens": 300,
             }
-        )
+        ),
+        encoding="utf-8",
     )
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: "acme:web")
@@ -197,7 +202,7 @@ def test_handle_agent_stop_writes_session(tmp_path: Path, monkeypatch: pytest.Mo
         result = handle_agent_stop()
 
     assert result == 0
-    log_lines = (project / "ai-sessions.log").read_text().splitlines()
+    log_lines = (project / "ai-sessions.log").read_text(encoding="utf-8").splitlines()
     data_lines = [ln for ln in log_lines if ln.startswith("s ")]
     assert len(data_lines) == 1
     parts = data_lines[0].split()
@@ -222,7 +227,8 @@ def test_handle_agent_stop_resets_accumulators(
                 "prompt_tokens": 1000,
                 "output_tokens": 200,
             }
-        )
+        ),
+        encoding="utf-8",
     )
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)
@@ -230,7 +236,7 @@ def test_handle_agent_stop_resets_accumulators(
     with _patch_stdin(_after_agent_payload(cwd=str(project))):
         handle_agent_stop()
 
-    state = json.loads(state_file.read_text())
+    state = json.loads(state_file.read_text(encoding="utf-8"))
     assert state["prompt_tokens"] == 0
     assert state["output_tokens"] == 0
     assert state["model"] == ""
@@ -249,7 +255,8 @@ def test_handle_agent_stop_skips_when_no_project(
                 "prompt_tokens": 100,
                 "output_tokens": 50,
             }
-        )
+        ),
+        encoding="utf-8",
     )
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
 
@@ -276,7 +283,8 @@ def test_handle_agent_stop_skips_evidence_free_fire(
                 "prompt_tokens": 0,
                 "output_tokens": 0,
             }
-        )
+        ),
+        encoding="utf-8",
     )
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)
@@ -311,7 +319,8 @@ def test_handle_agent_stop_tz_aware_turn_start_records(
                 "prompt_tokens": 2000,
                 "output_tokens": 400,
             }
-        )
+        ),
+        encoding="utf-8",
     )
     monkeypatch.setattr("halyard.collectors.gemini_cli._GC_SESSION_FILE", state_file)
     monkeypatch.setattr("halyard.collectors.gemini_cli.read_active_project", lambda: None)
@@ -327,7 +336,7 @@ def test_handle_agent_stop_tz_aware_turn_start_records(
     assert sessions[0].model == "gemini-3-flash-preview"
     assert sessions[0].output_tokens == 400
     # state reset, and turn_start is now naive so subsequent turns never regress
-    state = json.loads(state_file.read_text())
+    state = json.loads(state_file.read_text(encoding="utf-8"))
     assert state["prompt_tokens"] == 0
     assert "Z" not in state["turn_start"] and "+" not in state["turn_start"]
 

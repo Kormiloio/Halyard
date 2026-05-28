@@ -32,8 +32,8 @@ def _utc(local_naive: datetime) -> str:
 
 def _init(tmp: Path) -> Path:
     tmp.mkdir(parents=True, exist_ok=True)
-    (tmp / "halyard.toml").write_text("[business]\n")
-    (tmp / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     return tmp
 
 
@@ -82,14 +82,15 @@ def _transcript(tmp: Path) -> Path:
                 },
             ]
         )
-        + "\n"
+        + "\n",
+        encoding="utf-8",
     )
     return p
 
 
 def _run(tmp: Path) -> None:
     _CC_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _CC_SESSION_FILE.write_text(json.dumps({"start": _TURN_START.isoformat()}))
+    _CC_SESSION_FILE.write_text(json.dumps({"start": _TURN_START.isoformat()}), encoding="utf-8")
     payload = {"session_id": _SID, "transcript_path": str(_transcript(tmp))}
     with (
         patch("halyard.collectors.claude_code.find_project_dir", return_value=tmp),

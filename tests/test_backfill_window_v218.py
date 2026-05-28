@@ -18,9 +18,9 @@ def _dt(s: str) -> datetime:
 
 
 def _make_log(tmp_path: Path, lines: list[str]) -> Path:
-    (tmp_path / "halyard.toml").write_text("[business]\nname='T'\n")
+    (tmp_path / "halyard.toml").write_text("[business]\nname='T'\n", encoding="utf-8")
     log = HEADER + "\n".join(lines) + "\n"
-    (tmp_path / AI_LOG_FILENAME).write_text(log)
+    (tmp_path / AI_LOG_FILENAME).write_text(log, encoding="utf-8")
     return tmp_path
 
 
@@ -126,7 +126,7 @@ def test_backfill_no_matching_sessions_returns_zero(tmp_path: Path) -> None:
 def test_backfill_dry_run_does_not_write(tmp_path: Path) -> None:
     s = _session("2026-05-01T09:10:00", "2026-05-01T09:40:00")
     _make_log(tmp_path, [s])
-    before = (tmp_path / AI_LOG_FILENAME).read_text()
+    before = (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8")
 
     count = backfill_window(
         tmp_path,
@@ -137,4 +137,4 @@ def test_backfill_dry_run_does_not_write(tmp_path: Path) -> None:
     )
 
     assert count == 1
-    assert (tmp_path / AI_LOG_FILENAME).read_text() == before  # file unchanged
+    assert (tmp_path / AI_LOG_FILENAME).read_text(encoding="utf-8") == before  # file unchanged

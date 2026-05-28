@@ -23,9 +23,9 @@ runner = CliRunner()
 
 
 def _init(tmp: Path) -> None:
-    (tmp / "halyard.toml").write_text("[business]\nname = 'Acme'\n")
-    (tmp / "time.timeclock").write_text("; time\n")
-    (tmp / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp / "halyard.toml").write_text("[business]\nname = 'Acme'\n", encoding="utf-8")
+    (tmp / "time.timeclock").write_text("; time\n", encoding="utf-8")
+    (tmp / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
 
 
 def _add(tmp: Path) -> None:

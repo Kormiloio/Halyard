@@ -130,7 +130,7 @@ def discover_workspaces() -> dict[str, Path]:
             continue
 
         try:
-            data = json.loads(meta.read_text())
+            data = json.loads(meta.read_text(encoding="utf-8"))
             folder_uri = data.get("folder")
             if folder_uri and folder_uri.startswith("file://"):
                 mapping[folder.name] = Path(unquote(urlparse(folder_uri).path))
@@ -259,7 +259,7 @@ def parse_chat_session(path: Path) -> AiSession | None:
 def parse_editing_session(path: Path) -> int:
     """Count files touched in an editing session."""
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         files = data.get("initialFileContents", [])
         if isinstance(files, list):
             # Each entry is [uri, hash]
@@ -318,12 +318,16 @@ def _otel_captured_ids(target_dir: Path) -> set[str]:
 def _load_imported_state() -> set[str]:
     if not _IMPORTED_STATE_FILE.exists():
         return set()
-    return {line.strip() for line in _IMPORTED_STATE_FILE.read_text().splitlines() if line.strip()}
+    return {
+        line.strip()
+        for line in _IMPORTED_STATE_FILE.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
 
 
 def _save_imported_state(ids: set[str]) -> None:
     _IMPORTED_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _IMPORTED_STATE_FILE.write_text("\n".join(sorted(ids)) + "\n")
+    _IMPORTED_STATE_FILE.write_text("\n".join(sorted(ids)) + "\n", encoding="utf-8")
 
 
 def _parse_iso(ts: str) -> datetime | None:
@@ -353,4 +357,6 @@ def copilot_history_present() -> bool:
 
 def copilot_imported_any() -> bool:
     """True if any Copilot sessions have been imported already."""
-    return _IMPORTED_STATE_FILE.exists() and bool(_IMPORTED_STATE_FILE.read_text().strip())
+    return _IMPORTED_STATE_FILE.exists() and bool(
+        _IMPORTED_STATE_FILE.read_text(encoding="utf-8").strip()
+    )

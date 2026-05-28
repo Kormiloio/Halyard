@@ -49,5 +49,5 @@ def read_ai_plans(project_dir: Path) -> list[AiPlan]:
     path = project_dir / AI_PLANS_FILENAME
     if not path.exists():
         return []
-    data = tomllib.loads(path.read_text())
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
     return [AiPlan.model_validate(plan) for plan in data.get("plan", [])]

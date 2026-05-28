@@ -166,7 +166,7 @@ def test_reference_shell_emitter_exists_without_python_dependency() -> None:
     script = Path("samples/emit-session.sh")
 
     assert script.exists()
-    text = script.read_text()
+    text = script.read_text(encoding="utf-8")
     assert os.access(script, os.X_OK)
     assert "curl" in text
     assert "python" not in text.lower()

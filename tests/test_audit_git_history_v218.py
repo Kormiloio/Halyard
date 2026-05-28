@@ -42,12 +42,12 @@ def _make_git_repo(tmp_path: Path) -> Path:
     _git(repo, "config", "user.name", "Test User")
 
     # First commit: rate = 100
-    (repo / "clients.toml").write_text(_CLIENTS_V1)
+    (repo / "clients.toml").write_text(_CLIENTS_V1, encoding="utf-8")
     _git(repo, "add", "clients.toml")
     _git(repo, "commit", "-m", "initial rate 100")
 
     # Second commit: rate = 150
-    (repo / "clients.toml").write_text(_CLIENTS_V2)
+    (repo / "clients.toml").write_text(_CLIENTS_V2, encoding="utf-8")
     _git(repo, "add", "clients.toml")
     _git(repo, "commit", "-m", "raise rate to 150")
 

@@ -8,7 +8,7 @@ from halyard.ai_plans import AI_PLANS_FILENAME, read_ai_plans
 
 
 def _write_plans(tmp_path: Path, content: str) -> None:
-    (tmp_path / AI_PLANS_FILENAME).write_text(content)
+    (tmp_path / AI_PLANS_FILENAME).write_text(content, encoding="utf-8")
 
 
 def test_read_empty_file_returns_empty_list(tmp_path: Path) -> None:

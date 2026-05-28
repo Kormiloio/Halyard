@@ -73,7 +73,8 @@ def test_parse_session_file_single_model(tmp_path: Path) -> None:
                     _gemini_msg(model="gemini-2.5-flash", inp=10000, out=500, cached=2000),
                 ]
             )
-        )
+        ),
+        encoding="utf-8",
     )
     s = parse_session_file(f)
     assert s is not None
@@ -103,7 +104,8 @@ def test_parse_session_file_multi_model(tmp_path: Path) -> None:
                     _gemini_msg(model="gemini-2.5-flash", inp=20000, out=200),
                 ]
             )
-        )
+        ),
+        encoding="utf-8",
     )
     s = parse_session_file(f)
     assert s is not None
@@ -124,7 +126,8 @@ def test_parse_session_file_thinking_tokens(tmp_path: Path) -> None:
                     _gemini_msg(model="gemini-2.5-flash", inp=10000, out=500, thoughts=200),
                 ]
             )
-        )
+        ),
+        encoding="utf-8",
     )
     s = parse_session_file(f)
     assert s is not None
@@ -152,7 +155,8 @@ def test_parse_session_file_tool_calls(tmp_path: Path) -> None:
                     ),
                 ]
             )
-        )
+        ),
+        encoding="utf-8",
     )
     s = parse_session_file(f)
     assert s is not None
@@ -170,7 +174,8 @@ def test_parse_session_file_no_gemini_messages(tmp_path: Path) -> None:
                     {"type": "info", "content": "info msg"},
                 ]
             )
-        )
+        ),
+        encoding="utf-8",
     )
     s = parse_session_file(f)
     assert s is not None
@@ -184,7 +189,7 @@ def test_parse_session_file_no_gemini_messages(tmp_path: Path) -> None:
 
 def test_parse_session_file_malformed_json(tmp_path: Path) -> None:
     f = tmp_path / "session.json"
-    f.write_text("not valid json ][[[")
+    f.write_text("not valid json ][[[", encoding="utf-8")
     assert parse_session_file(f) is None
 
 
@@ -196,7 +201,7 @@ def test_parse_session_file_missing_session_id(tmp_path: Path) -> None:
     f = tmp_path / "session.json"
     data = _make_session()
     del data["sessionId"]
-    f.write_text(json.dumps(data))
+    f.write_text(json.dumps(data), encoding="utf-8")
     assert parse_session_file(f) is None
 
 
@@ -210,7 +215,7 @@ def test_find_session_file_found(tmp_path: Path) -> None:
     chats = tmp_path / "myproject" / "chats"
     chats.mkdir(parents=True)
     f = chats / "session-2026-05-07T10-00-abcd1234.json"
-    f.write_text(json.dumps(_make_session(session_id=session_id)))
+    f.write_text(json.dumps(_make_session(session_id=session_id)), encoding="utf-8")
 
     with patch.object(gh_mod, "_GEMINI_TMP", tmp_path):
         result = find_session_file(session_id)
@@ -231,7 +236,7 @@ def test_find_session_file_multiple_exact_matches_returns_newest(tmp_path: Path)
         chats = tmp_path / slug / "chats"
         chats.mkdir(parents=True)
         (chats / "session-2026-05-07T10-00-abcd1234.json").write_text(
-            json.dumps(_make_session(session_id=session_id))
+            json.dumps(_make_session(session_id=session_id)), encoding="utf-8"
         )
         time.sleep(0.01)  # ensure different mtime
 
@@ -247,7 +252,10 @@ def test_find_session_file_rejects_prefix_match_without_exact_session_id(tmp_pat
     chats = tmp_path / "myproject" / "chats"
     chats.mkdir(parents=True)
     f = chats / "session-2026-05-07T10-00-abcd1234.json"
-    f.write_text(json.dumps(_make_session(session_id="abcd1234-9999-0000-0000-000000000000")))
+    f.write_text(
+        json.dumps(_make_session(session_id="abcd1234-9999-0000-0000-000000000000")),
+        encoding="utf-8",
+    )
 
     with patch.object(gh_mod, "_GEMINI_TMP", tmp_path):
         result = find_session_file(session_id)
@@ -262,7 +270,7 @@ def test_find_session_file_rejects_prefix_match_without_exact_session_id(tmp_pat
 def test_project_dir_for_slug_found(tmp_path: Path) -> None:
     slug_dir = tmp_path / "myproject"
     slug_dir.mkdir()
-    (slug_dir / ".project_root").write_text("/home/user/projects/myproject\n")
+    (slug_dir / ".project_root").write_text("/home/user/projects/myproject\n", encoding="utf-8")
     with patch.object(gh_mod, "_GEMINI_HISTORY", tmp_path):
         result = project_dir_for_slug("myproject")
     assert result == Path("/home/user/projects/myproject")
@@ -286,7 +294,7 @@ def test_parse_session_file_rich_telemetry(tmp_path: Path) -> None:
     )
     data["codeStats"] = {"added": 45, "removed": 12}
     path = tmp_path / "session.json"
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
 
     summary = parse_session_file(path)
 
@@ -301,7 +309,7 @@ def test_parse_session_file_rich_telemetry(tmp_path: Path) -> None:
 def test_parse_session_file_no_code_stats(tmp_path: Path) -> None:
     data = _make_session(messages=[_gemini_msg()])
     path = tmp_path / "session.json"
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
 
     summary = parse_session_file(path)
 
@@ -313,7 +321,7 @@ def test_parse_session_file_no_code_stats(tmp_path: Path) -> None:
 def test_parse_session_file_resume_command_from_session_id(tmp_path: Path) -> None:
     data = _make_session(session_id="my-session-xyz", messages=[_gemini_msg()])
     path = tmp_path / "session.json"
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
 
     summary = parse_session_file(path)
 
@@ -391,7 +399,8 @@ def test_parse_jsonl_single_model(tmp_path: Path) -> None:
                 _rollout_user(),
                 _rollout_gemini(model="gemini-3-flash-preview", inp=10000, out=500, cached=2000),
             ]
-        )
+        ),
+        encoding="utf-8",
     )
     s = parse_session_file(f)
     assert s is not None
@@ -424,7 +433,8 @@ def test_parse_jsonl_dedupes_streamed_emissions(tmp_path: Path) -> None:
                     tool_calls=[_tool("read_file", "success")],
                 ),
             ]
-        )
+        ),
+        encoding="utf-8",
     )
     s = parse_session_file(f)
     assert s is not None
@@ -449,7 +459,8 @@ def test_parse_jsonl_multi_model(tmp_path: Path) -> None:
                 ),
                 _rollout_gemini(msg_id="g3", model="gemini-2.5-flash", inp=20000, out=200),
             ]
-        )
+        ),
+        encoding="utf-8",
     )
     s = parse_session_file(f)
     assert s is not None
@@ -473,7 +484,8 @@ def test_parse_jsonl_tool_calls_and_errors(tmp_path: Path) -> None:
                     ],
                 )
             ]
-        )
+        ),
+        encoding="utf-8",
     )
     s = parse_session_file(f)
     assert s is not None
@@ -490,7 +502,7 @@ def test_parse_jsonl_end_advances_from_set_patch(tmp_path: Path) -> None:
             {"$set": {"lastUpdated": "2026-05-23T15:30:00.000Z"}},
         ],
     )
-    f.write_text(body)
+    f.write_text(body, encoding="utf-8")
     s = parse_session_file(f)
     assert s is not None
     # end reflects the later $set lastUpdated, not the header value (compared
@@ -501,7 +513,7 @@ def test_parse_jsonl_end_advances_from_set_patch(tmp_path: Path) -> None:
 
 def test_parse_jsonl_header_only(tmp_path: Path) -> None:
     f = tmp_path / "session-2026-05-23T10-00-abcd1234.jsonl"
-    f.write_text(_rollout(events=[{"type": "info", "content": "notice"}]))
+    f.write_text(_rollout(events=[{"type": "info", "content": "notice"}]), encoding="utf-8")
     s = parse_session_file(f)
     assert s is not None
     assert s.model_stats == []
@@ -513,7 +525,7 @@ def test_parse_jsonl_header_only(tmp_path: Path) -> None:
 def test_parse_jsonl_missing_session_id_returns_none(tmp_path: Path) -> None:
     f = tmp_path / "session-2026-05-23T10-00-abcd1234.jsonl"
     # No header line carrying sessionId — only events.
-    f.write_text(json.dumps(_rollout_gemini()) + "\n")
+    f.write_text(json.dumps(_rollout_gemini()) + "\n", encoding="utf-8")
     assert parse_session_file(f) is None
 
 
@@ -521,7 +533,7 @@ def test_parse_jsonl_skips_blank_and_malformed_lines(tmp_path: Path) -> None:
     f = tmp_path / "session-2026-05-23T10-00-abcd1234.jsonl"
     good = _rollout(events=[_rollout_gemini(inp=3000, out=30)])
     # interleave blank + malformed lines
-    f.write_text(good.replace("\n", "\n\nnot json here\n", 1))
+    f.write_text(good.replace("\n", "\n\nnot json here\n", 1), encoding="utf-8")
     s = parse_session_file(f)
     assert s is not None
     assert s.total_output == 30
@@ -529,7 +541,7 @@ def test_parse_jsonl_skips_blank_and_malformed_lines(tmp_path: Path) -> None:
 
 def test_parse_jsonl_over_budget_returns_none(tmp_path: Path) -> None:
     f = tmp_path / "session-2026-05-23T10-00-abcd1234.jsonl"
-    f.write_text(_rollout(events=[_rollout_gemini()]))
+    f.write_text(_rollout(events=[_rollout_gemini()]), encoding="utf-8")
     # a tiny budget forces the streamed parse to bail out
     assert parse_session_file(f, max_bytes=10) is None
 
@@ -539,7 +551,7 @@ def test_parse_jsonl_skips_oversize_line(tmp_path: Path) -> None:
     big = _rollout_gemini(msg_id="g_big", inp=999999, out=999)
     big["content"] = "x" * 2000  # inflate one line past the (patched) per-line cap
     small = _rollout_gemini(msg_id="g_ok", inp=1000, out=11)
-    f.write_text(_rollout(events=[big, small]))
+    f.write_text(_rollout(events=[big, small]), encoding="utf-8")
     with patch.object(gh_mod, "_MAX_ROLLOUT_LINE_BYTES", 500):
         s = parse_session_file(f)
     assert s is not None
@@ -555,7 +567,10 @@ def test_json_jsonl_parity(tmp_path: Path) -> None:
         _gemini_msg(model="gemini-2.5-pro", inp=50000, out=800, cached=10000),
     ]
     jf = tmp_path / "session-2026-05-23T10-00-abcd1234.json"
-    jf.write_text(json.dumps(_make_session(messages=[{"type": "user", "content": "hi"}, *events])))
+    jf.write_text(
+        json.dumps(_make_session(messages=[{"type": "user", "content": "hi"}, *events])),
+        encoding="utf-8",
+    )
     rollout_events = [
         _rollout_user(),
         _rollout_gemini(
@@ -564,7 +579,7 @@ def test_json_jsonl_parity(tmp_path: Path) -> None:
         _rollout_gemini(msg_id="g2", model="gemini-2.5-pro", inp=50000, out=800, cached=10000),
     ]
     lf = tmp_path / "session-2026-05-23T10-00-abcd1234.jsonl"
-    lf.write_text(_rollout(events=rollout_events))
+    lf.write_text(_rollout(events=rollout_events), encoding="utf-8")
 
     js = parse_session_file(jf)
     ls = parse_session_file(lf)
@@ -586,8 +601,10 @@ def test_json_jsonl_parity(tmp_path: Path) -> None:
 def test_find_all_session_files_includes_jsonl(tmp_path: Path) -> None:
     chats = tmp_path / "proj" / "chats"
     chats.mkdir(parents=True)
-    (chats / "session-2026-05-07T10-00-aaaa1111.json").write_text(json.dumps(_make_session()))
-    (chats / "session-2026-05-23T10-00-bbbb2222.jsonl").write_text(_rollout())
+    (chats / "session-2026-05-07T10-00-aaaa1111.json").write_text(
+        json.dumps(_make_session()), encoding="utf-8"
+    )
+    (chats / "session-2026-05-23T10-00-bbbb2222.jsonl").write_text(_rollout(), encoding="utf-8")
     with patch.object(gh_mod, "_GEMINI_TMP", tmp_path):
         found = {p.name for p in find_all_session_files()}
     assert "session-2026-05-07T10-00-aaaa1111.json" in found
@@ -599,7 +616,7 @@ def test_find_session_file_finds_jsonl(tmp_path: Path) -> None:
     chats = tmp_path / "proj" / "chats"
     chats.mkdir(parents=True)
     f = chats / "session-2026-05-23T10-00-abcd1234.jsonl"
-    f.write_text(_rollout(session_id=session_id))
+    f.write_text(_rollout(session_id=session_id), encoding="utf-8")
     with patch.object(gh_mod, "_GEMINI_TMP", tmp_path):
         result = find_session_file(session_id)
     assert result == f
@@ -611,7 +628,7 @@ def test_find_session_file_jsonl_rejects_prefix_mismatch(tmp_path: Path) -> None
     chats.mkdir(parents=True)
     # same 8-char prefix in the filename, different full id in the header line
     f = chats / "session-2026-05-23T10-00-abcd1234.jsonl"
-    f.write_text(_rollout(session_id="abcd1234-9999-0000-0000-000000000000"))
+    f.write_text(_rollout(session_id="abcd1234-9999-0000-0000-000000000000"), encoding="utf-8")
     with patch.object(gh_mod, "_GEMINI_TMP", tmp_path):
         result = find_session_file(session_id)
     assert result is None

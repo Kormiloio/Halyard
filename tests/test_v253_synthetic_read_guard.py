@@ -15,8 +15,8 @@ _BASE = datetime(2026, 5, 15, 21, 0, 0)
 
 def _proj(p: Path) -> Path:
     p.mkdir(parents=True, exist_ok=True)
-    (p / "halyard.toml").write_text("[business]\n")
-    (p / AI_LOG_FILENAME).write_text(HEADER)
+    (p / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (p / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     return p
 
 
@@ -109,19 +109,19 @@ def test_parse_sessions_excludes_synthetic_but_keeps_file(tmp_path: Path) -> Non
         append_session(proj, s)
 
     log_path = proj / AI_LOG_FILENAME
-    before = log_path.read_text()
+    before = log_path.read_text(encoding="utf-8")
 
     got = parse_sessions(proj)
     assert len(got) == 2
     assert all(s.project == "kormilo:halyard" for s in got)
 
     # Raw lines untouched on disk; 4 's' records still present.
-    after = log_path.read_text()
+    after = log_path.read_text(encoding="utf-8")
     assert before == after
     assert sum(1 for ln in after.splitlines() if ln.startswith("s ")) == 4
     # Idempotent: re-parsing does not mutate the file either.
     parse_sessions(proj)
-    assert log_path.read_text() == after
+    assert log_path.read_text(encoding="utf-8") == after
 
 
 def test_aggregate_layer_inherits_exclusion(

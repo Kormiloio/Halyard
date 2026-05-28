@@ -18,7 +18,7 @@ class SystemdProvider(ServiceProvider):
 
         halyard_exe = _halyard_exe()
         self.unit_path.parent.mkdir(parents=True, exist_ok=True)
-        self.unit_path.write_text(self._unit_file(halyard_exe, project_dir, port))
+        self.unit_path.write_text(self._unit_file(halyard_exe, project_dir, port), encoding="utf-8")
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
         subprocess.run(["systemctl", "--user", "enable", "--now", self.label], check=True)
         return f"http://127.0.0.1:{port}/"
@@ -52,7 +52,7 @@ class SystemdProvider(ServiceProvider):
         if not self.unit_path.exists():
             return DASHBOARD_PORT
         try:
-            content = self.unit_path.read_text()
+            content = self.unit_path.read_text(encoding="utf-8")
             for line in content.splitlines():
                 if "ExecStart=" in line and "--port" in line:
                     parts = line.split()

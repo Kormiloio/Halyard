@@ -11,9 +11,9 @@ from halyard.dashboard import _session_sev, _stbl, render_dashboard
 
 
 def _init(tmp: Path) -> None:
-    (tmp / "halyard.toml").write_text("[business]\n")
-    (tmp / "time.timeclock").write_text("; time\n")
-    (tmp / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp / "time.timeclock").write_text("; time\n", encoding="utf-8")
+    (tmp / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
 
 
 def _sess(**kw: object) -> AiSession:

@@ -508,7 +508,7 @@ def _parse_closed_timeclock(tc_path: Path) -> list[tuple[datetime, datetime, str
     entries: list[tuple[datetime, datetime, str]] = []
     open_entry: tuple[datetime, str] | None = None
 
-    for raw_line in tc_path.read_text().splitlines():
+    for raw_line in tc_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith(";"):
             continue

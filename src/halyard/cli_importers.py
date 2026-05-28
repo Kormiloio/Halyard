@@ -45,7 +45,10 @@ def run_gemini_import(*, dry_run: bool, all_projects: bool, quiet: bool = False)
                 pr = slug_dir / ".project_root"
                 if pr.exists():
                     try:
-                        if Path(pr.read_text().strip()).resolve() == project_dir.resolve():
+                        if (
+                            Path(pr.read_text(encoding="utf-8").strip()).resolve()
+                            == project_dir.resolve()
+                        ):
                             chats_dir = _GEMINI_TMP / slug_dir.name / "chats"
                             session_files.extend(chats_dir.glob("session-*.json"))
                             session_files.extend(chats_dir.glob("session-*.jsonl"))

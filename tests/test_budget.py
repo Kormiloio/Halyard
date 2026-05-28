@@ -18,13 +18,13 @@ from halyard.budget import (
 
 def _write_budgets(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
 
 
 def _write_log(project_dir: Path, lines: list[str]) -> None:
     log = project_dir / "ai-sessions.log"
     project_dir.mkdir(parents=True, exist_ok=True)
-    log.write_text("\n".join(lines) + "\n")
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +62,7 @@ def test_load_budgets_monthly_only(tmp_path: Path) -> None:
 
 def test_load_budgets_corrupted(tmp_path: Path) -> None:
     f = tmp_path / "budgets.toml"
-    f.write_text("not valid toml ][[[")
+    f.write_text("not valid toml ][[[", encoding="utf-8")
     with patch.object(budget_mod, "_BUDGETS_FILE", f):
         result = load_budgets()
     assert result == {}

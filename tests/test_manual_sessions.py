@@ -34,10 +34,10 @@ def _session() -> AiSession:
 
 
 def _init_project(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\n")
-    (tmp_path / "time.timeclock").write_text("; time\n")
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
-    (tmp_path / "projects.toml").write_text('[[project]]\nslug = "acme:auth"\n')
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp_path / "time.timeclock").write_text("; time\n", encoding="utf-8")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
+    (tmp_path / "projects.toml").write_text('[[project]]\nslug = "acme:auth"\n', encoding="utf-8")
 
 
 def test_record_session_appends_manual_session(
@@ -229,7 +229,7 @@ def test_assign_unattributed_global_assigns_to_current_project(
 
     assert result.exit_code == 0, result.output
     assert parse_sessions(tmp_path)[0].project == "acme:auth"
-    assert (tmp_path / ".halyard" / "unattributed.log").read_text() == ""
+    assert (tmp_path / ".halyard" / "unattributed.log").read_text(encoding="utf-8") == ""
 
 
 def test_assign_unattributed_records_manual_attr_method(
@@ -273,7 +273,7 @@ def test_assign_unattributed_global_moves_to_hub(
 
     assert result.exit_code == 0, result.output
     assert parse_sessions(hub)[0].tool == "codex"
-    assert (tmp_path / ".halyard" / "unattributed.log").read_text() == ""
+    assert (tmp_path / ".halyard" / "unattributed.log").read_text(encoding="utf-8") == ""
 
 
 def test_assign_unattributed_global_discards_after_confirm(
@@ -287,7 +287,7 @@ def test_assign_unattributed_global_discards_after_confirm(
     result = runner.invoke(app, ["assign-unattributed"], input="d\ny\n")
 
     assert result.exit_code == 0, result.output
-    assert (tmp_path / ".halyard" / "unattributed.log").read_text() == ""
+    assert (tmp_path / ".halyard" / "unattributed.log").read_text(encoding="utf-8") == ""
 
 
 def test_assign_unattributed_global_skip_keeps_line(
@@ -301,7 +301,7 @@ def test_assign_unattributed_global_skip_keeps_line(
     result = runner.invoke(app, ["assign-unattributed"], input="s\n")
 
     assert result.exit_code == 0, result.output
-    assert "codex" in (tmp_path / ".halyard" / "unattributed.log").read_text()
+    assert "codex" in (tmp_path / ".halyard" / "unattributed.log").read_text(encoding="utf-8")
 
 
 def test_check_log_reports_invalid_line(
@@ -311,7 +311,7 @@ def test_check_log_reports_invalid_line(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     _init_project(tmp_path)
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "s bad\n")
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER + "s bad\n", encoding="utf-8")
 
     result = runner.invoke(app, ["check-log"])
 
@@ -327,8 +327,8 @@ def test_check_log_uses_hub_when_no_project_dir(
     """check-log falls back to hub log when run outside a project directory."""
     hub = tmp_path / "hub"
     hub.mkdir()
-    (hub / "halyard.toml").write_text("[business]\nhub = true\n")
-    (hub / AI_LOG_FILENAME).write_text(HEADER)
+    (hub / "halyard.toml").write_text("[business]\nhub = true\n", encoding="utf-8")
+    (hub / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
 
     non_project = tmp_path / "elsewhere"
     non_project.mkdir()

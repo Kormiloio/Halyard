@@ -40,7 +40,7 @@ def _cfg(client: str) -> Path:
 def test_creates_config_when_absent() -> None:
     assert not _cfg("cursor").exists()
     _do_install_mcp("cursor")
-    data = json.loads(_cfg("cursor").read_text())
+    data = json.loads(_cfg("cursor").read_text(encoding="utf-8"))
     entry = data["mcpServers"]["halyard"]
     assert entry["args"] == ["mcp"]
     assert isinstance(entry["command"], str) and entry["command"]
@@ -49,9 +49,9 @@ def test_creates_config_when_absent() -> None:
 def test_preserves_foreign_servers() -> None:
     p = _cfg("cursor")
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"mcpServers": {"claude-mem": {"command": "x"}}}))
+    p.write_text(json.dumps({"mcpServers": {"claude-mem": {"command": "x"}}}), encoding="utf-8")
     _do_install_mcp("cursor")
-    servers = json.loads(p.read_text())["mcpServers"]
+    servers = json.loads(p.read_text(encoding="utf-8"))["mcpServers"]
     assert servers["claude-mem"] == {"command": "x"}
     assert servers["halyard"]["args"] == ["mcp"]
 
@@ -59,9 +59,9 @@ def test_preserves_foreign_servers() -> None:
 def test_preserves_other_top_level_keys() -> None:
     p = _cfg("claude")
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"theme": "dark", "projects": {"a": 1}}))
+    p.write_text(json.dumps({"theme": "dark", "projects": {"a": 1}}), encoding="utf-8")
     _do_install_mcp("claude")
-    data = json.loads(p.read_text())
+    data = json.loads(p.read_text(encoding="utf-8"))
     assert data["theme"] == "dark"
     assert data["projects"] == {"a": 1}
     assert data["mcpServers"]["halyard"]["args"] == ["mcp"]
@@ -69,9 +69,9 @@ def test_preserves_other_top_level_keys() -> None:
 
 def test_idempotent_and_byte_stable() -> None:
     _do_install_mcp("gemini")
-    first = _cfg("gemini").read_text()
+    first = _cfg("gemini").read_text(encoding="utf-8")
     _do_install_mcp("gemini")
-    second = _cfg("gemini").read_text()
+    second = _cfg("gemini").read_text(encoding="utf-8")
     assert first == second
     servers = json.loads(second)["mcpServers"]
     assert list(servers) == ["halyard"]
@@ -82,23 +82,23 @@ def test_stale_exe_path_replaced(monkeypatch: pytest.MonkeyPatch) -> None:
     _do_install_mcp("cursor")
     monkeypatch.setattr(cli_hooks, "_halyard_exe", lambda: "/new/venv/bin/halyard")
     _do_install_mcp("cursor")
-    servers = json.loads(_cfg("cursor").read_text())["mcpServers"]
+    servers = json.loads(_cfg("cursor").read_text(encoding="utf-8"))["mcpServers"]
     assert servers["halyard"]["command"] == "/new/venv/bin/halyard"
 
 
 def test_refuses_non_object_config() -> None:
     p = _cfg("cursor")
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text('["not", "an", "object"]')
+    p.write_text('["not", "an", "object"]', encoding="utf-8")
     with pytest.raises(HookWriteError):
         _do_install_mcp("cursor")
-    assert p.read_text() == '["not", "an", "object"]'  # untouched
+    assert p.read_text(encoding="utf-8") == '["not", "an", "object"]'  # untouched
 
 
 def test_refuses_non_object_mcpservers() -> None:
     p = _cfg("gemini")
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"mcpServers": "oops"}))
+    p.write_text(json.dumps({"mcpServers": "oops"}), encoding="utf-8")
     with pytest.raises(HookWriteError):
         _do_install_mcp("gemini")
 

@@ -29,7 +29,7 @@ def load_log_config(config_file: Path | None = None) -> LogConfig:
     if not path.exists():
         return LogConfig()
 
-    data = tomllib.loads(path.read_text())
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
     raw_section = data.get("log", {})
     section: dict[str, Any] = raw_section if isinstance(raw_section, dict) else {}
 

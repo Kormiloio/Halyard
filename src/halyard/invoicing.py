@@ -242,7 +242,7 @@ def generate_invoice(
             path=None, rendered=rendered, total=view.total, dry_run=True, warning=warning
         )
 
-    invoice_path.write_text(rendered)
+    invoice_path.write_text(rendered, encoding="utf-8")
     # Counter already persisted by _allocate_invoice_number() for new invoices.
     # No further write needed for the existing-invoice (force=True) path.
 
@@ -442,7 +442,7 @@ def _open_file(path: Path) -> None:
 def _read_toml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
-    return tomllib.loads(path.read_text())
+    return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
 def _effective_rate(client: ClientRecord, as_of: date) -> float:
@@ -519,7 +519,7 @@ def _read_time_entries(
     closed: list[tuple[datetime, datetime, str]] = []
     open_entries: list[tuple[datetime, str]] = []
     current: tuple[datetime, str] | None = None
-    for raw_line in path.read_text().splitlines():
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith(";"):
             continue

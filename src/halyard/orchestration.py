@@ -354,12 +354,12 @@ def scaffold_project(target_dir: Path, hub: bool = False) -> None:
         ok = False
     if not ok:
         halyard_toml = _HALYARD_TOML_TEMPLATE.format(business_name=_DEFAULT_BUSINESS_NAME)
-    config_file.write_text(halyard_toml)
-    (target_dir / "clients.toml").write_text(_CLIENTS_TOML)
-    (target_dir / "projects.toml").write_text(_PROJECTS_TOML)
-    (target_dir / "time.timeclock").write_text(_TIMECLOCK)
-    (target_dir / "ai-sessions.log").write_text(_AI_SESSIONS_LOG)
-    (target_dir / "ai-plans.toml").write_text(_AI_PLANS_TOML)
+    config_file.write_text(halyard_toml, encoding="utf-8")
+    (target_dir / "clients.toml").write_text(_CLIENTS_TOML, encoding="utf-8")
+    (target_dir / "projects.toml").write_text(_PROJECTS_TOML, encoding="utf-8")
+    (target_dir / "time.timeclock").write_text(_TIMECLOCK, encoding="utf-8")
+    (target_dir / "ai-sessions.log").write_text(_AI_SESSIONS_LOG, encoding="utf-8")
+    (target_dir / "ai-plans.toml").write_text(_AI_PLANS_TOML, encoding="utf-8")
     (target_dir / "invoices").mkdir(exist_ok=True)
     _ensure_gitignore(target_dir / ".gitignore")
 
@@ -403,7 +403,7 @@ def interactive_assign_unattributed(
             raise typer.Exit(code=1)
 
     global_log = unattributed_log_path()
-    snapshot = global_log.read_text().splitlines() if global_log.exists() else []
+    snapshot = global_log.read_text(encoding="utf-8").splitlines() if global_log.exists() else []
     if any(line.strip().startswith("s ") for line in snapshot):
         assigned = 0
         hubbed = 0
@@ -536,7 +536,7 @@ def interactive_confirm_attribution(project_dir: Path) -> None:
         )
         return
 
-    raw_lines = log_path.read_text().splitlines()
+    raw_lines = log_path.read_text(encoding="utf-8").splitlines()
     candidates: list[tuple[str, AiSession, str]] = []
 
     for raw_line in raw_lines:
@@ -596,7 +596,7 @@ def _is_valid_project(slug: str, project_dir: Path) -> bool:
     if not path.exists():
         return False
     try:
-        data = tomllib.loads(path.read_text())
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
         client_part, _, project_part = slug.partition(":")
         for entry in data.get("project", []):
             if entry.get("slug") == slug:
@@ -652,10 +652,10 @@ def _detect_business_name() -> str:
 def _ensure_gitignore(path: Path) -> None:
     """Create or append the Halyard .gitignore block without removing user rules."""
     if not path.exists():
-        path.write_text(_GITIGNORE)
+        path.write_text(_GITIGNORE, encoding="utf-8")
         return
 
-    existing = path.read_text()
+    existing = path.read_text(encoding="utf-8")
     existing_lines = set(existing.splitlines())
     missing_lines = [
         line for line in _GITIGNORE.splitlines() if line and line not in existing_lines
@@ -665,7 +665,7 @@ def _ensure_gitignore(path: Path) -> None:
         return
 
     separator = "\n" if existing.endswith("\n") else "\n\n"
-    path.write_text(existing + separator + "\n".join(missing_lines) + "\n")
+    path.write_text(existing + separator + "\n".join(missing_lines) + "\n", encoding="utf-8")
 
 
 def _remove_lines_atomic(path: Path, drop: list[str]) -> None:

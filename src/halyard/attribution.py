@@ -124,7 +124,7 @@ def _alias_file_sig(path: Path) -> _AliasSig:
 def _read_alias_file(path: Path) -> dict[str, str]:
     """Parse one alias file's ``[aliases]`` table; ``{}`` if missing/invalid."""
     try:
-        data = tomllib.loads(path.read_text())
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
     except (tomllib.TOMLDecodeError, OSError):
         return {}
     aliases = data.get("aliases", {})

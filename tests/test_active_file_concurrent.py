@@ -34,7 +34,7 @@ def _write_active(home: Path, slug: str, *, delay: float = 0.0) -> None:
     tmp = halyard_dir / f"active.{uuid.uuid4().hex}.tmp"
 
     content = f"timeclock=/some/path\nslug={slug}\nstarted=2026-05-08 10:00:00\n"
-    tmp.write_text(content)
+    tmp.write_text(content, encoding="utf-8")
     if delay:
         time.sleep(delay)
     tmp.replace(active)
@@ -122,7 +122,7 @@ def test_partial_active_file_returns_none(
     active = tmp_path / ".halyard" / "active"
     active.parent.mkdir(parents=True, exist_ok=True)
     # Simulate a truncated write — only partial content, no slug= line yet
-    active.write_text("timeclock=/some/path\nslug")  # truncated mid-key
+    active.write_text("timeclock=/some/path\nslug", encoding="utf-8")  # truncated mid-key
 
     assert read_active_project() is None
 
@@ -136,7 +136,7 @@ def test_empty_active_file_returns_none(
 
     active = tmp_path / ".halyard" / "active"
     active.parent.mkdir(parents=True, exist_ok=True)
-    active.write_text("")
+    active.write_text("", encoding="utf-8")
 
     assert read_active_project() is None
 
@@ -150,6 +150,6 @@ def test_active_file_with_only_other_fields_returns_none(
 
     active = tmp_path / ".halyard" / "active"
     active.parent.mkdir(parents=True, exist_ok=True)
-    active.write_text("timeclock=/some/path\nstarted=2026-05-08 10:00:00\n")
+    active.write_text("timeclock=/some/path\nstarted=2026-05-08 10:00:00\n", encoding="utf-8")
 
     assert read_active_project() is None

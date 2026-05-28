@@ -31,7 +31,7 @@ def test_v33_claude_code_rejection_detection(tmp_path: Path) -> None:
             ],
         },
     }
-    transcript.write_text(json.dumps(deny_event) + "\n")
+    transcript.write_text(json.dumps(deny_event) + "\n", encoding="utf-8")
 
     # WHEN parsing the transcript
     stats = _read_from_transcript(str(transcript))
@@ -59,7 +59,7 @@ def test_v33_claude_code_normal_error_not_rejection(tmp_path: Path) -> None:
             ],
         },
     }
-    transcript.write_text(json.dumps(error_event) + "\n")
+    transcript.write_text(json.dumps(error_event) + "\n", encoding="utf-8")
 
     # WHEN parsing the transcript
     stats = _read_from_transcript(str(transcript))
@@ -105,7 +105,7 @@ def test_v33_codex_rejection_detection(tmp_path: Path) -> None:
             },
         },
     ]
-    rollout.write_text("\n".join(json.dumps(e) for e in events) + "\n")
+    rollout.write_text("\n".join(json.dumps(e) for e in events) + "\n", encoding="utf-8")
 
     # WHEN importing the Codex session
     result = _parse_session_file(rollout)
@@ -145,7 +145,7 @@ def test_v33_codex_rejection_in_agent_message(tmp_path: Path) -> None:
             },
         },
     ]
-    rollout.write_text("\n".join(json.dumps(e) for e in events) + "\n")
+    rollout.write_text("\n".join(json.dumps(e) for e in events) + "\n", encoding="utf-8")
 
     # WHEN importing the Codex session
     result = _parse_session_file(rollout)

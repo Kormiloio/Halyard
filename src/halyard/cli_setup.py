@@ -281,7 +281,7 @@ def register(app: typer.Typer) -> None:
             raise typer.Exit(code=1)
 
         toml_content = f'[project]\nslug = "{slug}"\n'
-        (target / "halyard.toml").write_text(toml_content)
+        (target / "halyard.toml").write_text(toml_content, encoding="utf-8")
 
         if remote:
             register_repo(remote, slug)

@@ -27,7 +27,8 @@ default_due_days = 30
 
 [invoicing]
 counter = 0
-"""
+""",
+        encoding="utf-8",
     )
     (tmp_path / "clients.toml").write_text(
         """
@@ -35,7 +36,8 @@ counter = 0
 slug = "acme"
 name = "Acme Corp"
 hourly_rate = 100
-"""
+""",
+        encoding="utf-8",
     )
     (tmp_path / "projects.toml").write_text(
         """
@@ -44,15 +46,17 @@ slug = "auth"
 client_slug = "acme"
 name = "Auth"
 hourly_rate = 150
-"""
+""",
+        encoding="utf-8",
     )
     (tmp_path / "time.timeclock").write_text(
         """
 i 2026-05-06 10:00:00 acme:auth
 o 2026-05-06 12:00:00
-"""
+""",
+        encoding="utf-8",
     )
-    (tmp_path / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp_path / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     (tmp_path / "invoices").mkdir()
 
 
@@ -67,11 +71,11 @@ def test_invoice_writes_markdown_and_increments_counter(
     assert result.exit_code == 0, result.output
     invoice_path = tmp_path / "invoices" / "2026-05-001-acme.md"
     assert invoice_path.exists()
-    rendered = invoice_path.read_text()
+    rendered = invoice_path.read_text(encoding="utf-8")
     assert "Acme Corp" in rendered
     assert "Auth" in rendered
     assert "USD 300.00" in rendered
-    assert "counter = 1" in (tmp_path / "halyard.toml").read_text()
+    assert "counter = 1" in (tmp_path / "halyard.toml").read_text(encoding="utf-8")
 
 
 def test_invoice_dry_run_does_not_write_or_increment(tmp_path: Path, monkeypatch: object) -> None:
@@ -83,7 +87,7 @@ def test_invoice_dry_run_does_not_write_or_increment(tmp_path: Path, monkeypatch
     assert result.exit_code == 0, result.output
     assert "Invoice 2026-05-001" in result.output
     assert not (tmp_path / "invoices" / "2026-05-001-acme.md").exists()
-    assert "counter = 0" in (tmp_path / "halyard.toml").read_text()
+    assert "counter = 0" in (tmp_path / "halyard.toml").read_text(encoding="utf-8")
 
 
 def test_log_json_returns_local_summary(tmp_path: Path, monkeypatch: object) -> None:
@@ -115,7 +119,7 @@ def test_log_json_returns_local_summary(tmp_path: Path, monkeypatch: object) -> 
 def test_run_log_query_uses_hub_fallback(tmp_path: Path, monkeypatch: object) -> None:
     hub_dir = tmp_path / "hub"
     hub_dir.mkdir()
-    (hub_dir / AI_LOG_FILENAME).write_text(HEADER)
+    (hub_dir / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     monkeypatch.setattr("halyard.hub.find_hub", lambda: hub_dir)  # type: ignore[attr-defined]
 
     response = run_log_query("what did I spend?", project_dir=None, agent="local")
@@ -160,7 +164,7 @@ def test_log_cli_agent_overrides_config(tmp_path: Path, monkeypatch: object) -> 
         ),
     )
     config_file = tmp_path / "config.toml"
-    config_file.write_text('[log]\ndefault_agent = "claude"\n')
+    config_file.write_text('[log]\ndefault_agent = "claude"\n', encoding="utf-8")
     monkeypatch.setattr(log_config, "_LOG_CONFIG_FILE", config_file)  # type: ignore[attr-defined]
 
     result = runner.invoke(app, ["log", "what did I spend?", "--agent", "local", "--json"])
@@ -344,7 +348,7 @@ def test_ai_evidence_appendix_not_included_by_default(tmp_path: Path, monkeypatc
     result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05"])
 
     assert result.exit_code == 0, result.output
-    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
+    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text(encoding="utf-8")
     assert "AI Usage Evidence" not in rendered
 
 
@@ -355,7 +359,7 @@ def test_ai_evidence_appendix_no_sessions(tmp_path: Path, monkeypatch: object) -
     result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"])
 
     assert result.exit_code == 0, result.output
-    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
+    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text(encoding="utf-8")
     assert "## AI Usage Evidence" in rendered
     assert "No AI sessions recorded for this period" in rendered
 
@@ -368,7 +372,7 @@ def test_ai_evidence_appendix_with_direct_api_sessions(tmp_path: Path, monkeypat
     result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"])
 
     assert result.exit_code == 0, result.output
-    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
+    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text(encoding="utf-8")
     assert "## AI Usage Evidence" in rendered
     assert "Direct API" in rendered
     assert "captured from API responses" in rendered
@@ -389,14 +393,15 @@ billing = "seat"
 monthly_usd = 200
 allocation = "active_minutes"
 starts_on = "2026-01-01"
-"""
+""",
+        encoding="utf-8",
     )
     append_session(tmp_path, _ai_session(cost=0.0))
 
     result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"])
 
     assert result.exit_code == 0, result.output
-    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
+    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text(encoding="utf-8")
     assert "Allocated plans" in rendered
     assert "subscription plan allocation" in rendered
     assert "Allocated costs are estimates" in rendered
@@ -412,7 +417,7 @@ def test_ai_evidence_appendix_no_trust_note_for_all_direct(
     result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05", "--include-ai-evidence"])
 
     assert result.exit_code == 0, result.output
-    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
+    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text(encoding="utf-8")
     assert "Allocated costs are estimates" not in rendered
 
 
@@ -449,7 +454,7 @@ def test_generate_invoice_unknown_client(tmp_path: Path, monkeypatch: object) ->
 def test_generate_invoice_no_time_entries(tmp_path: Path, monkeypatch: object) -> None:
     monkeypatch.chdir(tmp_path)  # type: ignore[attr-defined]
     _init_project(tmp_path)
-    (tmp_path / "time.timeclock").write_text("; empty\n")
+    (tmp_path / "time.timeclock").write_text("; empty\n", encoding="utf-8")
 
     result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05"])
 
@@ -506,14 +511,15 @@ default_due_days = 30
 [invoicing]
 counter = 0
 include_ai_cost_in_invoice = true
-"""
+""",
+        encoding="utf-8",
     )
     append_session(tmp_path, _ai_session(cost=5.00))
 
     result = runner.invoke(app, ["invoice", "acme", "--period", "2026-05"])
 
     assert result.exit_code == 0, result.output
-    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text()
+    rendered = (tmp_path / "invoices" / "2026-05-001-acme.md").read_text(encoding="utf-8")
     assert "AI usage cost" in rendered
 
 
@@ -610,7 +616,8 @@ def test_read_clients_parses_rate_history(tmp_path: Path) -> None:
     (tmp_path / "clients.toml").write_text(
         '[[client]]\nslug = "acme"\nname = "Acme"\nhourly_rate = 175.0\n\n'
         '[[client.rate_history]]\nrate = 150.0\neffective = "2026-01-01"\n\n'
-        '[[client.rate_history]]\nrate = 175.0\neffective = "2026-06-01"\n'
+        '[[client.rate_history]]\nrate = 175.0\neffective = "2026-06-01"\n',
+        encoding="utf-8",
     )
     clients = _read_clients(tmp_path)
     assert len(clients["acme"].rate_history) == 2
@@ -628,7 +635,7 @@ def test_read_clients_rejects_traversal_slug(tmp_path: Path) -> None:
     from halyard.invoicing import _read_clients
 
     (tmp_path / "clients.toml").write_text(
-        '[[client]]\nslug = "../../evil"\nname = "Evil"\nhourly_rate = 100\n'
+        '[[client]]\nslug = "../../evil"\nname = "Evil"\nhourly_rate = 100\n', encoding="utf-8"
     )
     clients = _read_clients(tmp_path)
     assert "../../evil" not in clients
@@ -639,7 +646,7 @@ def test_read_clients_rejects_slug_with_spaces(tmp_path: Path) -> None:
     from halyard.invoicing import _read_clients
 
     (tmp_path / "clients.toml").write_text(
-        '[[client]]\nslug = "bad slug"\nname = "Bad"\nhourly_rate = 100\n'
+        '[[client]]\nslug = "bad slug"\nname = "Bad"\nhourly_rate = 100\n', encoding="utf-8"
     )
     clients = _read_clients(tmp_path)
     assert len(clients) == 0
@@ -649,7 +656,7 @@ def test_read_clients_accepts_valid_slug(tmp_path: Path) -> None:
     from halyard.invoicing import _read_clients
 
     (tmp_path / "clients.toml").write_text(
-        '[[client]]\nslug = "acme-corp"\nname = "Acme Corp"\nhourly_rate = 100\n'
+        '[[client]]\nslug = "acme-corp"\nname = "Acme Corp"\nhourly_rate = 100\n', encoding="utf-8"
     )
     clients = _read_clients(tmp_path)
     assert "acme-corp" in clients
@@ -660,7 +667,7 @@ def test_read_projects_rejects_traversal_slug(tmp_path: Path) -> None:
     from halyard.invoicing import _read_projects
 
     (tmp_path / "projects.toml").write_text(
-        '[[project]]\nslug = "../evil"\nclient_slug = "acme"\nname = "Evil"\n'
+        '[[project]]\nslug = "../evil"\nclient_slug = "acme"\nname = "Evil"\n', encoding="utf-8"
     )
     projects = _read_projects(tmp_path)
     assert "../evil" not in projects
@@ -672,7 +679,7 @@ def test_read_projects_rejects_traversal_client_slug(tmp_path: Path) -> None:
     from halyard.invoicing import _read_projects
 
     (tmp_path / "projects.toml").write_text(
-        '[[project]]\nslug = "auth"\nclient_slug = "../../etc"\nname = "Auth"\n'
+        '[[project]]\nslug = "auth"\nclient_slug = "../../etc"\nname = "Auth"\n', encoding="utf-8"
     )
     projects = _read_projects(tmp_path)
     assert len(projects) == 0

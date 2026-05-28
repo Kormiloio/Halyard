@@ -40,7 +40,7 @@ def _session(**kwargs) -> AiSession:  # type: ignore[no-untyped-def]
 
 def _write_log(tmp_path: Path, lines: list[str]) -> Path:
     log = tmp_path / AI_LOG_FILENAME
-    log.write_text(HEADER + "\n".join(lines) + "\n")
+    log.write_text(HEADER + "\n".join(lines) + "\n", encoding="utf-8")
     return tmp_path
 
 

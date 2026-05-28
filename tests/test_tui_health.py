@@ -11,9 +11,9 @@ from halyard.reports import HealthCheck
 
 
 def _good_project(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text("[business]\n")
-    (tmp_path / "time.timeclock").write_text("; t\n")
-    (tmp_path / "ai-sessions.log").write_text(HEADER)
+    (tmp_path / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp_path / "time.timeclock").write_text("; t\n", encoding="utf-8")
+    (tmp_path / "ai-sessions.log").write_text(HEADER, encoding="utf-8")
 
 
 def test_status_bar_shows_chip_when_a_check_fails(tmp_path: Path) -> None:

@@ -111,10 +111,11 @@ def _mem_db() -> sqlite3.Connection:
 
 def _halyard_project(tmp_path: Path) -> Path:
     tmp_path.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "halyard.toml").write_text("[project]\nslug = 'acme:web'\n")
+    (tmp_path / "halyard.toml").write_text("[project]\nslug = 'acme:web'\n", encoding="utf-8")
     (tmp_path / "ai-sessions.log").write_text(
         "; Halyard AI session log\n"
-        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n"
+        "; s <start> <end> <tool> <model> <input_tok> <output_tok> <cost_usd>\n",
+        encoding="utf-8",
     )
     return tmp_path
 
@@ -432,7 +433,7 @@ def test_resolve_sessions_dry_run_no_amendment(tmp_path: Path) -> None:
     assert len(results) == 1
     assert results[0].pr_state == "merged"
     # No amendment appended in dry_run
-    log = (project / "ai-sessions.log").read_text()
+    log = (project / "ai-sessions.log").read_text(encoding="utf-8")
     assert "\na " not in log
 
 
@@ -521,7 +522,7 @@ def test_resolve_sessions_writes_amendment(tmp_path: Path) -> None:
     ):
         resolve_sessions(project, sessions)
 
-    log = (project / "ai-sessions.log").read_text()
+    log = (project / "ai-sessions.log").read_text(encoding="utf-8")
     amendment_lines = [ln for ln in log.splitlines() if ln.startswith("a ")]
     assert len(amendment_lines) == 1
     assert "pr_ref=acme/web#5" in amendment_lines[0]

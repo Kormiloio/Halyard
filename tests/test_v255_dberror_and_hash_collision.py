@@ -61,8 +61,8 @@ def test_attribute_session_degrades_on_dberror(monkeypatch: pytest.MonkeyPatch) 
 
 def _proj(p: Path) -> Path:
     p.mkdir(parents=True, exist_ok=True)
-    (p / "halyard.toml").write_text("[business]\n")
-    (p / AI_LOG_FILENAME).write_text(HEADER)
+    (p / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (p / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     return p
 
 

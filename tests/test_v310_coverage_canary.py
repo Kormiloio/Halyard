@@ -20,8 +20,8 @@ _NOW = datetime.now()
 
 def _init(tmp: Path) -> Path:
     tmp.mkdir(parents=True, exist_ok=True)
-    (tmp / "halyard.toml").write_text("[business]\n")
-    (tmp / AI_LOG_FILENAME).write_text(HEADER)
+    (tmp / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (tmp / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     return tmp
 
 

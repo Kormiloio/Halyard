@@ -98,8 +98,8 @@ def test_legacy_comma_tags_still_parse() -> None:
 def test_append_session_does_not_reparse_log(tmp_path: Path, monkeypatch) -> None:
     from halyard import ai_log
 
-    (tmp_path / "halyard.toml").write_text("[project]\n")
-    (tmp_path / "ai-sessions.log").write_text("; header\n")
+    (tmp_path / "halyard.toml").write_text("[project]\n", encoding="utf-8")
+    (tmp_path / "ai-sessions.log").write_text("; header\n", encoding="utf-8")
 
     calls = {"n": 0}
     real = ai_log.parse_sessions
@@ -135,8 +135,8 @@ def test_sqlite_concurrent_open_does_not_raise(tmp_path: Path, monkeypatch) -> N
 
 def test_report_json_error_is_structured(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "halyard.toml").write_text("[project]\n")
-    (tmp_path / "ai-sessions.log").write_text("; header\n")
+    (tmp_path / "halyard.toml").write_text("[project]\n", encoding="utf-8")
+    (tmp_path / "ai-sessions.log").write_text("; header\n", encoding="utf-8")
     result = CliRunner().invoke(app, ["report", "--json", "--month", "not-a-month"])
     assert result.exit_code == 1
     payload = json.loads(result.output)
@@ -149,7 +149,7 @@ def test_report_json_error_is_structured(tmp_path: Path, monkeypatch) -> None:
 def test_store_applies_amendment_without_full_reload(tmp_path: Path, monkeypatch) -> None:
     log = tmp_path / "ai-sessions.log"
     s = _session(project="acme:web")
-    log.write_text("; header\n" + s.to_log_line() + "\n")
+    log.write_text("; header\n" + s.to_log_line() + "\n", encoding="utf-8")
 
     from halyard.tui.store import SessionStore
 
@@ -182,7 +182,7 @@ def test_codex_iter_rejects_symlink(tmp_path: Path) -> None:
     from halyard.collectors.codex_app import _iter_jsonl_lines
 
     real = tmp_path / "real.jsonl"
-    real.write_text('{"ok": 1}\n')
+    real.write_text('{"ok": 1}\n', encoding="utf-8")
     link = tmp_path / "link.jsonl"
     link.symlink_to(real)
     assert list(_iter_jsonl_lines(link)) == []
@@ -192,7 +192,7 @@ def test_gemini_history_read_capped_rejects_symlink(tmp_path: Path) -> None:
     from halyard.collectors.gemini_history import _read_capped
 
     real = tmp_path / "real.json"
-    real.write_text("{}")
+    real.write_text("{}", encoding="utf-8")
     link = tmp_path / "link.json"
     link.symlink_to(real)
     assert _read_capped(link) is None
@@ -208,9 +208,9 @@ def test_install_claude_is_byte_stable_no_op(tmp_path: Path, monkeypatch) -> Non
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     cli_hooks._do_install_hook_claude(global_=True)
     settings = tmp_path / ".claude" / "settings.json"
-    first = settings.read_text()
+    first = settings.read_text(encoding="utf-8")
     cli_hooks._do_install_hook_claude(global_=True)
-    assert settings.read_text() == first  # second run must not rewrite
+    assert settings.read_text(encoding="utf-8") == first  # second run must not rewrite
 
 
 # --- Risk 1: typst invoked by resolved path, not bare name -----------------
@@ -229,7 +229,7 @@ def test_render_pdf_uses_resolved_typst_path(tmp_path: Path, monkeypatch) -> Non
         lambda argv, **kw: captured.setdefault("argv", argv),
     )
     invoice = tmp_path / "inv.typ"
-    invoice.write_text("#text[hi]")
+    invoice.write_text("#text[hi]", encoding="utf-8")
     assert invoicing.render_pdf(invoice) is None
     assert captured["argv"][0] == "/opt/safe/bin/typst"  # resolved, not "typst"
 
@@ -253,7 +253,8 @@ def test_timeclock_anomalies_detects_double_in_and_orphan_out(tmp_path: Path) ->
         "i 2026-05-16 09:00:00 acme:web\n"
         "i 2026-05-16 10:00:00 acme:web\n"  # second open — first is lost
         "o 2026-05-16 11:00:00\n"
-        "o 2026-05-16 12:00:00\n"  # orphan close — no open
+        "o 2026-05-16 12:00:00\n",  # orphan close — no open
+        encoding="utf-8",
     )
     dropped, orphans = timeclock_anomalies(tc)
     assert dropped == 1
@@ -264,7 +265,9 @@ def test_timeclock_health_warns_on_structural_issue(tmp_path: Path) -> None:
     from halyard.reports import _timeclock_check
 
     tc = tmp_path / "time.timeclock"
-    tc.write_text("i 2026-05-16 09:00:00 acme:web\ni 2026-05-16 10:00:00 acme:web\n")
+    tc.write_text(
+        "i 2026-05-16 09:00:00 acme:web\ni 2026-05-16 10:00:00 acme:web\n", encoding="utf-8"
+    )
     check = _timeclock_check(tc)
     assert check.status == "warning"
     assert "undercounted" in check.detail
@@ -274,6 +277,6 @@ def test_clean_timeclock_stays_healthy(tmp_path: Path) -> None:
     from halyard.reports import _timeclock_check, timeclock_anomalies
 
     tc = tmp_path / "time.timeclock"
-    tc.write_text("i 2026-05-16 09:00:00 acme:web\no 2026-05-16 10:00:00\n")
+    tc.write_text("i 2026-05-16 09:00:00 acme:web\no 2026-05-16 10:00:00\n", encoding="utf-8")
     assert timeclock_anomalies(tc) == (0, 0)
     assert _timeclock_check(tc).status == "healthy"

@@ -51,13 +51,13 @@ def test_safe_transcript_path_rejects_symlink_and_oversize(tmp_path: Path) -> No
     from halyard.collectors import claude_code
 
     real = tmp_path / "real.jsonl"
-    real.write_text('{"type":"assistant"}\n')
+    real.write_text('{"type":"assistant"}\n', encoding="utf-8")
     link = tmp_path / "link.jsonl"
     os.symlink(real, link)
     assert claude_code._safe_transcript_path(str(link)) is None
 
     big = tmp_path / "big.jsonl"
-    big.write_text("x")
+    big.write_text("x", encoding="utf-8")
     # Force the size check without writing 25MB.
     orig = claude_code._MAX_TRANSCRIPT_BYTES
     claude_code._MAX_TRANSCRIPT_BYTES = 0
@@ -71,7 +71,7 @@ def test_safe_transcript_path_accepts_normal_tmp_file(tmp_path: Path) -> None:
     from halyard.collectors.claude_code import _safe_transcript_path
 
     f = tmp_path / "t.jsonl"
-    f.write_text('{"type":"assistant"}\n')
+    f.write_text('{"type":"assistant"}\n', encoding="utf-8")
     assert _safe_transcript_path(str(f)) == f.resolve()
 
 
@@ -92,7 +92,7 @@ def test_gemini_history_skips_oversized(tmp_path: Path) -> None:
     from halyard.collectors import gemini_history
 
     f = tmp_path / "session-abcd.json"
-    f.write_text('{"sessionId":"abcd"}')
+    f.write_text('{"sessionId":"abcd"}', encoding="utf-8")
     orig = gemini_history._MAX_HISTORY_BYTES
     gemini_history._MAX_HISTORY_BYTES = 0
     try:

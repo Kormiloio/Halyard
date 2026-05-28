@@ -74,7 +74,7 @@ def test_mix_orders_strongest_first() -> None:
 
 
 def test_rung_toml_walkup(tmp_path: Path) -> None:
-    (tmp_path / "halyard.toml").write_text('[project]\nslug = "acme:web"\n')
+    (tmp_path / "halyard.toml").write_text('[project]\nslug = "acme:web"\n', encoding="utf-8")
     slug, rung = git_context.infer_project_with_source(tmp_path)
     assert slug == "acme:web"
     assert rung == "toml"
@@ -98,8 +98,8 @@ def test_rung_repo_map_then_git_auto(monkeypatch: pytest.MonkeyPatch, tmp_path: 
 
 def _proj(p: Path) -> Path:
     p.mkdir(parents=True, exist_ok=True)
-    (p / "halyard.toml").write_text("[business]\n")
-    (p / AI_LOG_FILENAME).write_text(HEADER)
+    (p / "halyard.toml").write_text("[business]\n", encoding="utf-8")
+    (p / AI_LOG_FILENAME).write_text(HEADER, encoding="utf-8")
     return p
 
 
@@ -156,15 +156,15 @@ def test_remediation_emits_command_and_writes_nothing(tmp_path: Path) -> None:
     monkey_home = home / ".halyard"
     monkey_home.mkdir(parents=True)
     ulog = monkey_home / "unattributed.log"
-    ulog.write_text(HEADER)
+    ulog.write_text(HEADER, encoding="utf-8")
     s = _s(0, project=None, attr=None, remote="git@github.com:acme/web.git")
     with ulog.open("a") as fh:
         fh.write(s.to_log_line() + "\n")
     groups = _group_unattributed_by_remote(ulog)
     assert groups  # sanity: grouped by remote
-    before = ulog.read_text()
+    before = ulog.read_text(encoding="utf-8")
     # The doctor check only proposes; the file is never mutated by it.
-    assert ulog.read_text() == before
+    assert ulog.read_text(encoding="utf-8") == before
 
 
 # --- MCP surface ----------------------------------------------------------

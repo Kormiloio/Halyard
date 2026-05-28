@@ -38,7 +38,7 @@ def test_uninstall_service_warns_on_launchctl_failure(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """If launchctl unload fails, a warning must be printed to stderr."""
-    provider.plist_path.write_text("<plist/>")
+    provider.plist_path.write_text("<plist/>", encoding="utf-8")
 
     def _failing_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
@@ -61,7 +61,7 @@ def test_uninstall_service_still_removes_plist_on_failure(
     provider: LaunchdProvider, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Even when launchctl fails, the plist file must still be removed."""
-    provider.plist_path.write_text("<plist/>")
+    provider.plist_path.write_text("<plist/>", encoding="utf-8")
 
     def _failing_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(args=cmd, returncode=1, stdout="", stderr="error")
@@ -79,7 +79,7 @@ def test_uninstall_service_no_warning_on_success(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A successful launchctl unload must not print any warning."""
-    provider.plist_path.write_text("<plist/>")
+    provider.plist_path.write_text("<plist/>", encoding="utf-8")
 
     def _ok_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
@@ -116,7 +116,7 @@ def test_service_status_reports_custom_port(
     """A plist installed with a non-default port surfaces in service_status."""
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
-    provider.plist_path.write_text(provider._plist("halyard", project_dir, 7777))
+    provider.plist_path.write_text(provider._plist("halyard", project_dir, 7777), encoding="utf-8")
 
     # Simulate launchctl reporting the service as loaded.
     monkeypatch.setattr(
@@ -136,7 +136,7 @@ def test_installed_port_falls_back_on_malformed_plist(
     """Malformed plist → warning + DASHBOARD_PORT fallback, not a crash."""
     from halyard.dashboard import DASHBOARD_PORT
 
-    provider.plist_path.write_text("<not valid xml")  # garbage
+    provider.plist_path.write_text("<not valid xml", encoding="utf-8")  # garbage
 
     port = provider.get_port()
     assert port == DASHBOARD_PORT
@@ -157,7 +157,7 @@ def test_install_service_uses_trusted_halyard_resolver(
     """LaunchAgent install must not persist an arbitrary PATH hit."""
     trusted_exe = tmp_path / ".venv" / "bin" / "halyard"
     trusted_exe.parent.mkdir(parents=True)
-    trusted_exe.write_text("#!/bin/sh\n")
+    trusted_exe.write_text("#!/bin/sh\n", encoding="utf-8")
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
 
@@ -174,7 +174,7 @@ def test_install_service_uses_trusted_halyard_resolver(
 
     assert url == "http://127.0.0.1:7777/"
     assert calls == [["launchctl", "load", "-w", str(provider.plist_path)]]
-    assert f"<string>{trusted_exe}</string>" in provider.plist_path.read_text()
+    assert f"<string>{trusted_exe}</string>" in provider.plist_path.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

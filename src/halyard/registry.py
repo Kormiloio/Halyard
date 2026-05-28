@@ -60,7 +60,7 @@ def register_project(path: Path) -> None:
     if resolved not in existing:
         REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
         if not REGISTRY_PATH.exists():
-            REGISTRY_PATH.write_text(_HEADER)
+            REGISTRY_PATH.write_text(_HEADER, encoding="utf-8")
         with REGISTRY_PATH.open("a") as f:
             f.write(resolved + "\n")
 
@@ -85,11 +85,11 @@ def forget_project(path: Path) -> bool:
     if resolved not in _read_raw_paths():
         return False
     kept: list[str] = []
-    for line in REGISTRY_PATH.read_text().splitlines(keepends=True):
+    for line in REGISTRY_PATH.read_text(encoding="utf-8").splitlines(keepends=True):
         if line.strip() == resolved:
             continue
         kept.append(line)
-    REGISTRY_PATH.write_text("".join(kept))
+    REGISTRY_PATH.write_text("".join(kept), encoding="utf-8")
     return True
 
 
@@ -119,7 +119,7 @@ def _read_raw_paths() -> list[str]:
     if not REGISTRY_PATH.exists():
         return []
     paths: list[str] = []
-    for line in REGISTRY_PATH.read_text().splitlines():
+    for line in REGISTRY_PATH.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if stripped and not stripped.startswith("#"):
             paths.append(stripped)
