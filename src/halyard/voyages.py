@@ -119,7 +119,9 @@ def write_voyages(project_dir: Path, entries: list[VoyageEntry]) -> None:
     path = project_dir / VOYAGES_FILENAME
     fd, tmp = tempfile.mkstemp(dir=project_dir, prefix=".voyages-", suffix=".tmp")
     try:
-        with os.fdopen(fd, "w") as f:
+        # newline="" keeps LF on every OS — Windows text mode would otherwise
+        # translate \n → \r\n, breaking byte-level diffs across platforms.
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(content)
         os.replace(tmp, path)
     except OSError:

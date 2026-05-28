@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -77,6 +78,7 @@ def test_hmac_fails_closed_without_key(tmp_path: Path) -> None:
         read_trusted_state(p, mode="hmac")
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file-mode semantics")
 def test_key_file_is_0600(tmp_path: Path) -> None:
     write_trusted_state(tmp_path / "active", "x\n", mode="hmac")
     mode = stat.S_IMODE((tmp_path / "integrity.key").stat().st_mode)

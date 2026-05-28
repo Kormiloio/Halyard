@@ -25,7 +25,12 @@ _warn_console = Console(stderr=True)
 
 def _warn(message: str) -> None:
     """Emit a pricing warning to stderr via Rich (consistent with the app)."""
-    _warn_console.print(f"[halyard] Warning: {message}", markup=False, style="yellow")
+    # soft_wrap=True keeps the warning on one logical line regardless of the
+    # capturing terminal's width — Windows CI's narrow default would otherwise
+    # wrap mid-substring and break "X in output" assertions.
+    _warn_console.print(
+        f"[halyard] Warning: {message}", markup=False, style="yellow", soft_wrap=True
+    )
 
 
 # (input_per_mtok, output_per_mtok)
@@ -334,7 +339,7 @@ def update_pricing(timeout: int = 5, accept_changed: bool = False) -> tuple[int,
     _LOCAL_PRICING_FILE.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(dir=_LOCAL_PRICING_FILE.parent, suffix=".toml.tmp")
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(content)
         os.replace(tmp_path, _LOCAL_PRICING_FILE)
     except OSError:

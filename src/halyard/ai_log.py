@@ -268,7 +268,10 @@ def locked_file(path: Path, mode: str) -> Generator[IO[str], None, None]:
     lock_key = str(path.resolve())
     with _PATH_LOCKS_GUARD:
         thread_lock = _PATH_LOCKS.setdefault(lock_key, threading.RLock())
-    with thread_lock, open(path, mode, encoding="utf-8") as f:
+    # newline="" keeps Halyard's plain-text files LF-only on every OS — Windows
+    # text mode would otherwise translate \n → \r\n on write, breaking byte-level
+    # diffs and hash checks across platforms.
+    with thread_lock, open(path, mode, encoding="utf-8", newline="") as f:
         fd = f.fileno()
         _acquire_lock(fd)
         try:

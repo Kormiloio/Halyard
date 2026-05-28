@@ -10,7 +10,8 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 from halyard.ai_log import AiSession, append_session, find_project_dir
 from halyard.git_context import commits_in_window, current_branch, infer_project
@@ -133,7 +134,10 @@ def discover_workspaces() -> dict[str, Path]:
             data = json.loads(meta.read_text(encoding="utf-8"))
             folder_uri = data.get("folder")
             if folder_uri and folder_uri.startswith("file://"):
-                mapping[folder.name] = Path(unquote(urlparse(folder_uri).path))
+                # url2pathname handles Windows's file:///C:/... convention
+                # (strips the leading slash), where bare Path(unquote(...path))
+                # would produce '/C:/...' and break.
+                mapping[folder.name] = Path(url2pathname(urlparse(folder_uri).path))
         except (json.JSONDecodeError, OSError):
             continue
 

@@ -143,9 +143,15 @@ _VSCODE_TASK_INPUTS: tuple[dict[str, str], ...] = (
 
 
 def _cc_hook_cmd_key(cmd: str) -> str:
-    """Normalise hook command to subcommand name so absolute paths don't create false duplicates."""
+    """Normalise hook command to subcommand name so absolute paths don't create false duplicates.
+
+    Uses ``Path.stem`` (not ``.name``) so ``halyard.exe`` on Windows and
+    ``halyard`` on POSIX produce the same key — otherwise the dedup check
+    against an existing settings file with the bare ``halyard`` token would
+    miss its own prior install on Windows.
+    """
     parts = _command_parts(cmd)
-    return f"{Path(parts[0]).name} {' '.join(parts[1:])}" if parts else cmd
+    return f"{Path(parts[0]).stem} {' '.join(parts[1:])}" if parts else cmd
 
 
 def _is_halyard_hook_cmd(cmd: str) -> bool:

@@ -102,7 +102,10 @@ def run_dashboard(
     try:
         server = ThreadingHTTPServer((host, resolved), _handler_for(project_dir))
     except OSError as exc:
-        if exc.errno == errno.EADDRINUSE:
+        # Windows raises WSAEACCES (WinError 10013) → PermissionError(EACCES)
+        # when a 2nd process tries to bind a port the first one already holds —
+        # treat it the same as POSIX's EADDRINUSE.
+        if exc.errno in (errno.EADDRINUSE, errno.EACCES):
             raise DashboardError(
                 f"port {resolved} is already in use — a Halyard Bridge is "
                 f"likely already running at http://{display_host}:{resolved}/.\n"
