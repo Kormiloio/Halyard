@@ -31,7 +31,9 @@ def _load_or_create_token() -> str:
     tmp = path.with_suffix(".token.tmp")
     tmp.write_text(token, encoding="utf-8")
     os.chmod(tmp, 0o600)
-    tmp.replace(path)
+    from halyard.ai_log import atomic_replace
+
+    atomic_replace(tmp, path)
     return token
 
 

@@ -123,7 +123,9 @@ def write_voyages(project_dir: Path, entries: list[VoyageEntry]) -> None:
         # translate \n → \r\n, breaking byte-level diffs across platforms.
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(content)
-        os.replace(tmp, path)
+        from halyard.ai_log import atomic_replace
+
+        atomic_replace(tmp, path)
     except OSError:
         import contextlib
 

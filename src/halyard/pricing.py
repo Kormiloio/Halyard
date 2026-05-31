@@ -341,7 +341,9 @@ def update_pricing(timeout: int = 5, accept_changed: bool = False) -> tuple[int,
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(content)
-        os.replace(tmp_path, _LOCAL_PRICING_FILE)
+        from halyard.ai_log import atomic_replace
+
+        atomic_replace(tmp_path, _LOCAL_PRICING_FILE)
     except OSError:
         with suppress(OSError):
             os.unlink(tmp_path)

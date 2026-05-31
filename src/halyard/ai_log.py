@@ -13,9 +13,11 @@ automatically symmetric.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import sys
 import threading
+import time
 import traceback
 import urllib.parse
 import warnings
@@ -97,6 +99,27 @@ else:
 
         def _release_lock(fd: int) -> None:
             pass
+
+
+def atomic_replace(src: Path | str, dst: Path | str, *, attempts: int = 6) -> None:
+    """``os.replace`` with a Windows-aware retry on sharing violations.
+
+    On Windows, ``os.replace`` raises ``PermissionError`` (WinError 5) when
+    another process has the destination file open — a routine occurrence under
+    concurrent readers. Retry with exponential backoff (5, 10, 20, 40, 80 ms;
+    ~155 ms total) to absorb the transient sharing violation. POSIX never hits
+    the retry path: ``os.replace`` is atomic and always succeeds there.
+    """
+    delay = 0.005
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay)
+            delay *= 2
 
 
 SPEC_URL = "https://halyard.dev/spec/ai-sessions/v1"

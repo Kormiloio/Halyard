@@ -222,6 +222,8 @@ def write_trusted_state(path: Path, content: str, *, mode: IntegrityMode | None 
 
 def _atomic_write(path: Path, content: str) -> None:
     """Write *content* to *path* via tmp + fsync + atomic rename."""
+    from halyard.ai_log import atomic_replace
+
     tmp = path.with_suffix(path.suffix + ".tmp")
     fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
@@ -229,7 +231,7 @@ def _atomic_write(path: Path, content: str) -> None:
         os.fsync(fd)
     finally:
         os.close(fd)
-    os.replace(tmp, path)
+    atomic_replace(tmp, path)
 
 
 def verify_all(paths: list[Path]) -> tuple[bool, Path | None]:

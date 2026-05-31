@@ -128,7 +128,9 @@ def timeclock_repair_cmd(
         os.fsync(fd)
     finally:
         os.close(fd)
-    os.replace(tmp, path)
+    from halyard.ai_log import atomic_replace
+
+    atomic_replace(tmp, path)
 
     console.print(f"[green]✓[/] Repaired {path}")
     console.print(f"  backup: {backup}")
