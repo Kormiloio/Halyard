@@ -51,12 +51,10 @@ jobs:
   # Real-Windows coverage for the platform-specific file-locking path
   # (_acquire_read_lock / _release_read_lock — the v5.9 read-lock crash site).
   # Runs only the suite; lint/format/mypy/audit are platform-independent and
-  # stay on ubuntu above. Non-blocking (continue-on-error) until the first
-  # green run confirms the suite passes on Windows, since we have no Windows
-  # machine to pre-verify on.
+  # stay on ubuntu above. Required since v5.12 iter 2 (encoding + LF + EACCES
+  # + hook/copilot path fixes brought it from 60+ failures to green).
   test-windows:
     runs-on: windows-latest
-    continue-on-error: true
     strategy:
       matrix:
         python-version: ["3.12"]

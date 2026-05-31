@@ -1265,6 +1265,28 @@ layers must read from this local source of truth; they do not replace it.
     v5.9 read-lock path. Spec in `openspec/changes/v5.11-loose-ends/`.
     **Status: complete (1544 tests passing).**
 
+86. **v5.12 — Windows portability:** the first real-Windows CI run from v5.11
+    surfaced 60+ failures, all platform-portability bugs (none touched v5.9's
+    read-lock fix, confirming that works). Iter 1: a mechanical UTF-8 pass over
+    `src/` and `tests/` added `encoding="utf-8"` to every `Path.read_text` /
+    `write_text` / `open` (147 files patched) — the em-dash in the
+    `ai-sessions.log` and registry headers was getting written as cp1252's
+    `\x97` on Windows; UTF-8 reads then cascaded `UnicodeDecodeError` across the
+    suite. `jsonio` now emits `Path.as_posix()` so a serialized path is the
+    same string on every OS. Iter 2: `os.fdopen` sites (voyages, pricing) — not
+    matched by the iter-1 `open(...)` sweep — gained `encoding="utf-8"` and
+    `newline=""`; the same `newline=""` on `locked_file` keeps Halyard's
+    plain-text files LF-only on every OS. `run_dashboard` catches `EACCES`
+    (WinError 10013) in addition to `EADDRINUSE`. `_cc_hook_cmd_key` uses
+    `Path.stem` so `halyard.exe` and `halyard` produce the same dedup key. The
+    Copilot importer's `workspace.json` folder URI now uses `url2pathname` so
+    `file:///C:/...` resolves correctly. The pricing `_warn` uses Rich
+    `soft_wrap=True` so warnings survive narrow CI terminals. One POSIX-only
+    test (`test_key_file_is_0600`) skipped on win32. The `test-windows` job is
+    now required (no longer `continue-on-error`). Spec in
+    `openspec/changes/v5.12-windows-portability/`.
+    **Status: complete (1544 tests passing on Linux + Windows).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
