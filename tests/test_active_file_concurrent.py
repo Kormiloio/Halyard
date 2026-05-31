@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from halyard.ai_log import read_active_project
+from halyard.ai_log import atomic_replace, read_active_project
 
 # ---------------------------------------------------------------------------
 # Gap 2: Concurrent write simulation
@@ -37,7 +37,10 @@ def _write_active(home: Path, slug: str, *, delay: float = 0.0) -> None:
     tmp.write_text(content, encoding="utf-8")
     if delay:
         time.sleep(delay)
-    tmp.replace(active)
+    # Use the production atomic_replace so the simulation matches the prod
+    # write path on Windows (bare tmp.replace raises PermissionError when a
+    # concurrent reader holds the destination open).
+    atomic_replace(tmp, active)
 
 
 def test_concurrent_write_reader_never_sees_partial_slug(
