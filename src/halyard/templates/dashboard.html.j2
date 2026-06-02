@@ -88,7 +88,11 @@
         <div class="panel-head">
           <div>
             <p class="eyebrow">{{ morse_wake|safe }}</p>
-            <h2>Wake · {{ wake_month|safe }}</h2>
+            <h2>Wake ·
+              <a class="wake-nav" href="{{ wake_prev_href }}" aria-label="Previous month" rel="prev">‹</a>
+              {{ wake_month|safe }}
+              {% if wake_next_href %}<a class="wake-nav" href="{{ wake_next_href }}" aria-label="Next month" rel="next">›</a>{% endif %}
+            </h2>
           </div>
           <div class="pill-group">{{ trail_pill|safe }}</div>
         </div>

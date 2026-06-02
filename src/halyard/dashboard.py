@@ -158,6 +158,7 @@ def render_dashboard(
     *,
     usage_range: UsageRangeOpt = "30d",
     usage_tab: UsageTabOpt = "overview",
+    wake_month: str | None = None,
 ) -> str:
     """Render the dashboard HTML for tests and the HTTP handler.
 
@@ -168,6 +169,9 @@ def render_dashboard(
     ``usage_range`` controls the Usage Analytics window (7d/30d/all).
     ``usage_tab`` selects between the Overview panel and the per-day-by-
     model breakdown panel.
+
+    ``wake_month`` is a ``YYYY-MM`` string scoping only the Wake panel.
+    Invalid or future values fall back to the current month.
     """
     from halyard.reports import build_aggregate_dashboard_state
 
@@ -176,7 +180,12 @@ def render_dashboard(
         if project_dir is None
         else build_dashboard_state(project_dir)
     )
-    return _render_state(state, usage_range=usage_range, usage_tab=usage_tab)
+    return _render_state(
+        state,
+        usage_range=usage_range,
+        usage_tab=usage_tab,
+        wake_month_raw=wake_month,
+    )
 
 
 def _handler_for(
@@ -318,6 +327,7 @@ def _handler_for(
             qs = parse_qs(parsed.query)
             raw_range = (qs.get("range") or ["30d"])[0]
             raw_tab = (qs.get("tab") or ["overview"])[0]
+            raw_month = (qs.get("month") or [""])[0] or None
             usage_range: UsageRangeOpt = (
                 raw_range if raw_range in ("7d", "30d", "all") else "30d"  # type: ignore[assignment]
             )
@@ -325,7 +335,10 @@ def _handler_for(
                 raw_tab if raw_tab in ("overview", "models") else "overview"  # type: ignore[assignment]
             )
             body = render_dashboard(
-                project_dir, usage_range=usage_range, usage_tab=usage_tab
+                project_dir,
+                usage_range=usage_range,
+                usage_tab=usage_tab,
+                wake_month=raw_month,
             ).encode()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -685,6 +698,7 @@ def _render_state(
     *,
     usage_range: UsageRangeOpt = "30d",
     usage_tab: UsageTabOpt = "overview",
+    wake_month_raw: str | None = None,
 ) -> str:
     report = state.report
     human_time = state.human_time
@@ -778,16 +792,42 @@ def _render_state(
         else:
             costs_trust_pill = _panel_status_pill("all captured", "healthy")
 
+    wake_period = _resolve_wake_period(wake_month_raw, now)
+    wake_month_param = wake_period.strftime("%Y-%m")
+    is_current_wake = (wake_period.year, wake_period.month) == (now.year, now.month)
+    wake_sessions = (
+        report.sessions
+        if is_current_wake
+        else [
+            s
+            for s in state.all_sessions
+            if s.start.year == wake_period.year and s.start.month == wake_period.month
+        ]
+    )
     trail_month_sessions = [
         s
-        for s in report.sessions
-        if s.start.date().year == now.year and s.start.date().month == now.month
+        for s in wake_sessions
+        if s.start.date().year == wake_period.year and s.start.date().month == wake_period.month
     ]
     trail_active_days = len({s.start.date() for s in trail_month_sessions})
     trail_pill = _panel_status_pill(
         f"{trail_active_days} active day{'s' if trail_active_days != 1 else ''}",
         "muted" if trail_active_days else "warning",
     )
+
+    prev_param = _shift_month(wake_period, -1).strftime("%Y-%m")
+    wake_prev_href = _dash_href(usage_range=usage_range, usage_tab=usage_tab, wake_month=prev_param)
+    if is_current_wake:
+        wake_next_href = ""
+    else:
+        next_period = _shift_month(wake_period, 1)
+        next_param: str | None = next_period.strftime("%Y-%m")
+        if (next_period.year, next_period.month) == (now.year, now.month):
+            # Don't carry the param when next click lands on "current"; keeps URLs clean.
+            next_param = None
+        wake_next_href = _dash_href(
+            usage_range=usage_range, usage_tab=usage_tab, wake_month=next_param
+        )
 
     context = {
         "css": _load_css(),
@@ -842,17 +882,25 @@ def _render_state(
         "friends_panel": _friends_panel(state.project_dir, report.sessions),
         "moat_panel": _moat_panel(state),
         "usage_h2": "Models" if usage_tab == "models" else "Overview",
-        "range_control": _range_control(usage_range, usage_tab),
-        "tab_control": _tab_control(usage_tab, usage_range),
+        "range_control": _range_control(
+            usage_range, usage_tab, wake_month=None if is_current_wake else wake_month_param
+        ),
+        "tab_control": _tab_control(
+            usage_tab, usage_range, wake_month=None if is_current_wake else wake_month_param
+        ),
         "active_days": _e(usage.summary.active_days),
         "usage_body": (
             _usage_panel(usage) if usage_tab == "overview" else _usage_models_panel(usage)
         ),
         "leverage_panel": _leverage_panel(state.all_sessions, state.generated_at),
         "morse_wake": _morse("WAKE"),
-        "wake_month": _e(now.strftime("%B %Y")),
+        "wake_month": _e(wake_period.strftime("%B %Y")),
+        # Hrefs are not pre-escaped — Jinja autoescape encodes them once; an
+        # extra _e() round produces `&amp;amp;` in the rendered output.
+        "wake_prev_href": wake_prev_href,
+        "wake_next_href": wake_next_href,
         "trail_pill": trail_pill,
-        "trail_heatmap": _trail_heatmap_html(report.sessions, now),
+        "trail_heatmap": _trail_heatmap_html(wake_sessions, wake_period),
         "tools_pill": tools_pill,
         "tool_table": _tool_table(report.by_tool_usage),
         "morse_log": _morse("LOG"),
@@ -1460,7 +1508,24 @@ def _color_for_model(model: str, index_in_top: int | None) -> str:
     return _PALETTE_BUCKETS[index_in_top]
 
 
-def _range_control(current: UsageRangeOpt, tab: UsageTabOpt) -> str:
+def _dash_href(
+    *,
+    usage_range: UsageRangeOpt,
+    usage_tab: UsageTabOpt,
+    wake_month: str | None = None,
+) -> str:
+    """Build a ``?range=…&tab=…[&month=YYYY-MM]`` href that preserves panel state."""
+    from urllib.parse import urlencode
+
+    params: list[tuple[str, str]] = [("range", usage_range), ("tab", usage_tab)]
+    if wake_month:
+        params.append(("month", wake_month))
+    return "?" + urlencode(params)
+
+
+def _range_control(
+    current: UsageRangeOpt, tab: UsageTabOpt, *, wake_month: str | None = None
+) -> str:
     """Render a three-button segmented control for the Usage range window."""
     opts: list[tuple[UsageRangeOpt, str]] = [("7d", "7d"), ("30d", "30d"), ("all", "All")]
     parts = []
@@ -1468,11 +1533,14 @@ def _range_control(current: UsageRangeOpt, tab: UsageTabOpt) -> str:
         cls = "pill pill-segment"
         if key == current:
             cls += " pill-active"
-        parts.append(f"<a class='{cls}' href='?range={key}&tab={tab}'>{_e(label)}</a>")
+        href = _dash_href(usage_range=key, usage_tab=tab, wake_month=wake_month)
+        parts.append(f"<a class='{cls}' href='{href}'>{_e(label)}</a>")
     return "<div class='segment-group' role='group' aria-label='Range'>" + "".join(parts) + "</div>"
 
 
-def _tab_control(current: UsageTabOpt, usage_range: UsageRangeOpt) -> str:
+def _tab_control(
+    current: UsageTabOpt, usage_range: UsageRangeOpt, *, wake_month: str | None = None
+) -> str:
     """Render an Overview/Models segmented control."""
     opts: list[tuple[UsageTabOpt, str]] = [("overview", "Overview"), ("models", "Models")]
     parts = []
@@ -1480,8 +1548,34 @@ def _tab_control(current: UsageTabOpt, usage_range: UsageRangeOpt) -> str:
         cls = "pill pill-segment"
         if key == current:
             cls += " pill-active"
-        parts.append(f"<a class='{cls}' href='?range={usage_range}&tab={key}'>{_e(label)}</a>")
+        href = _dash_href(usage_range=usage_range, usage_tab=key, wake_month=wake_month)
+        parts.append(f"<a class='{cls}' href='{href}'>{_e(label)}</a>")
     return "<div class='segment-group' role='group' aria-label='Tab'>" + "".join(parts) + "</div>"
+
+
+def _resolve_wake_period(raw: str | None, now: datetime) -> datetime:
+    """Parse ``YYYY-MM``; fall back to ``now``'s month on bad / future input."""
+    if not raw:
+        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    try:
+        year_s, month_s = raw.split("-", 1)
+        year = int(year_s)
+        month = int(month_s)
+        if not (1 <= month <= 12):
+            raise ValueError
+        candidate = datetime(year, month, 1)
+    except (ValueError, TypeError):
+        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    current = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if candidate > current:
+        return current
+    return candidate
+
+
+def _shift_month(period: datetime, delta: int) -> datetime:
+    """Return ``period`` shifted by ``delta`` months (+1 / -1)."""
+    total = period.year * 12 + (period.month - 1) + delta
+    return datetime(total // 12, (total % 12) + 1, 1)
 
 
 def _usage_models_panel(usage: UsageAnalytics) -> str:

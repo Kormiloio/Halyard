@@ -1287,6 +1287,23 @@ layers must read from this local source of truth; they do not replace it.
     `openspec/changes/v5.12-windows-portability/`.
     **Status: complete (1544 tests passing on Linux + Windows).**
 
+87. **v5.13 — Wake month navigation:** the Bridge's Wake panel hard-coded
+    the current calendar month — no way to look back at prior months from
+    the dashboard. Adds a `?month=YYYY-MM` query param scoped strictly to
+    Wake (Service Record, Sessions, Adrift, etc. are untouched) plus
+    `‹` / `›` links in the panel head. `›` is hidden on the current
+    month so the user can't navigate into the future; invalid or
+    future-dated values fall back silently. `_dash_href` urlencodes
+    `range`/`tab`/`month` together so the existing Usage controls
+    preserve the chosen month, and the `month=` param is dropped from
+    "next" links that land on the current month to keep URLs clean.
+    Hrefs are passed through Jinja autoescape only (a pre-`_e()` round
+    was double-encoding `&` into `&amp;amp;`). Spec in
+    `openspec/changes/v5.13-wake-month-navigation/`. Browser-verified
+    end-to-end. **Status: complete (1504 passing on this branch; the
+    41 pre-existing time-cliff failures on `main` are identical and not
+    introduced here — separate follow-up).**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

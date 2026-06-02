@@ -97,6 +97,8 @@ button.status:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2p
 .span-4 { grid-column: span 4; }
 .span-3 { grid-column: span 3; }
 .panel-head { min-height: 42px; display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.wake-nav { color: var(--muted); text-decoration: none; padding: 0 6px; font-weight: 400; }
+.wake-nav:hover { color: var(--text); }
 .attention-on { border-color: rgba(243, 191, 91, .62); }
 .attention-on .pill { color: var(--amber); border-color: rgba(243, 191, 91, .45); }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }

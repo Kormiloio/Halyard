@@ -820,3 +820,56 @@ def test_dashboard_cli_port_in_use_exits_one_no_traceback(tmp_path: Path) -> Non
     assert result.exit_code == 1
     assert "already in use" in result.output
     assert "Traceback" not in result.output
+
+
+def test_render_dashboard_wake_month_param_scopes_panel(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    # One session in May 2026, one in June 2026.
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 5, 14, 9, 0),
+            end=datetime(2026, 5, 14, 10, 0),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=100,
+            output_tokens=50,
+            cost_usd=0.001,
+            project="acme:may",
+        ),
+    )
+    append_session(
+        tmp_path,
+        AiSession(
+            start=datetime(2026, 6, 1, 9, 0),
+            end=datetime(2026, 6, 1, 10, 0),
+            tool="claude-code",
+            model="claude-sonnet-4-6",
+            input_tokens=100,
+            output_tokens=50,
+            cost_usd=0.001,
+            project="acme:june",
+        ),
+    )
+
+    # Default: current month label appears, prev link points to previous month,
+    # no next link.
+    html_default = render_dashboard(tmp_path)
+    assert "Wake ·" in html_default
+    assert 'class="wake-nav"' in html_default
+    assert 'rel="prev"' in html_default
+    assert 'rel="next"' not in html_default
+
+    # Looking back at May 2026 explicitly.
+    html_may = render_dashboard(tmp_path, wake_month="2026-05")
+    assert "May 2026" in html_may
+    # Next link should now be present (we're in the past relative to the
+    # default `now`).
+    assert 'rel="next"' in html_may
+    # Prev link should target April 2026.
+    assert "month=2026-04" in html_may
+
+    # Garbage input falls back silently (no exception, no "None" label).
+    html_bad = render_dashboard(tmp_path, wake_month="not-a-month")
+    assert "Wake ·" in html_bad
+    assert "None" not in html_bad.split("Wake ·", 1)[1].split("</h2>", 1)[0]
