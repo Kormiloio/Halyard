@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -19,6 +20,10 @@ class SystemdProvider(ServiceProvider):
         halyard_exe = _halyard_exe()
         self.unit_path.parent.mkdir(parents=True, exist_ok=True)
         self.unit_path.write_text(self._unit_file(halyard_exe, project_dir, port), encoding="utf-8")
+        # v5.18/B23: the unit's ExecStart exposes the halyard exe path,
+        # project_dir, and port the user auto-runs at login. write_text honours
+        # the umask (commonly world-readable 0o644); restrict to owner-only.
+        os.chmod(self.unit_path, 0o600)
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
         subprocess.run(["systemctl", "--user", "enable", "--now", self.label], check=True)
         return f"http://127.0.0.1:{port}/"

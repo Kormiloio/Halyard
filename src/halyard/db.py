@@ -462,7 +462,10 @@ def _sync_sessions(conn: sqlite3.Connection, log_path: Path) -> int:
                 session.pr_state,
                 session.outcome_resolved_at,
                 session.mcp_servers_used,
-                ",".join(session.mcp_server_names) if session.mcp_server_names else None,
+                # v5.17/B14: mcp_server_names is already a CSV string (str|None).
+                # A prior ",".join() iterated it character-by-character, corrupting
+                # "filesystem,github" into "f,i,l,e,...". Write the CSV through as-is.
+                session.mcp_server_names or "",
                 session.remote,
             ),
         )

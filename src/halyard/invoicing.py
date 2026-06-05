@@ -151,11 +151,15 @@ def generate_invoice(
         _, account_project = account.split(":", 1)
         project = projects.get(account_project)
         description = project.name if project else account_project
-        rate = (
-            rate_override
-            or (project.hourly_rate if project else None)
-            or _effective_rate(client, period_start)
-        )
+        # v5.17/B15: select rate by explicit `is not None`, not truthiness, so a
+        # legitimate 0.0 (comp/free invoice override, or a $0 project rate) bills
+        # zero instead of falling through to a non-zero fallback and over-billing.
+        if rate_override is not None:
+            rate = rate_override
+        elif project is not None and project.hourly_rate is not None:
+            rate = project.hourly_rate
+        else:
+            rate = _effective_rate(client, period_start)
         hours = round(minutes / 60, 2)
         line_items.append(
             InvoiceLineItem(
@@ -235,7 +239,17 @@ def generate_invoice(
         plans = read_ai_plans(project_dir)
         tc_entries = parse_timeclock(project_dir / "time.timeclock")
         period_label = datetime(year, month, 1).strftime("%B %Y")
-        rendered += render_ai_evidence_appendix(evidence_sessions, plans, tc_entries, period_label)
+        # v5.17/B16: pin the ledger to the invoice period so a session straddling
+        # the month boundary (selected by its `end`) does not run the ledger for
+        # the prior month derived from min(s.start).
+        rendered += render_ai_evidence_appendix(
+            evidence_sessions,
+            plans,
+            tc_entries,
+            period_label,
+            ledger_year=year,
+            ledger_month=month,
+        )
 
     if dry_run:
         return InvoiceResult(
@@ -256,20 +270,33 @@ def render_ai_evidence_appendix(
     plans: list[AiPlan],
     tc_entries: list[tuple[datetime, datetime, str]],
     period_label: str,
+    *,
+    ledger_year: int | None = None,
+    ledger_month: int | None = None,
 ) -> str:
     """Render a markdown AI usage evidence appendix for an invoice.
 
     Never includes prompts, code contents, or session transcripts.
+
+    ``ledger_year``/``ledger_month`` pin the ledger period when the caller
+    selected sessions by an invoice period; pass both or neither.
     """
     if not sessions:
         return "\n\n---\n\n## AI Usage Evidence\n\nNo AI sessions recorded for this period.\n"
 
     from halyard.ledger import build_ledger
 
-    period_start = min(s.start for s in sessions)
-    summary = build_ledger(
-        sessions, plans, tc_entries, year=period_start.year, month=period_start.month
-    )
+    # v5.17/B16: derive the ledger month from the invoice PERIOD when the caller
+    # supplies it, not from min(s.start). Sessions are selected by `end`
+    # (half-open period_start<=end<period_end), so a session that begins on the
+    # last day of the prior month but ends in this one would otherwise run the
+    # ledger for the wrong month (mis-labelled period, wrong AiPlan.is_active_in).
+    if ledger_year is not None and ledger_month is not None:
+        year, month = ledger_year, ledger_month
+    else:
+        period_start = min(s.start for s in sessions)
+        year, month = period_start.year, period_start.month
+    summary = build_ledger(sessions, plans, tc_entries, year=year, month=month)
 
     tools = sorted({s.tool for s in sessions})
     models = sorted({s.model for s in sessions})

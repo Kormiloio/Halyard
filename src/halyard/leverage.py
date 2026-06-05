@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from statistics import median
 
 from halyard.ai_log import AiSession
+from halyard.mcp_inventory import MCP_SERVER_ALLOWLIST
 
 LEVERAGE_WINDOW_DAYS = 30
 
@@ -156,7 +157,18 @@ def summarize_mcp(sessions: list[AiSession], now: datetime) -> McpRollup | None:
     if not recent:
         return None
     peak = max(recent, key=lambda s: s.mcp_servers_used or 0)
-    names = tuple(n for n in (peak.mcp_server_names or "").split(",") if n)
+    # v5.16/B19: enforce the documented "allowlisted only, sorted" invariant
+    # of McpRollup.named here, not only at write time. The stored CSV
+    # ``mcp_server_names`` is attacker-influenceable (a hand-edited log), and
+    # a non-allowlisted value like ``x[/notopened]`` would otherwise reach
+    # render_mcp_phrase and crash the TUI via rich.markup (MarkupError).
+    # Allowlisted names are safe identifiers, so filtering closes the vector
+    # at the source for both the web and TUI surfaces.
+    names = tuple(
+        sorted(
+            n for n in (peak.mcp_server_names or "").split(",") if n and n in MCP_SERVER_ALLOWLIST
+        )
+    )
     return McpRollup(peak_servers=peak.mcp_servers_used or 0, named=names)
 
 

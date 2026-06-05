@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from rich.markup import escape
 from textual.widgets import Static
 
 from halyard.ai_log import AiSession
@@ -59,7 +60,11 @@ class LeveragePane(Static):
         # v3.4: MCP capability line, parity with web (shared summary).
         mcp = summarize_mcp(sessions, when)
         if mcp is not None:
-            lines.append(render_mcp_phrase(mcp))
+            # v5.16/B19: escape before the phrase reaches Static.update ->
+            # Text.from_markup (defense-in-depth; summarize_mcp already
+            # allowlist-filters the names). Matches the escaping discipline
+            # used by the other panes (session_feed, project_pane, ...).
+            lines.append(escape(render_mcp_phrase(mcp)))
         lines += [
             "",
             f"Merged   {s.merged:>3}",

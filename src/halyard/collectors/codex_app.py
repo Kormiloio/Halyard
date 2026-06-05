@@ -61,7 +61,14 @@ def import_codex_sessions(
             if prior_size is not None and prior_size == current_size:
                 continue
 
-        parsed = _parse_session_file(path)
+        # v5.16/B08: one malformed rollout must skip-and-continue, never abort
+        # the batch (which would silently drop every later session). The parser
+        # honours its own contract, but a defence-in-depth guard ensures a novel
+        # coercion error in a single file can't take down the whole import.
+        try:
+            parsed = _parse_session_file(path)
+        except (OSError, ValueError, TypeError, OverflowError):
+            continue
         if parsed is None:
             continue
 
@@ -229,10 +236,13 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
     total_tokens = 0
 
     if last_token_usage:
-        total_input = int(last_token_usage.get("input_tokens", 0))
-        cached_input = int(last_token_usage.get("cached_input_tokens", 0))
-        output_tokens = int(last_token_usage.get("output_tokens", 0))
-        total_tokens = int(last_token_usage.get("total_tokens", 0))
+        # v5.16/B08: token fields in an attacker-stageable rollout are not
+        # guaranteed numeric (e.g. total_token_usage:{"output_tokens":"x"}); a
+        # bare int() would raise ValueError and abort the whole import batch.
+        total_input = _safe_int(last_token_usage.get("input_tokens"))
+        cached_input = _safe_int(last_token_usage.get("cached_input_tokens"))
+        output_tokens = _safe_int(last_token_usage.get("output_tokens"))
+        total_tokens = _safe_int(last_token_usage.get("total_tokens"))
 
     # Skip sessions with no real work.
     if output_tokens == 0 and total_tokens == 0:
@@ -356,6 +366,21 @@ def codex_imported_any() -> bool:
 def _extract_uuid(path: Path) -> str | None:
     m = _UUID_RE.search(path.name)
     return m.group(1) if m else None
+
+
+def _safe_int(value: object) -> int:
+    """Coerce a token field to int, treating any malformed value as 0.
+
+    v5.16/B08: degrade a non-numeric/out-of-range token field to 0 rather than
+    letting int() raise and escape the parser (which documents returning None).
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return 0
+    try:
+        result: int = int(value)
+    except (ValueError, TypeError, OverflowError):
+        return 0
+    return result
 
 
 def _parse_iso(ts: str) -> datetime | None:

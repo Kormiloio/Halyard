@@ -419,17 +419,28 @@ class HubServer:
         """Queue OTLP traces for mapping and eventual logging."""
         with self._lock:
             accumulate_traces(self._otel_acc, payload)
-            self._evict_excess_otel()
+            evicted = self._evict_excess_otel()
 
-    def _evict_excess_otel(self) -> None:
-        """Bound ``_otel_acc`` size by dropping the least-recently-updated
-        sessions. Must be called holding ``self._lock``."""
+        # v5.18/B4-evict: finalize-and-write evicted accumulators outside the
+        # lock (mirroring flush_stale), instead of dropping in-flight sessions.
+        for acc in evicted:
+            session = finalize(acc)
+            if session:
+                self._write_to_log(session)
+
+    def _evict_excess_otel(self) -> list[_SessionAcc]:
+        """Bound ``_otel_acc`` size by removing the least-recently-updated
+        sessions. Must be called holding ``self._lock``.
+
+        Returns the removed accumulators so the caller can finalize-and-write
+        them: a bare ``del`` here silently dropped genuine in-flight sessions
+        before they reached the ledger (v5.18/B4-evict data loss).
+        """
         excess = len(self._otel_acc) - _MAX_OTEL_SESSIONS
         if excess <= 0:
-            return
+            return []
         oldest = sorted(self._otel_acc.items(), key=lambda kv: kv[1].last_update)
-        for sid, _acc in oldest[:excess]:
-            del self._otel_acc[sid]
+        return [self._otel_acc.pop(sid) for sid, _acc in oldest[:excess]]
 
     def flush_stale(self, *, force: bool = False) -> int:
         """Finalize and append sessions idle past the TTL (or all if force)."""

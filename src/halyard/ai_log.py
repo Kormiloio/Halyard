@@ -13,6 +13,7 @@ automatically symmetric.
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import re
 import sys
@@ -989,8 +990,13 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
         return None, f"input_tokens must be non-negative: {input_tokens}"
     if output_tokens < 0:
         return None, f"output_tokens must be non-negative: {output_tokens}"
-    if cost_usd < 0:
-        return None, f"cost_usd must be non-negative: {cost_usd}"
+    # v5.16/B1: ``float("inf")`` and ``float("nan")`` both parse cleanly and
+    # both satisfy ``< 0 == False``, so a bare non-negativity check admits
+    # them. A non-finite cost later raises ``decimal.InvalidOperation`` (inf)
+    # or silently poisons every total to NaN in ``usage.sum_spend``. Reject
+    # the whole line — a session with a non-finite cost is not trustworthy.
+    if not math.isfinite(cost_usd) or cost_usd < 0:
+        return None, f"cost_usd must be a finite non-negative number: {cost_usd}"
 
     session = AiSession(
         start=start,
@@ -1015,7 +1021,11 @@ def _parse_line_result(line: str) -> tuple[AiSession | None, str | None]:
                         setattr(session, spec.attr, int(v))
                 case FieldKind.FLOAT_4:
                     with suppress(ValueError):
-                        setattr(session, spec.attr, float(v))
+                        fv = float(v)
+                        # v5.16/B1: skip non-finite (inf/nan) — keep the field
+                        # at its default rather than admitting a poison value.
+                        if math.isfinite(fv):
+                            setattr(session, spec.attr, fv)
                 case FieldKind.BOOL_LOWER:
                     setattr(session, spec.attr, v.lower() == "true")
                 case FieldKind.TOKENS_AVAILABLE:

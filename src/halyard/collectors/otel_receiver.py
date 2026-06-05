@@ -43,6 +43,12 @@ _IDLE_TTL = timedelta(minutes=10)
 # Untrusted-input bound: reject an OTLP body larger than this.
 _MAX_BODY = 25 * 1024 * 1024  # 25 MB
 
+# v5.18/B06: cardinality cap on the per-session accumulator. ``session.id``
+# is wire-supplied, so an unbounded ``_acc`` lets an id-spray OOM the host.
+# When the cap is exceeded we FINALIZE the least-recently-updated session
+# (never silently drop an in-flight one) to make room.
+_MAX_SESSIONS = 4096
+
 # OTLP/HTTP success body (empty ExportTraceServiceResponse).
 _OK_BODY = b"{}"
 
@@ -91,6 +97,29 @@ class OTelReceiver:
     def ingest_traces(self, payload: Any) -> None:
         with self._lock:
             accumulate_traces(self._acc, payload)
+            evicted = self._evict_over_cap_locked()
+        # v5.18/B06: finalize evicted sessions outside the lock so an
+        # id-spray cannot OOM the host, and so an in-flight session is
+        # never silently dropped on eviction.
+        for acc in evicted:
+            self._finalize_one(acc)
+
+    def _evict_over_cap_locked(self) -> list[_SessionAcc]:
+        """Pop least-recently-updated sessions until under the cardinality cap.
+
+        Caller must hold ``self._lock``. Returns the popped accumulators so
+        the caller can finalize them outside the lock.
+        """
+        if len(self._acc) <= _MAX_SESSIONS:
+            return []
+        # Oldest last_update first: evict the stalest in-flight sessions.
+        ordered = sorted(self._acc.items(), key=lambda kv: kv[1].last_update)
+        overflow = len(self._acc) - _MAX_SESSIONS
+        evicted = []
+        for sid, acc in ordered[:overflow]:
+            del self._acc[sid]
+            evicted.append(acc)
+        return evicted
 
     # ── flush ──────────────────────────────────────────────────────────
 
@@ -98,7 +127,16 @@ class OTelReceiver:
         # Wake periodically; flush sessions idle past the TTL. Exits when
         # stop() sets the event (also flushed force-true there).
         while not self._stop.wait(60):
-            self.flush_stale()
+            # v5.18/B06: this is the only flush thread. Any raise in
+            # flush_stale/_finalize_one (deleted cwd, git shellout, disk IO)
+            # would permanently kill it and telemetry would never be written
+            # again. Swallow and continue so the daemon never dies.
+            try:
+                self.flush_stale()
+            except Exception as exc:  # daemon must survive any finalize raise
+                from halyard.ai_log import log_diagnostic
+
+                log_diagnostic(f"otel flush_loop error: {exc!r}", tool="otel")
 
     def flush_stale(self, *, force: bool = False) -> int:
         """Finalize and append sessions idle past the TTL (or all if force).
@@ -113,12 +151,27 @@ class OTelReceiver:
                 for sid, acc in self._acc.items()
                 if force or (now - acc.last_update) > _IDLE_TTL
             ]
-            popped = [self._acc.pop(sid) for sid in ready]
 
+        # v5.18/B06: finalize-then-pop. The old code popped every ready
+        # session up front, so a mid-loop raise in _finalize_one (deleted
+        # cwd, git shellout, disk IO) silently lost sessions N..end with no
+        # re-queue. Pop one at a time and re-insert on failure so a partial
+        # flush retries on the next tick instead of dropping telemetry.
         count = 0
-        for acc in popped:
-            if self._finalize_one(acc):
-                count += 1
+        for sid in ready:
+            with self._lock:
+                acc = self._acc.pop(sid, None)
+            if acc is None:
+                continue  # concurrently evicted/flushed
+            try:
+                if self._finalize_one(acc):
+                    count += 1
+            except Exception:
+                with self._lock:
+                    # Re-insert only if a newer accumulator did not take its
+                    # place while the lock was released.
+                    self._acc.setdefault(sid, acc)
+                raise
         return count
 
     def _finalize_one(self, acc: _SessionAcc) -> bool:
@@ -168,6 +221,11 @@ class OTelReceiver:
         receiver = self
 
         class _Handler(BaseHTTPRequestHandler):
+            # v5.18/B06: bound per-request socket reads so a slow/half-open
+            # client cannot hold a ThreadingHTTPServer worker thread forever
+            # (slowloris). Mirrors hub_server's handler (hub_server.py:625).
+            timeout = 10
+
             def do_POST(self) -> None:
                 path = self.path.split("?", 1)[0].rstrip("/")
                 if path not in ("/v1/traces", "/v1/metrics"):

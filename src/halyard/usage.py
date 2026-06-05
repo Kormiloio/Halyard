@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -42,6 +43,12 @@ def sum_spend(
         if period_start is not None and s.end < period_start:
             continue
         if period_end is not None and s.end >= period_end:
+            continue
+        # v5.16/B1 backstop: a non-finite cost reaching here (e.g. via the
+        # SQLite cache or direct AiSession construction, bypassing the
+        # parse-time guard) would raise decimal.InvalidOperation (inf) or
+        # poison the total to NaN. Skip it; the parse-side reject is primary.
+        if not math.isfinite(s.cost_usd):
             continue
         total += Decimal(str(s.cost_usd))
     quant = Decimal(1).scaleb(-places)  # e.g. places=2 -> Decimal("0.01")
@@ -174,7 +181,11 @@ def build_usage_analytics(
         token_data_missing_sessions=sum(1 for s in selected if not s.tokens_available),
         total_messages=sum(_known_messages(s) for s in selected),
         message_data_missing_sessions=sum(1 for s in selected if not _has_message_data(s)),
-        total_cost_usd=sum(s.cost_usd for s in selected),
+        # v5.17/B17: headline must equal the sum of the breakdown bars, which
+        # all use sum_spend(api_only=True) (Decimal-quantized). The old raw
+        # sum(s.cost_usd) folded in credits/subscription cost the bars exclude,
+        # so "captured" never matched the chart. Use the same convention here.
+        total_cost_usd=sum_spend(selected),
         active_days=len(days),
         current_streak_days=_current_streak(days, usage_range.end),
         longest_streak_days=_longest_streak(days),
@@ -377,6 +388,11 @@ def _model_buckets(sessions: list[AiSession]) -> list[ModelUsageBucket]:
     for session in sessions:
         if _parse_breakdown(session.model_breakdown) is not None:
             # Multi-model: attribute each model its own tokens + cost.
+            # v5.17/B17: cost must obey the SAME billing filter the single-model
+            # branch applies via sum_spend(api_only=True) — otherwise an
+            # identical subscription session shows cost here but $0 there.
+            # Tokens are real regardless of billing, so only the cost is gated.
+            cost_billable = session.billing == "api" and session.cost_usd > 0
             for model, m_in, m_out, m_cr, m_cw, m_cost in iter_model_usage(session):
                 row = rows[model]
                 row["sessions"] += 1
@@ -384,7 +400,8 @@ def _model_buckets(sessions: list[AiSession]) -> list[ModelUsageBucket]:
                 row["output"] += m_out
                 row["cache_read"] += m_cr
                 row["cache_write"] += m_cw
-                multi_model_costs[model] += Decimal(str(m_cost))
+                if cost_billable:
+                    multi_model_costs[model] += Decimal(str(m_cost))
             continue
 
         # Single-model: byte-identical to pre-v2.61 behaviour.

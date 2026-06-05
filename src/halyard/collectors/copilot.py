@@ -81,7 +81,12 @@ def import_copilot_sessions(
             if captured and session_id in captured:
                 continue
 
-            session = parse_chat_session(session_path)
+            # v5.16/B08: one malformed chat session must skip-and-continue,
+            # never abort the batch and silently drop every later session.
+            try:
+                session = parse_chat_session(session_path)
+            except (OSError, ValueError, TypeError, OverflowError):
+                continue
             if not session:
                 continue
 
@@ -203,7 +208,9 @@ def parse_chat_session(path: Path) -> AiSession | None:
 
     created = state.get("creationDate")
     if isinstance(created, (int, float)):
-        start_dt = datetime.fromtimestamp(created / 1000.0)
+        # v5.16/B08: an out-of-range epoch-millis value raises OSError/
+        # OverflowError/ValueError from fromtimestamp; treat it as no start.
+        start_dt = _safe_fromtimestamp_ms(created)
 
     requests = state.get("requests")
     for req in requests if isinstance(requests, list) else []:
@@ -212,11 +219,13 @@ def parse_chat_session(path: Path) -> AiSession | None:
         user_count += 1
         ts = req.get("timestamp")
         if isinstance(ts, (int, float)):
-            dt = datetime.fromtimestamp(ts / 1000.0)
-            if start_dt is None or dt < start_dt:
-                start_dt = dt
-            if end_dt is None or dt > end_dt:
-                end_dt = dt
+            # v5.16/B08: guard out-of-range epoch-millis (see _safe_fromtimestamp_ms).
+            dt = _safe_fromtimestamp_ms(ts)
+            if dt is not None:
+                if start_dt is None or dt < start_dt:
+                    start_dt = dt
+                if end_dt is None or dt > end_dt:
+                    end_dt = dt
         ct = req.get("completionTokens")
         if isinstance(ct, (int, float)):
             output_tokens += int(ct)
@@ -332,6 +341,21 @@ def _load_imported_state() -> set[str]:
 def _save_imported_state(ids: set[str]) -> None:
     _IMPORTED_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     _IMPORTED_STATE_FILE.write_text("\n".join(sorted(ids)) + "\n", encoding="utf-8")
+
+
+def _safe_fromtimestamp_ms(ms: int | float) -> datetime | None:
+    """Convert epoch-milliseconds to a local datetime, or None if out of range.
+
+    v5.16/B08: ``datetime.fromtimestamp`` raises OSError/OverflowError/ValueError
+    for values outside the platform's representable range (a crafted
+    ``creationDate``/``timestamp`` in an attacker-stageable chat session). Returning
+    None keeps the parser honouring its "skip on any error" contract instead of
+    letting one bad file abort the whole import.
+    """
+    try:
+        return datetime.fromtimestamp(ms / 1000.0)
+    except (OSError, OverflowError, ValueError):
+        return None
 
 
 def _parse_iso(ts: str) -> datetime | None:

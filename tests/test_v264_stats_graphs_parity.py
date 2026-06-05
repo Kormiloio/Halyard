@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from freezegun import freeze_time
 from typer.testing import CliRunner
 
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
@@ -22,6 +23,15 @@ from halyard.cli import app
 from halyard.dashboard import render_dashboard
 from halyard.tui.widgets.usage_pane import UsagePane
 from halyard.usage import build_usage_analytics
+
+
+@pytest.fixture(autouse=True)
+def _freeze_to_may_2026():
+    # v5.14: pin wall clock so May-2026 fixtures survive build_ai_report's
+    # current-month filter.
+    with freeze_time("2026-05-15 12:00:00"):
+        yield
+
 
 runner = CliRunner()
 

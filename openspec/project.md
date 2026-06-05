@@ -1304,6 +1304,91 @@ layers must read from this local source of truth; they do not replace it.
     41 pre-existing time-cliff failures on `main` are identical and not
     introduced here — separate follow-up).**
 
+88. **v5.14 — Time-cliff test fix:** 41 tests across 9 files broke the
+    moment the wall clock crossed out of May 2026 — they create
+    `AiSession` fixtures with hard-coded `datetime(2026, 5, …)` and the
+    `build_ai_report` "current month" filter (correct production
+    behaviour) drops them on any other date. Fix is in the tests, not
+    production: module-level `freezegun.freeze_time("2026-05-15 12:00:00")`
+    autouse fixtures pin the clock for every affected file
+    (`test_dashboard.py`, `test_dashboard_health_detail.py`,
+    `test_dashboard_layout.py`, `test_integration_ledger.py`,
+    `test_outcome_sync.py`, `test_tui.py`,
+    `test_v264_stats_graphs_parity.py`, `test_v273_table_sort.py`,
+    `test_v57_dashboard_b_plus.py`). One surgical production tweak:
+    `DashboardState.generated_at` was `field(default_factory=datetime.now)`,
+    which binds the unpatched class method at dataclass-definition time
+    and slips past `freeze_time`; rewriting as
+    `default_factory=lambda: datetime.now()` re-resolves on each call
+    (semantic no-op for production, unblocks the test pin). Spec in
+    `openspec/changes/v5.14-time-cliff-tests/`. **Status: complete (full
+    suite green; 0 failures past May 2026).**
+
+89. **v5.15 — Dashboard prettifier prototype (rejected direction):** the
+    Owner asked whether the techniques in subframe.com's "data analytics
+    website design examples" roundup could make The Bridge prettier.
+    Following the v5.7 playbook, the cycle began with a *prototype only*
+    — a short-lived `prototypes/dashboard_prettifier.py` wrapped
+    `render_dashboard()` and injected a layered `proto-overrides.css`
+    plus a small JS pass that decorated `.metric` cards with stub
+    sparklines + delta chips, appended a heatmap legend, and added a
+    "prototype" banner. Seven moves were applied as a bundle: hero KPI
+    promotion, sparklines + delta chips, single-accent discipline
+    (cyan-dominant), headline typography uplift, heatmap "Less → More"
+    legend, glass-card backdrop-blur, and responsive breakpoints.
+    **Outcome: the Owner preferred the production look on `:7432` over
+    the prototype on `:8766` and rejected the entire bundle.** No
+    production CSS or templates were touched; `src/halyard/templates/`
+    is byte-identical to its v5.14 state. After the verdict, the entire
+    `prototypes/` directory was deleted on Owner instruction — this
+    roadmap entry is the sole surviving record of the attempt.
+    Lessons for any next prettifier pass (captured here so they don't
+    get lost): (1) gate moves behind per-move toggles, not a bundle, so
+    each can be accept/rejected on its own; (2) calmer stub series
+    (single shared shape or metric-specific monotone trend, not 14
+    independent deterministic-noise shapes); (3) the production
+    dashboard is genuinely in good shape — the subframe patterns it
+    didn't already match (single-accent discipline, sparkline+delta)
+    were the ones actively *not* wanted. Spec lives at
+    `openspec/changes/v5.15-dashboard-prettifier/`. **Status: complete
+    (prototype rejected, scaffold deleted, no fold-in opened).**
+
+90. **Pre-release security + correctness audit (2026-06-04/05):** ahead of
+    the OSS launch, a whole-codebase multi-agent audit (260 agents,
+    security + correctness lenses over all 102 `src/halyard` modules,
+    adversarially verified) surfaced 111 findings — 0 critical, 38 high,
+    39 medium, 34 low — merged into 23 high-severity launch blockers.
+    Report: `docs/reviews/2026-06-pre-release-audit.md`. Remediation split
+    into four changesets:
+
+    - **v5.16 — Untrusted-input hardening:** B1 non-finite cost/credits
+      floats (a poisoned log line crashed every consumer or poisoned totals
+      to NaN), B7 windsurf path-traversal arbitrary file write, B8 collector
+      parse crashes aborting a whole import, B9 git argument-injection, B10
+      gh endpoint/log injection, B11 cached-failure attribution, B12
+      merged-PR mis-bucketing, B19 Rich-markup TUI crash. Spec in
+      `openspec/changes/v5.16-untrusted-input-hardening/`.
+    - **v5.17 — Billing & aggregation correctness:** B14 db CSV
+      char-by-char corruption of MCP names, B15 zero-rate over-billing, B16
+      month-boundary invoice mis-allocation, B17 headline cost ≠ sum of
+      bars. Spec in `openspec/changes/v5.17-billing-aggregation-correctness/`.
+    - **v5.18 — Robustness & data-loss:** B4-evict OTel eviction data loss,
+      B6 OTel receiver robustness (slowloris/thread-death/partial-flush
+      loss/unbounded cardinality), B18 timeclock-repair deleting valid
+      billable lines, B20 silently-dead TUI branch filter, B21 live-tail
+      encoding crash, B22 wake prev-month year-0 500, B23 world-readable
+      service units. Spec in `openspec/changes/v5.18-robustness-dataloss/`.
+
+    16 blockers fixed across v5.16–v5.18 via a parallel fix workflow (13
+    agents over disjoint file-groups), integrated and gated together:
+    **1614 passed** (`--ignore=tests/test_tui.py`; the Textual pilot tests
+    hang in this sandbox's event loop — environmental), ruff + mypy clean.
+    The gate also surfaced a 10th time-cliff test file
+    (`test_v54_dashboard_templating.py`) that v5.14 had deferred; fixed with
+    the same freeze fixture. **Status: v5.16/v5.17/v5.18 complete; the 5
+    localhost-auth / shared-host blockers (B2, B3, B4-auth, B5, B13) remain
+    as v5.19, in progress with the owner in the loop.**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

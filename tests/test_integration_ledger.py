@@ -13,6 +13,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+from freezegun import freeze_time
 from typer.testing import CliRunner
 
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
@@ -21,6 +23,14 @@ from halyard.cli import app
 runner = CliRunner()
 
 _NOW = datetime(2026, 5, 7, 10, 0, 0)
+
+
+@pytest.fixture(autouse=True)
+def _freeze_to_may_2026():
+    # v5.14: pin wall clock so May-2026 fixtures survive build_ai_report's
+    # current-month filter.
+    with freeze_time("2026-05-15 12:00:00"):
+        yield
 
 
 def _session(

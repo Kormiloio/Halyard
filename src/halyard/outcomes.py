@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import subprocess
 from contextlib import suppress
@@ -11,7 +12,13 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from halyard.ai_log import AiSession, locked_file, parse_sessions, session_hash
+from halyard.ai_log import (
+    AiSession,
+    _safe_field,
+    locked_file,
+    parse_sessions,
+    session_hash,
+)
 
 if TYPE_CHECKING:
     from halyard.leverage import StruggleSummary
@@ -22,6 +29,21 @@ if TYPE_CHECKING:
 
 _GH_TIMEOUT = 10  # seconds
 _CACHE_TTL_HOURS = 1
+
+# v5.1x/B10: a repo slug embedded in `gh api repos/{repo}/...` must be exactly
+# owner/name with no path traversal. Without this a crafted value like
+# "a/b/../../user/keys" walks the REST path to an arbitrary authenticated
+# endpoint. Validate against this before any such call.
+_REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+
+
+def _is_safe_repo(repo: str) -> bool:
+    """True iff `repo` is a plain owner/name slug with no traversal segments."""
+    if not _REPO_RE.match(repo):
+        return False
+    # The charset above already excludes "/" inside a component, but a literal
+    # "." or ".." component is still alphanumeric-safe; reject it explicitly.
+    return not any(part in (".", "..") for part in repo.split("/"))
 
 
 def gh_available() -> bool:
@@ -40,10 +62,15 @@ def gh_available() -> bool:
 def fetch_prs_for_branch(
     branch: str,
     remote: str | None = None,
-) -> list[dict]:  # type: ignore[type-arg]
+) -> list[dict] | None:  # type: ignore[type-arg]
     """Run `gh pr list --head <branch>` and return parsed JSON rows.
 
-    Returns an empty list if gh is unavailable or the call fails.
+    v5.1x/B11: distinguishes failure from "no PRs". Returns the parsed list
+    (possibly empty — a genuine no-PR result) on success, or None on any
+    failure (non-zero exit, timeout, OSError, JSON error). Returning None
+    rather than [] lets the caller skip caching, so a transient gh/network
+    blip does not poison every session with a cached pr_state="none" for an
+    hour — mirroring the no-cache-on-failure logic of the friction path.
     """
     cmd = [
         "gh",
@@ -70,11 +97,11 @@ def fetch_prs_for_branch(
             timeout=_GH_TIMEOUT,
         )
         if result.returncode != 0:
-            return []
+            return None  # v5.1x/B11: failure, not "no PRs" — do not cache
         data = json.loads(result.stdout)
         return data if isinstance(data, list) else []
     except (OSError, FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
-        return []
+        return None  # v5.1x/B11: failure, not "no PRs" — do not cache
 
 
 def _remote_to_repo(remote: str) -> str | None:
@@ -255,6 +282,9 @@ def gh_pr_inline_comment_count(
     if rn is None:
         return None
     repo, number = rn
+    # v5.1x/B10: never interpolate an unvalidated repo into the gh api path.
+    if not _is_safe_repo(repo):
+        return None
     try:
         result = subprocess.run(
             [
@@ -472,8 +502,14 @@ def resolve_sessions(
             cache_key = f"{remote or ''}:{branch}"
             prs = _cache_get(conn, cache_key)
             if prs is None:
-                prs = fetch_prs_for_branch(branch, remote)
-                _cache_set(conn, cache_key, prs)
+                # v5.1x/B11: fetch returns None on failure (vs [] for a genuine
+                # no-PR result). Only cache a genuine result; a transient gh
+                # failure leaves the cache untouched and falls through to the
+                # no-PR path for this sync, retrying on the next one.
+                fetched = fetch_prs_for_branch(branch, remote)
+                if fetched is not None:
+                    _cache_set(conn, cache_key, fetched)
+                prs = fetched if fetched is not None else []
 
             for s in branch_sessions:
                 best = _best_pr_for_session(s, prs)
@@ -531,11 +567,15 @@ def _write_amendment(project_dir: Path, result: ResolutionResult) -> None:
     log_path = project_dir / "ai-sessions.log"
     if not log_path.exists():
         return
+    # v5.1x/B10: every value is routed through _safe_field — the same encoding
+    # to_log_line uses — so a pr_ref containing whitespace, '=', or a newline
+    # cannot forge extra fields or inject a second append-only record. The keys
+    # and the leading "a <hash>" anchor are static/hex and safe verbatim.
     parts = [f"a {result.session_hash}"]
     if result.pr_ref:
-        parts.append(f"pr_ref={result.pr_ref}")
-    parts.append(f"pr_state={result.pr_state}")
-    parts.append(f"outcome_resolved_at={result.resolved_at}")
+        parts.append(f"pr_ref={_safe_field(result.pr_ref)}")
+    parts.append(f"pr_state={_safe_field(result.pr_state)}")
+    parts.append(f"outcome_resolved_at={_safe_field(result.resolved_at)}")
     if result.review_comments is not None:
         parts.append(f"review_comments={result.review_comments}")
     if result.review_rounds is not None:
@@ -543,7 +583,7 @@ def _write_amendment(project_dir: Path, result: ResolutionResult) -> None:
     if result.time_to_merge_s is not None:
         parts.append(f"time_to_merge_s={result.time_to_merge_s}")
     if result.review_decision:
-        parts.append(f"review_decision={result.review_decision}")
+        parts.append(f"review_decision={_safe_field(result.review_decision)}")
     line = " ".join(parts)
     with locked_file(log_path, "a") as f:
         f.write(line + "\n")
@@ -773,6 +813,11 @@ def _fetch_pr_by_ref(
     repo = repo_part or (_remote_to_repo(remote or "") if remote else None)
     if not repo or not number_str.isdigit():
         return []
+    # v5.1x/B10: reject traversal/injection in the repo slug before it reaches
+    # the gh api path. _parse_pr_ref returns repo_part verbatim, so a crafted
+    # ref could otherwise redirect the call to an arbitrary REST endpoint.
+    if not _is_safe_repo(repo):
+        return []
     try:
         result = subprocess.run(
             [
@@ -780,7 +825,10 @@ def _fetch_pr_by_ref(
                 "api",
                 f"repos/{repo}/pulls/{number_str}",
                 "--jq",
-                "{number: .number, state: .state, mergedAt: .merged_at, url: .html_url}",
+                # v5.1x/B12: extract .merged + .merged_at so a merged PR can be
+                # distinguished from a plain "closed" one (REST .state is "closed").
+                "{number: .number, state: .state, merged: .merged, "
+                "mergedAt: .merged_at, url: .html_url}",
             ],
             capture_output=True,
             text=True,
@@ -788,6 +836,13 @@ def _fetch_pr_by_ref(
         )
         if result.returncode != 0:
             return []
-        return [json.loads(result.stdout)]
+        pr = json.loads(result.stdout)
+        # v5.1x/B12: the gh REST API reports merged PRs as state="closed";
+        # "merged" is signalled only by .merged/.merged_at. Map a merged PR
+        # to state="merged" before the caller's closed/open fallback, so a
+        # shipped PR is not mis-bucketed as Abandoned.
+        if isinstance(pr, dict) and (pr.get("merged") or pr.get("mergedAt")):
+            pr["state"] = "merged"
+        return [pr]
     except (OSError, FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
         return []

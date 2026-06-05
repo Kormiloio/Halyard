@@ -815,8 +815,18 @@ def _render_state(
         "muted" if trail_active_days else "warning",
     )
 
-    prev_param = _shift_month(wake_period, -1).strftime("%Y-%m")
-    wake_prev_href = _dash_href(usage_range=usage_range, usage_tab=usage_tab, wake_month=prev_param)
+    # v5.18/B22: clamp the prev-month target at the bottom of the calendar.
+    # _shift_month(datetime(1, 1, 1), -1) would build year 0 and raise
+    # ValueError ("year 0 is out of range"), which previously took down the
+    # whole render with an unhandled 500. Don't emit a prev link below the
+    # earliest representable month.
+    if (wake_period.year, wake_period.month) <= (datetime.min.year, 1):
+        wake_prev_href = ""
+    else:
+        prev_param = _shift_month(wake_period, -1).strftime("%Y-%m")
+        wake_prev_href = _dash_href(
+            usage_range=usage_range, usage_tab=usage_tab, wake_month=prev_param
+        )
     if is_current_wake:
         wake_next_href = ""
     else:

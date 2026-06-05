@@ -23,6 +23,21 @@ from pathlib import Path
 
 _REPOS_CONFIG = Path.home() / ".halyard" / "repos.toml"
 
+# v5.16/B09: a git object ref interpolated into a diff argv must be a bare
+# hex SHA (4-40 chars). Anything else (e.g. "--output=/path", "-O<file>",
+# "--ext-diff") is an attacker-supplied git option, not a ref — reject it.
+_GIT_REF_RE = re.compile(r"^[0-9a-fA-F]{4,40}$")
+
+
+def is_valid_git_ref(ref: str | None) -> bool:
+    """True iff ``ref`` is a bare hex git object id (4-40 chars).
+
+    Session-state JSON is attacker-influenceable; a ref that fails this
+    check must never reach a git argv (argument-injection -> arbitrary
+    file write via ``--output=``/``-O``/``--ext-diff``).
+    """
+    return bool(ref) and bool(_GIT_REF_RE.fullmatch(ref or ""))
+
 
 def _slug_from_halyard_toml(cwd: Path) -> str | None:
     """Walk up from cwd looking for a halyard.toml with [project].slug."""
@@ -145,9 +160,13 @@ def numstat_summary(cwd: Path, sha_at_start: str) -> tuple[int, int, int] | None
     File names are read only to count changed rows and are never returned.
     Binary files count as touched files, but their line counts are ignored.
     """
+    # v5.16/B09: validate the session-derived ref and place it after a literal
+    # "--" so git cannot interpret it as an option (arbitrary file write).
+    if not is_valid_git_ref(sha_at_start):
+        return None
     try:
         result = subprocess.run(
-            ["git", "-C", str(cwd), "diff", "--numstat", sha_at_start, "HEAD"],
+            ["git", "-C", str(cwd), "diff", "--numstat", sha_at_start, "HEAD", "--"],
             capture_output=True,
             text=True,
             timeout=2,

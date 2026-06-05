@@ -38,10 +38,18 @@ class SessionStore:
         if size < self._offset:
             self._offset = 0
             self.sessions = []
-        with self.log_path.open() as handle:
-            handle.seek(self._offset)
-            lines = handle.read().splitlines()
-            self._offset = handle.tell()
+        # v5.1x/B21: match the writer (ai_log.append_session) and the initial
+        # load — open utf-8 with newline="" so a non-UTF-8 locale can't
+        # mis-decode a non-ASCII session. Guard the read so a stray decode
+        # error degrades to "no new lines" instead of escaping the awatch
+        # worker and silently killing live updates.
+        try:
+            with self.log_path.open(encoding="utf-8", newline="") as handle:
+                handle.seek(self._offset)
+                lines = handle.read().splitlines()
+                self._offset = handle.tell()
+        except UnicodeDecodeError:
+            return []
 
         parsed: list[AiSession] = []
         for line in lines:
@@ -99,20 +107,24 @@ class SessionStore:
         if project_scope is not None:
             result = [s for s in result if s.project == project_scope]
         if branch is not None:
-            tag = f"branch:{branch}"
-            result = [s for s in result if tag in s.tags]
+            # v5.1x/B20: current collectors write the branch as the
+            # session.branch FIELD (ai_log only promotes a legacy
+            # `branch:` tag into it), so match the field — the tag is
+            # dead for every freshly captured session.
+            result = [s for s in result if s.branch == branch]
         return result
 
     def branches(self, sessions: list[AiSession] | None = None) -> list[str]:
-        """Return branch tags sorted by most recent session."""
+        """Return branch names sorted by most recent session."""
         seen: dict[str, datetime] = {}
         for session in sessions or self.sessions:
-            for tag in session.tags:
-                if not tag.startswith("branch:"):
-                    continue
-                branch = tag.removeprefix("branch:")
-                if branch not in seen or session.start > seen[branch]:
-                    seen[branch] = session.start
+            # v5.1x/B20: read the session.branch field, not the legacy
+            # `branch:` tag which no collector writes anymore.
+            branch = session.branch
+            if not branch:
+                continue
+            if branch not in seen or session.start > seen[branch]:
+                seen[branch] = session.start
         sorted_branches = sorted(seen.items(), key=lambda item: item[1], reverse=True)
         return [branch for branch, _start in sorted_branches]
 

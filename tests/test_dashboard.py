@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from freezegun import freeze_time
 from typer.testing import CliRunner
 
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
@@ -13,6 +14,14 @@ from halyard.cli import app
 from halyard.dashboard import render_dashboard
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _freeze_to_may_2026():
+    # v5.14: pin wall clock so May-2026 fixtures survive build_ai_report's
+    # current-month filter.
+    with freeze_time("2026-05-15 12:00:00"):
+        yield
 
 
 def _init_project(tmp_path: Path) -> None:
@@ -822,6 +831,12 @@ def test_dashboard_cli_port_in_use_exits_one_no_traceback(tmp_path: Path) -> Non
     assert "Traceback" not in result.output
 
 
+# v5.14: the module-level _freeze_to_may_2026 autouse fixture pins now to
+# mid-May, which would make wake_month="2026-05" the *current* month and
+# correctly suppress the "next" link this test asserts. This test's logic
+# needs now to be LATER than May so May reads as the past; re-freeze just
+# this test to mid-June (innermost freeze_time wins over the autouse one).
+@freeze_time("2026-06-15 12:00:00")
 def test_render_dashboard_wake_month_param_scopes_panel(tmp_path: Path) -> None:
     _init_project(tmp_path)
     # One session in May 2026, one in June 2026.

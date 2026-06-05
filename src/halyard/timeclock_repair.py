@@ -24,9 +24,27 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from halyard.auto_timer import INACTIVITY_MINUTES
-from halyard.reports import _parse_timeclock_timestamp
 
 _TS_FMT = "%Y-%m-%d %H:%M:%S"
+
+
+# v5.18/B18: hledger timeclock natively accepts an HH:MM timestamp with no
+# seconds. The shared reports parser is strict "%Y-%m-%d %H:%M:%S" and returns
+# None for the bare-minute form, which previously caused a full rewrite to
+# silently drop hand-edited valid entries like ``i 2026-06-01 09:00 client:proj``.
+# Parse the seconds-optional form locally so such lines are recognised, not lost.
+def _parse_ts(day: str, time: str) -> datetime | None:
+    for fmt in (_TS_FMT, "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(f"{day} {time}", fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _is_record_marker(marker: str) -> bool:
+    """A token that introduces a timeclock record (clock-in / clock-out)."""
+    return marker in ("i", "o")
 
 
 @dataclass
@@ -57,7 +75,7 @@ def _needs_repair(lines: list[str]) -> bool:
         parts = stripped.split()
         if len(parts) < 3:
             continue
-        ts = _parse_timeclock_timestamp(parts[1], parts[2])
+        ts = _parse_ts(parts[1], parts[2])
         if ts is None:
             continue
         if parts[0] == "i" and len(parts) >= 4:
@@ -85,13 +103,35 @@ def reconstruct_timeclock(
     legitimate multi-hour window down to its endpoints. A lone trailing open
     (a possibly-live window) is likewise left as-is.
     """
+    repaired, _dropped = reconstruct_timeclock_with_drops(
+        lines, inactivity_minutes=inactivity_minutes
+    )
+    return repaired
+
+
+def reconstruct_timeclock_with_drops(
+    lines: list[str], *, inactivity_minutes: int = INACTIVITY_MINUTES
+) -> tuple[list[str], int]:
+    """Like :func:`reconstruct_timeclock`, but also report how many lines were
+    dropped as unrecoverably malformed.
+
+    v5.18/B18: the old rewrite silently dropped (bare ``continue``, no
+    ``out.append``) every line with <3 tokens, every timestamp failing the
+    strict ``%Y-%m-%d %H:%M:%S`` parse, and every ``i`` with no project — which
+    erased hand-edited *valid* entries (hledger accepts seconds-less ``HH:MM``,
+    and the module docstring promises manual entries survive verbatim). We now
+    only drop a line that is a recognisable-but-unparseable record marker, echo
+    every other non-conforming line verbatim, and return the drop count so the
+    caller can surface it instead of discarding billable time in silence.
+    """
     if not _needs_repair(lines):
-        return [raw.rstrip("\n") for raw in lines]
+        return [raw.rstrip("\n") for raw in lines], 0
 
     window = timedelta(minutes=inactivity_minutes)
     out: list[str] = []
     open_win: _Open | None = None
     seen_record = False
+    dropped = 0
 
     def flush(o: _Open) -> None:
         out.append(o.orig_i_line)
@@ -107,11 +147,20 @@ def reconstruct_timeclock(
             continue
 
         parts = stripped.split()
-        if len(parts) < 3:
-            continue  # malformed — drop
         marker = parts[0]
-        ts = _parse_timeclock_timestamp(parts[1], parts[2])
+        # v5.18/B18: a line is only dropped if it is a known-bad record — an
+        # ``i``/``o`` marker we cannot parse a timestamp from (too few tokens or
+        # an unrecognised time form). Anything else (a non-record annotation, a
+        # plausible-but-unexpected line) is preserved verbatim rather than erased.
+        ts = _parse_ts(parts[1], parts[2]) if len(parts) >= 3 else None
         if ts is None:
+            if _is_record_marker(marker):
+                dropped += 1  # genuinely corrupt clock record — drop, but counted
+            else:
+                out.append(line)  # not a record; keep it verbatim
+            continue
+        if marker == "i" and len(parts) < 4:
+            dropped += 1  # clock-in with no project — corrupt, counted
             continue
 
         if marker == "i" and len(parts) >= 4:
@@ -159,7 +208,7 @@ def reconstruct_timeclock(
             # it open, never fabricate a close.
             out.append(open_win.orig_i_line)
 
-    return out
+    return out, dropped
 
 
 def counted_minutes(lines: list[str]) -> float:
@@ -173,7 +222,7 @@ def counted_minutes(lines: list[str]) -> float:
         parts = stripped.split()
         if len(parts) < 3:
             continue
-        ts = _parse_timeclock_timestamp(parts[1], parts[2])
+        ts = _parse_ts(parts[1], parts[2])
         if ts is None:
             continue
         if parts[0] == "i" and len(parts) >= 4:

@@ -95,6 +95,24 @@ _DEFAULT_ROLLOUT_BYTES = 1024 * 1024 * 1024  # 1 GiB
 _HOOK_ROLLOUT_BYTES = 64 * 1024 * 1024  # 64 MiB
 
 
+def _safe_int(value: object) -> int:
+    """Coerce a token field to int, treating any malformed value as 0.
+
+    v5.16/B08: token fields in attacker-stageable history files are not
+    guaranteed numeric (e.g. ``tokens:{"input":"abc"}``). A bare ``int()``
+    would raise on the ``.jsonl`` rollout path, which only guards ``OSError``,
+    so one crafted line would abort the whole import. Honour the documented
+    "return None/skip on any error" contract by degrading a bad field to 0.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return 0
+    try:
+        result: int = int(value)
+    except (ValueError, TypeError, OverflowError):
+        return 0
+    return result
+
+
 def _extract_gemini_stats(msg: dict[str, object]) -> GeminiModelStats:
     """Pull one ``type=="gemini"`` message into a single-request stats record.
 
@@ -117,16 +135,16 @@ def _extract_gemini_stats(msg: dict[str, object]) -> GeminiModelStats:
         tool_calls += 1
         if tc.get("status") == "error":
             tool_errors += 1
-    inp = int(tokens.get("input") or 0)
-    cached = int(tokens.get("cached") or 0)
+    inp = _safe_int(tokens.get("input"))
+    cached = _safe_int(tokens.get("cached"))
     return GeminiModelStats(
         model=model,
         requests=1,
         # Gemini reports gross input (cached subset included).
         input_tokens=normalise_input(inp, cached, 0, cache_inclusive=True),
-        output_tokens=int(tokens.get("output") or 0),
+        output_tokens=_safe_int(tokens.get("output")),
         cache_tokens=cached,
-        thinking_tokens=int(tokens.get("thoughts") or 0),
+        thinking_tokens=_safe_int(tokens.get("thoughts")),
         tool_calls=tool_calls,
         tool_errors=tool_errors,
     )
@@ -150,7 +168,7 @@ def _add_stats(stats_by_model: dict[str, GeminiModelStats], rec: GeminiModelStat
 def _total_tokens(msg: dict[str, object]) -> int:
     """The message's reported ``tokens.total`` (used to pick the final emission)."""
     tokens = msg.get("tokens") or {}
-    return int(tokens.get("total") or 0) if isinstance(tokens, dict) else 0
+    return _safe_int(tokens.get("total")) if isinstance(tokens, dict) else 0
 
 
 def _read_capped(path: Path) -> str | None:
@@ -364,7 +382,9 @@ def _parse_jsonl_rollout(path: Path, *, max_bytes: int) -> GeminiSessionSummary 
                 ts = _parse_iso(str(obj.get("timestamp") or ""))
                 if ts is not None and (end is None or ts > end):
                     end = ts
-    except OSError:
+    # v5.16/B08: honour the documented "return None on any error" contract —
+    # a single crafted rollout line must never escape and abort the import loop.
+    except (OSError, ValueError, TypeError, OverflowError):
         return None
 
     if not session_id or start is None:

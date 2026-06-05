@@ -9,6 +9,7 @@ Three entry points, wired up by `halyard install-windsurf-hook`:
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -33,9 +34,30 @@ from halyard.hub import find_hub
 
 _WS_TTL = timedelta(minutes=30)
 
+# v5.16/B07: trajectory_id arrives from untrusted hook stdin and is used to
+# build a state-file path. Only allow a safe slug so it cannot escape the
+# ws-sessions/ root via traversal ("..", "/", absolute, leading "..").
+_SAFE_TID = re.compile(r"^[A-Za-z0-9._-]+$")
+
 
 def _ws_sessions_dir() -> Path:
     return Path.home() / ".halyard" / "ws-sessions"
+
+
+def _safe_state_path(tid: str, state_dir: Path) -> Path | None:
+    """v5.16/B07: map an untrusted trajectory_id to a path strictly inside
+    ``state_dir``. Returns None for anything that would escape the root."""
+    if not tid or tid in {".", ".."} or not _SAFE_TID.match(tid):
+        return None
+    path = state_dir / f"{tid}.json"
+    try:
+        resolved = path.resolve()
+        root = state_dir.resolve()
+    except OSError:
+        return None
+    if resolved.parent != root:
+        return None
+    return path
 
 
 def record_turn(payload: dict[str, Any], is_start: bool) -> int:
@@ -45,8 +67,13 @@ def record_turn(payload: dict[str, Any], is_start: bool) -> int:
         return 0
 
     state_dir = _ws_sessions_dir()
+    # v5.16/B07: sanitize trajectory_id before any mkdir/write so a malicious
+    # payload cannot traverse out of ws-sessions/ and overwrite arbitrary JSON.
+    path = _safe_state_path(str(tid), state_dir)
+    if path is None:
+        return 0
+
     state_dir.mkdir(parents=True, exist_ok=True)
-    path = state_dir / f"{tid}.json"
 
     now = datetime.now()
     state = _read_state(path) or {

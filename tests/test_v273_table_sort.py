@@ -6,8 +6,19 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+from freezegun import freeze_time
+
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session
 from halyard.dashboard import _session_sev, _stbl, render_dashboard
+
+
+@pytest.fixture(autouse=True)
+def _freeze_to_may_2026():
+    # v5.14: pin wall clock so May-2026 fixtures survive build_ai_report's
+    # current-month filter.
+    with freeze_time("2026-05-15 12:00:00"):
+        yield
 
 
 def _init(tmp: Path) -> None:

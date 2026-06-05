@@ -109,7 +109,13 @@ class DashboardState:
     health: list[HealthCheck]
     latest_session: AiSession | None
     all_sessions: list[AiSession] = field(default_factory=list)
-    generated_at: datetime = field(default_factory=datetime.now)
+    # NOTE: lambda wrapper (not bare ``datetime.now``) is intentional —
+    # ``field(default_factory=datetime.now)`` captures the unbound class
+    # method at dataclass-definition time, which test-time clock patchers
+    # (freezegun) can't reach. The lambda re-resolves ``datetime.now`` on
+    # each call, so the production behaviour is identical and the test
+    # suite can pin the wall clock (v5.14).
+    generated_at: datetime = field(default_factory=lambda: datetime.now())
     # >0 when this state aggregates multiple project logs (number of
     # source dirs); 0 for a single-project view.
     aggregate_count: int = 0

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import plistlib
 import subprocess
 import sys
@@ -23,6 +24,10 @@ class LaunchdProvider(ServiceProvider):
         halyard_exe = _halyard_exe()
         self.plist_path.parent.mkdir(parents=True, exist_ok=True)
         self.plist_path.write_text(self._plist(halyard_exe, project_dir, port), encoding="utf-8")
+        # v5.18/B23: the plist exposes the halyard exe path, project_dir, and
+        # port the user auto-runs at login. write_text honours the umask
+        # (commonly world-readable 0o644); restrict to owner-only.
+        os.chmod(self.plist_path, 0o600)
         subprocess.run(["launchctl", "load", "-w", str(self.plist_path)], check=True)
         return f"http://127.0.0.1:{port}/"
 

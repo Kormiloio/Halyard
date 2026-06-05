@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch  # MagicMock used in fetch_prs tests
 
 import pytest
+from freezegun import freeze_time
 
 from halyard.ai_log import AiSession
 from halyard.outcomes import (
@@ -43,6 +44,14 @@ def _no_real_gh(monkeypatch: pytest.MonkeyPatch) -> None:
         raise FileNotFoundError("gh not available in tests")
 
     monkeypatch.setattr("halyard.outcomes.subprocess.run", _no_gh)
+
+
+@pytest.fixture(autouse=True)
+def _freeze_to_may_2026():
+    # v5.14: pin wall clock so May-2026 fixtures survive build_ai_report's
+    # current-month filter.
+    with freeze_time("2026-05-15 12:00:00"):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -259,16 +268,19 @@ def test_fetch_prs_for_branch_returns_list() -> None:
     assert result[0]["number"] == 1
 
 
-def test_fetch_prs_for_branch_returns_empty_on_nonzero() -> None:
+def test_fetch_prs_for_branch_returns_none_on_nonzero() -> None:
+    # v5.1x/B11: a failed call now signals failure (None) rather than
+    # collapsing to [] ("no PRs"), so the caller can skip caching.
     mock_result = MagicMock()
     mock_result.returncode = 1
     with patch("halyard.outcomes.subprocess.run", return_value=mock_result):
-        assert fetch_prs_for_branch("main", None) == []
+        assert fetch_prs_for_branch("main", None) is None
 
 
-def test_fetch_prs_for_branch_returns_empty_on_oserror() -> None:
+def test_fetch_prs_for_branch_returns_none_on_oserror() -> None:
+    # v5.1x/B11: OSError is a failure, not an empty result — return None.
     with patch("halyard.outcomes.subprocess.run", side_effect=OSError):
-        assert fetch_prs_for_branch("main", None) == []
+        assert fetch_prs_for_branch("main", None) is None
 
 
 def test_fetch_prs_for_branch_passes_repo_when_remote_given() -> None:

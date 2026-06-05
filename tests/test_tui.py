@@ -9,12 +9,21 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from freezegun import freeze_time
 from typer.testing import CliRunner
 
 from halyard.ai_log import HEADER, AiSession, append_session
 from halyard.cli import app
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _freeze_to_may_2026():
+    # v5.14: pin wall clock so May-2026 fixtures survive build_ai_report's
+    # current-month filter.
+    with freeze_time("2026-05-15 12:00:00"):
+        yield
 
 
 def _session(
@@ -29,6 +38,7 @@ def _session(
     output_tokens: int = 50,
     tokens_available: bool = True,
     client_surface: str | None = None,
+    branch: str | None = None,
 ) -> AiSession:
     start_time = start or datetime(2026, 5, 7, 10)
     return AiSession(
@@ -43,6 +53,7 @@ def _session(
         tokens_available=tokens_available,
         tags=tags or [],
         client_surface=client_surface,
+        branch=branch,
     )
 
 
@@ -161,9 +172,11 @@ def test_session_store_filter_branch(tmp_path: Path) -> None:
     from halyard.tui.store import SessionStore
 
     store = SessionStore(tmp_path / "ai-sessions.log")
+    # v5.1x/B20: collectors write the branch as the session.branch field,
+    # not a legacy `branch:` tag, so the filter must match the field.
     store.sessions = [
-        _session(tags=["branch:main"]),
-        _session(project="acme:feature", tags=["branch:feature"]),
+        _session(branch="main"),
+        _session(project="acme:feature", branch="feature"),
     ]
 
     result = store.filter(time_window="all", branch="main")
@@ -176,10 +189,11 @@ def test_session_store_branches_sorted_by_recent(tmp_path: Path) -> None:
     from halyard.tui.store import SessionStore
 
     store = SessionStore(tmp_path / "ai-sessions.log")
+    # v5.1x/B20: branches() reads the session.branch field, not the tag.
     store.sessions = [
-        _session(start=datetime(2026, 5, 7, 12), tags=["branch:feature"]),
-        _session(start=datetime(2026, 5, 7, 10), tags=["branch:main"]),
-        _session(start=datetime(2026, 5, 7, 9), tags=["branch:feature"]),
+        _session(start=datetime(2026, 5, 7, 12), branch="feature"),
+        _session(start=datetime(2026, 5, 7, 10), branch="main"),
+        _session(start=datetime(2026, 5, 7, 9), branch="feature"),
     ]
 
     assert store.branches() == ["feature", "main"]
@@ -276,9 +290,11 @@ def test_session_store_filter_week_and_all(tmp_path: Path) -> None:
 def test_session_store_branches_skips_non_branch_tags(tmp_path: Path) -> None:
     from halyard.tui.store import SessionStore
 
+    # v5.1x/B20: branches() reads the session.branch field; unrelated tags
+    # (pr:, client:) must not leak into the branch list.
     store = SessionStore(tmp_path / "ai-sessions.log")
     store.sessions = [
-        _session(tags=["pr:42", "branch:main", "client:acme"]),
+        _session(tags=["pr:42", "client:acme"], branch="main"),
     ]
     assert store.branches() == ["main"]
 
@@ -604,7 +620,7 @@ def test_branch_modal_key_opens_selector(tmp_path: Path) -> None:
 
     async def run() -> None:
         store = SessionStore(tmp_path / "ai-sessions.log")
-        store.sessions = [_session(tags=["branch:main"])]
+        store.sessions = [_session(branch="main")]  # v5.1x/B20: branch is a field
         store.load = lambda: None  # type: ignore[method-assign]
         app_instance = HalyardApp(store=store)
         async with app_instance.run_test() as pilot:
@@ -621,7 +637,7 @@ def test_branch_modal_selects_branch(tmp_path: Path) -> None:
 
     async def run() -> None:
         store = SessionStore(tmp_path / "ai-sessions.log")
-        store.sessions = [_session(tags=["branch:main"])]
+        store.sessions = [_session(branch="main")]  # v5.1x/B20: branch is a field
         store.load = lambda: None  # type: ignore[method-assign]
         app_instance = HalyardApp(store=store)
         async with app_instance.run_test() as pilot:
@@ -639,7 +655,7 @@ def test_escape_clears_branch_filter(tmp_path: Path) -> None:
 
     async def run() -> None:
         store = SessionStore(tmp_path / "ai-sessions.log")
-        store.sessions = [_session(tags=["branch:main"])]
+        store.sessions = [_session(branch="main")]  # v5.1x/B20: branch is a field
         store.load = lambda: None  # type: ignore[method-assign]
         app_instance = HalyardApp(store=store)
         app_instance.branch_filter = "main"

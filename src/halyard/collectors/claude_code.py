@@ -42,6 +42,7 @@ from halyard.git_context import (
     head_sha,
     infer_project,
     infer_project_with_source,
+    is_valid_git_ref,
     numstat_delta,
 )
 from halyard.hub import find_hub
@@ -229,7 +230,9 @@ def handle_stop_hook() -> int:
     commit_count = commits_in_window(cwd, start, now)
     code_added: int | None = None
     code_removed: int | None = None
-    if sha_at_start:
+    # v5.16/B09: sha_at_start comes from attacker-influenceable session-state
+    # JSON — reject anything that is not a bare hex ref before it reaches git.
+    if sha_at_start and is_valid_git_ref(sha_at_start):
         delta = numstat_delta(cwd, sha_at_start)
         if delta is not None:
             code_added, code_removed = delta
