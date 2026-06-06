@@ -119,7 +119,13 @@ def run_dashboard(
     print("Press Ctrl-C to stop.")
 
     if open_browser:
-        webbrowser.open(url)
+        # v5.19/B3: hand the token to the browser via the launch URL, not via
+        # an unconditional Set-Cookie on every GET. The server only returns the
+        # auth cookie to a request that already presents the token, so a
+        # co-located user who GETs the page cannot harvest it.
+        from halyard.service import _load_or_create_token
+
+        webbrowser.open(f"{url}?token={_load_or_create_token()}")
 
     # v4.0: Halyard Hub. The Hub acts as a central telemetry broker and
     # exclusive writer for the ledger. It includes the OTLP/HTTP receiver
@@ -343,12 +349,17 @@ def _handler_for(
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
-            # 2.2: Set token cookie so the browser can authenticate POSTs.
-            # HttpOnly prevents JS access; SameSite=Strict prevents CSRF.
-            self.send_header(
-                "Set-Cookie",
-                f"halyard_token={_token}; Path=/; HttpOnly; SameSite=Strict",
-            )
+            # v5.19/B3: only set the token cookie for a request that ALREADY
+            # presents the token (launch-URL ?token=, header, or an existing
+            # cookie). Previously every GET got the cookie, so any local user
+            # could `curl` the page and harvest the token — which post-B4
+            # grants full write access. HttpOnly blocks JS; SameSite=Strict
+            # blocks CSRF.
+            if self._request_token_valid():
+                self.send_header(
+                    "Set-Cookie",
+                    f"halyard_token={_token}; Path=/; HttpOnly; SameSite=Strict",
+                )
             self.end_headers()
             if include_body:
                 self.wfile.write(body)
@@ -364,6 +375,18 @@ def _handler_for(
                 if part.startswith("halyard_token="):
                     return part[len("halyard_token=") :]
             return ""
+
+        def _request_token_valid(self) -> bool:
+            """v5.19/B3: True if the request carries the valid token via header,
+            cookie, or the launch-URL ``?token=`` param. Constant-time compare."""
+            from urllib.parse import parse_qs, urlparse
+
+            submitted = self._extract_token()
+            if not submitted:
+                vals = parse_qs(urlparse(self.path).query).get("token")
+                if vals:
+                    submitted = vals[0]
+            return bool(submitted) and hmac.compare_digest(submitted, _token)
 
         def _send_json_error(self, status: HTTPStatus, reason: str) -> None:
             """Send a terse JSON error body with the given HTTP status."""

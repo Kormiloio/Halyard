@@ -67,13 +67,20 @@ ingest listener.
 - [ ] Lifecycle: create/unlink socket on start/stop; handle stale socket file.
 - [ ] Regression test: same-uid peer accepted; ingest via socket writes ledger.
 
-## B3 — token disclosure [dashboard.py, service.py?]
+## B3 — token disclosure [dashboard.py] ✅
 
-- [ ] Remove unconditional `Set-Cookie` on unauthenticated GET.
-- [ ] `run_dashboard` opens browser at `…/?token=<tok>`; cookie issued only on
-      a valid-token request (URL/header/cookie).
-- [ ] Regression test: GET without token → no `Set-Cookie`, no privileged
-      action; GET with token → cookie set; POST still requires the token.
+- [x] `_send_dashboard` sets the `halyard_token` cookie ONLY when the request
+      already presents the valid token (`_request_token_valid()`: launch-URL
+      `?token=`, `X-Halyard-Token` header, or existing cookie; constant-time).
+- [x] `run_dashboard` opens the browser at `…/?token=<tok>` so the legit user
+      is authed on first load and receives the cookie for subsequent POSTs.
+- [x] Regression test (tests/test_v519_b03_token_cookie.py, 4 tests):
+      unauth GET → no `Set-Cookie` (no token leak); `?token=` / valid cookie →
+      cookie set; wrong token → no cookie. 53 dashboard tests still green.
+- Note (separate, lesser, follow-up): an unauthenticated GET still *renders*
+      the page (data visible), only the token is withheld. Gating the page
+      body on auth is a larger change tracked separately; the audited
+      escalation (token → writes) is closed.
 
 ## B5 — timer path traversal [hub_server.py] ✅
 
