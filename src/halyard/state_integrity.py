@@ -38,6 +38,12 @@ from typing import Literal, cast
 IntegrityMode = Literal["off", "hash", "hmac"]
 
 _VALID_MODES = ("off", "hash", "hmac")
+# v5.19/B13: relative strength of each mode. The sidecar that exists on disk is
+# a *trusted* signal (an attacker who can't read integrity.key cannot forge an
+# .hmac sidecar); the resolved mode, by contrast, can come from
+# attacker-controlled config reached via an untrusted pointer. Verification
+# must never use a mode weaker than the file's sidecar implies.
+_MODE_STRENGTH: dict[IntegrityMode, int] = {"off": 0, "hash": 1, "hmac": 2}
 _KEY_PATH = Path.home() / ".halyard" / "integrity.key"
 
 _DEFAULT_MODE: IntegrityMode = "off"
@@ -159,11 +165,10 @@ def read_global_trusted_state(path: Path) -> str | None:
     not exist. Raises :class:`IntegrityError` on verification failure
     (callers decide fail-closed vs fail-open).
     """
-    mode = current_mode()
-    sidecar_mode = detect_sidecar_mode(path)
-    if sidecar_mode is not None and mode == "off":
-        mode = sidecar_mode
-    return read_trusted_state(path, mode=mode)
+    # The sidecar floor is enforced inside read_trusted_state (B13), so a
+    # plain resolved mode is safe to pass — a stronger sidecar cannot be
+    # silently downgraded.
+    return read_trusted_state(path, mode=current_mode())
 
 
 def read_trusted_state(path: Path, *, mode: IntegrityMode | None = None) -> str | None:
@@ -177,6 +182,15 @@ def read_trusted_state(path: Path, *, mode: IntegrityMode | None = None) -> str 
     if not path.exists():
         return None
     active_mode = mode if mode is not None else current_mode()
+    # v5.19/B13: enforce the sidecar as a strength floor. The resolved mode can
+    # be steered by an attacker (a forged ~/.halyard/active pointer → an
+    # attacker-controlled halyard.toml with state_integrity="hash"/"off"), but
+    # the .hmac sidecar on disk cannot be forged without integrity.key. If a
+    # stronger sidecar exists than the resolved mode, verify with the stronger
+    # scheme — never silently downgrade hmac → hash/off.
+    sidecar_mode = detect_sidecar_mode(path)
+    if sidecar_mode is not None and _MODE_STRENGTH[sidecar_mode] > _MODE_STRENGTH[active_mode]:
+        active_mode = sidecar_mode
     content = path.read_text(encoding="utf-8")
     if active_mode == "off":
         return content

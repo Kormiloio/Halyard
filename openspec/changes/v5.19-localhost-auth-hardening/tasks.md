@@ -65,21 +65,28 @@ ingest listener.
 - [ ] Regression test: GET without token → no `Set-Cookie`, no privileged
       action; GET with token → cookie set; POST still requires the token.
 
-## B5 — timer path traversal [hub_server.py]
+## B5 — timer path traversal [hub_server.py] ✅
 
-- [ ] `_target_project_dir` constrained to registered-project allowlist;
-      refuse to create `time.timeclock` in an untracked dir.
-- [ ] `project` through `_safe_field` on the timer path.
-- [ ] Regression test: arbitrary `project_dir` rejected; injected `project`
-      sanitized.
+- [x] `_target_project_dir` constrained to the `read_registry()` allowlist
+      (resolved-path match); unregistered dirs return None → caller falls back
+      to the hub's own project dir. The timeclock-parent fallback is
+      constrained the same way.
+- [x] `project` run through `_safe_field` on the timer path (mirrors presence).
+- [x] Regression test (tests/test_v519_b05_timer_path.py, 3 tests): arbitrary
+      `project_dir`/`timeclock` rejected; registered accepted. 83 existing
+      hub/timer tests still green.
 
-## B13 — HMAC downgrade [state_integrity.py]
+## B13 — HMAC downgrade [state_integrity.py] ✅
 
-- [ ] If an `.hmac` sidecar exists, require HMAC regardless of any
-      `state_integrity` resolved through the untrusted pointer; never
-      silently downgrade hmac → hash/off.
-- [ ] Regression test: forged pointer + attacker `state_integrity="hash"`
-      does not bypass HMAC.
+- [x] Sidecar-as-strength-floor enforced at the verification choke point
+      (`read_trusted_state`): `_MODE_STRENGTH` map; if a stronger sidecar
+      exists than the resolved mode, verify with the stronger scheme. The old
+      `mode == "off"`-only guard in `read_global_trusted_state` is subsumed
+      (simplified). Protects every caller, not just the global entry point.
+- [x] Regression test (tests/test_v519_b13_hmac_downgrade.py, 2 tests): forged
+      content + unkeyed `.sha256` + `mode="hash"`/`"off"` is rejected because
+      the `.hmac` sidecar forces HMAC; genuine hash-only file still reads. 43
+      existing integrity tests green.
 
 ## Gate
 

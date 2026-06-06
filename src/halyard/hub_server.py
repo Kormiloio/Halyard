@@ -242,14 +242,32 @@ def _parse_timer_started(value: str | None) -> datetime | None:
 
 
 def _target_project_dir(data: dict[str, Any]) -> Path | None:
+    """Resolve a client-supplied target dir, constrained to registered projects.
+
+    v5.19/B5: previously any existing directory was accepted, so a
+    token-holding client could create ``time.timeclock`` (and inject fields)
+    in an arbitrary location. Only honour a dir that is an already-registered
+    Halyard project (exists + has ``halyard.toml``); otherwise return None and
+    let the caller fall back to the hub's own project dir.
+    """
     raw = data.get("project_dir")
+    candidate: Path | None = None
     if isinstance(raw, str) and raw:
-        path = Path(raw)
-        if path.is_dir():
-            return path
-    raw_timeclock = data.get("timeclock")
-    if isinstance(raw_timeclock, str) and raw_timeclock:
-        return Path(raw_timeclock).parent
+        candidate = Path(raw)
+    else:
+        raw_timeclock = data.get("timeclock")
+        if isinstance(raw_timeclock, str) and raw_timeclock:
+            candidate = Path(raw_timeclock).parent
+    if candidate is None:
+        return None
+    from halyard.registry import read_registry
+
+    try:
+        resolved = candidate.resolve()
+    except OSError:
+        return None
+    if any(resolved == p.resolve() for p in read_registry()):
+        return resolved
     return None
 
 
@@ -740,7 +758,15 @@ class HubServer:
                 try:
                     data = json.loads(body)
                     action = data.get("action")
+                    # v5.19/B5: sanitize the project slug before it is written
+                    # into the timeclock / global state (the presence path
+                    # already does this) — a raw value could inject newlines or
+                    # extra fields into the append-only records.
+                    from halyard.ai_log import _safe_field
+
                     project = data.get("project")
+                    if isinstance(project, str):
+                        project = _safe_field(project)
 
                     from halyard.ai_log import find_project_dir
                     from halyard.hub import find_hub
