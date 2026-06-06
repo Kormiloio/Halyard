@@ -174,9 +174,22 @@ MVP data sources:
 - `projects.toml`;
 - selected files under `~/.halyard/` for state only.
 
+## Security & auth (v5.19)
+
+The dashboard binds `127.0.0.1` only and is not a remote service. Its auth
+model was hardened in v5.19 (see `docs/trust-model.md` for the full picture):
+the token is **no longer handed to an unauthenticated `GET` via `Set-Cookie`**
+— it is delivered through the launch URL, and the cookie is set only once a
+valid token is presented (B3). Live-update events come from the hub's
+authenticated `/v1/events` SSE channel, which the dashboard reaches with a
+`?token=` query param because `EventSource` cannot set headers. Every
+state-changing request requires `Content-Type: application/json` and rejects
+cross-site `Sec-Fetch-Site` (browser-CSRF / DNS-rebinding defence).
+
 ## Later Scope
 
-- Live updates through server-sent events or WebSockets.
+- Live updates through server-sent events or WebSockets. *(Shipped v4.3;
+  authenticated v5.19.)*
 - Attribution correction workflow.
 - Invoice preview and appendix generation.
 - Exportable charts.

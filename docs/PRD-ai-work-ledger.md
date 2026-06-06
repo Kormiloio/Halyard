@@ -122,6 +122,23 @@ A higher-level aggregation of one or more AI sessions that belong to a task,
 plan, deliverable, or job. This may be represented by `job_id`, `task_id`, or
 future record types.
 
+### Invoicing correctness (v5.17 / owner review)
+
+- **Rate selection by presence, not truthiness (B15):** a `0.0` rate override
+  or project `hourly_rate` bills `$0` (a comp / pro-bono invoice) — it never
+  falls through to a non-zero client fallback.
+- **Round the money, not the hours (B25):** line-item amounts are computed from
+  exact minutes and only the final dollar figure is rounded; sub-minute work is
+  not over-billed (1 min @ $150/h = `$2.50`, not a rounded-hours `$3.00`).
+  `hours` stays 2-decimal for display.
+- **Period source matches selection (B16):** sessions are selected into an
+  invoice by their `end`, so the appendix ledger period is derived from the
+  invoice period, not `min(session.start)` — a session straddling a month
+  boundary is allocated to the month it completed in.
+- **Projects keyed by `(client_slug, slug)` (B24):** project slugs are only
+  unique within a client, so a slug shared by two clients no longer collides
+  onto the wrong client's project name or hourly rate.
+
 ### Token contract (v2.62)
 
 Every collector emits `input_tokens` as **fresh, non-cached input

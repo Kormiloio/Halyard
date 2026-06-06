@@ -224,6 +224,11 @@ It should not read prompts, transcripts, code contents, or arbitrary files.
 - Token totals must separate available zero values from unavailable token data.
 - Cost totals must distinguish captured direct API cost from allocated plan
   cost and missing cost.
+- **Captured-cost consistency (v5.17/B17):** the headline "captured" cost
+  equals the sum of the by-model / by-tool / daily breakdown bars — all use the
+  same `sum_spend(api_only=True)` convention, so the total never silently folds
+  in credit/subscription cost the bars exclude, and single- vs multi-model
+  subscription sessions are attributed identically.
 - Older sessions with incomplete fields should remain visible.
 - Unknown models and tools should be grouped by their captured label, not
   silently discarded.

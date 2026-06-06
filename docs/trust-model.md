@@ -137,20 +137,51 @@ is **bound to `127.0.0.1` only** — it is never exposed beyond the
 loopback interface. It is not a remote service and must not be put behind
 a public reverse proxy.
 
-Protections on that server:
+Protections on that server (hardened in v5.19):
 
 - `Host` is validated against `127.0.0.1`/`localhost` (blocks
-  DNS-rebinding); `Origin`/`Referer` are checked when present.
-- State-changing actions are POST-only and require a 256-bit token,
-  delivered via an `HttpOnly; SameSite=Strict` cookie or the
-  `X-Halyard-Token` header, compared in constant time. The token lives
-  in a `0600` file under `~/.halyard/`.
-- POST bodies are size-capped.
+  DNS-rebinding).
+- **Browser-CSRF defence:** state-changing requests must send
+  `Content-Type: application/json` and must not carry a cross-site
+  `Sec-Fetch-Site`. A malicious web page can only issue a CORS *simple
+  request* (`text/plain`, form-encoded) without a preflight — those are
+  rejected; an `application/json` request from another origin triggers a
+  preflight the server never answers.
+- **Authentication:** every read/write endpoint the dashboard or hub owns
+  (`/v1/ingest`, `/v1/state`, `/v1/events`, `/v1/collisions`,
+  `/v1/state/timer`, `/v1/state/presence`, and the dashboard POST actions)
+  requires a 256-bit token, compared in constant time. The token is sent
+  via the `X-Halyard-Token` header, the `halyard_token` cookie, or — for
+  the SSE `EventSource`, which cannot set headers — a `?token=` query
+  param on a URL only the authenticated page receives. The dashboard no
+  longer hands the token to an unauthenticated `GET`: it is delivered via
+  the launch URL, not an unconditional `Set-Cookie`.
+- **Token file:** the token lives in a `0600` file under a `0700`
+  `~/.halyard/`, created atomically with
+  `O_CREAT|O_EXCL|O_WRONLY|O_NOFOLLOW` (no world-readable window,
+  symlink-safe, race-free). A pre-existing token is trusted only if it is
+  a regular file owned by the current user.
+- **Same-host machine-to-machine ingest:** Halyard's own emitters can reach
+  the hub over an `AF_UNIX` socket (`~/.halyard/hub.sock`, `0600`)
+  authenticated by OS peer-credential (`SO_PEERCRED` on Linux,
+  `getpeereid` on macOS) — a same-user process is trusted with no shared
+  secret; a different UID is rejected. TCP loopback (browser, external
+  OTLP) continues to use the token.
+- **OTLP exception:** `/v1/traces` stays unauthenticated on loopback so the
+  zero-config VS Code Copilot OTLP exporter (which cannot send a token)
+  keeps working. Its impact is bounded by the loopback `Host` check, the
+  `application/json`/`Sec-Fetch-Site` CSRF rules, a finalize-on-eviction
+  accumulator cap, and a socket read timeout. (A forged-timestamp
+  plausibility bound on spans is a tracked follow-up, not yet shipped — a
+  same-user process could otherwise inject telemetry with implausible
+  timestamps.)
+- POST bodies are size-capped; concurrent SSE connections are bounded.
 
-Residual risk: because it is a local server, **another process running
-as your user can still reach it** and read the token file. The dashboard
-is a convenience surface for the local user, not a security boundary
-against local-account compromise.
+Residual risk: a co-located process running **as your own user** can read
+the `0600` token file and authenticate, and can connect to the `AF_UNIX`
+socket (same UID). The dashboard defends against *other local users* and
+browser-origin CSRF/DNS-rebinding, but it is not a security boundary
+against compromise of your own account.
 
 ## Files Halyard writes
 

@@ -32,21 +32,39 @@ Transition to a central Hub process that acts as the exclusive manager for `ai-s
 - **Generated Public Spec (v4.1):** `halyard spec` is generated from the same
   `_FIELDS` registry used by the writer/parser, keeping the documented optional
   key table aligned with the runtime schema.
-- **Hub-Managed Active State (v4.2):** the Hub owns the in-memory active timer
-  state while it is running. `GET /v1/state` is read-only and unauthenticated on
-  loopback; `POST /v1/state/timer` mutates manual timer state and requires the
-  existing dashboard token via `X-Halyard-Token` or the `halyard_token` cookie.
-  The old `~/.halyard/active` file remains the compatibility mirror and offline
-  fallback, not a second source of truth while the Hub is reachable.
+- **Hub-Managed Active State (v4.2; auth hardened v5.19):** the Hub owns the
+  in-memory active timer state while it is running. As of v5.19/B4 **both**
+  `GET /v1/state` and `POST /v1/state/timer` require the dashboard token (or an
+  AF_UNIX peer-credential) — the read path is authenticated too, because the
+  state payload leaks home-directory and project paths. The timer path also
+  constrains a client-supplied `project_dir` to a registered project and runs
+  the project slug through `_safe_field` (v5.19/B5). The old `~/.halyard/active`
+  file remains the compatibility mirror and offline fallback, not a second
+  source of truth while the Hub is reachable.
 - **Auto-Timer Presence (v4.2):** `POST /v1/state/presence` lets collectors
-  record, refresh, and close presence windows through the same Hub state store.
-  The Hub worker also closes stale presence windows, while `auto_timer.py`
-  retains its historical file path when the Hub is unavailable.
-- **Reactive Dashboard Events (v4.3):** `/v1/events` is the read-only SSE
-  channel for Hub updates. The Hub emits typed events after successful appends
-  and timer state mutations. The Bridge dashboard treats these as hints: it
-  fetches the current dashboard HTML and patches known `data-hub-fragment`
-  regions instead of reloading the whole page.
+  record, refresh, and close presence windows through the same Hub state store
+  (token/peer-cred authenticated). The Hub worker also closes stale presence
+  windows, while `auto_timer.py` retains its historical file path when the Hub
+  is unavailable.
+- **Reactive Dashboard Events (v4.3; authenticated v5.19):** `/v1/events` is the
+  read-only SSE channel for Hub updates. It now requires the token, supplied as
+  a `?token=` query param because `EventSource` cannot set headers (the
+  dashboard renders the URL with the token; the page itself is auth-gated).
+  Concurrent SSE connections are capped to bound worker threads. The Hub emits
+  typed events after successful appends and timer state mutations. The Bridge
+  dashboard treats these as hints: it fetches the current dashboard HTML and
+  patches known `data-hub-fragment` regions instead of reloading the whole page.
+- **Localhost Trust Boundary (v5.19):** every Hub endpoint **except**
+  `/v1/traces` requires authentication — the bearer token over TCP, or OS
+  peer-credential over a new `AF_UNIX` ingest socket (`~/.halyard/hub.sock`,
+  `0600`) for same-user machine-to-machine emitters. POST writes require
+  `Content-Type: application/json` and reject a cross-site `Sec-Fetch-Site`
+  (browser-CSRF / DNS-rebinding defence). Non-finite `cost`/`credits` are
+  rejected at the ingest boundary. `/v1/traces` stays open for the token-less
+  Copilot OTLP exporter, bounded by the CSRF rules, the finalize-on-eviction
+  accumulator cap, and a socket read timeout (a forged-timestamp plausibility
+  bound on spans is a tracked follow-up, not yet shipped). See
+  `docs/trust-model.md` for the full model.
 - **Service Abstraction:** Introduce a `ServiceManager` interface with providers:
   - `LaunchdProvider` (macOS)
   - `SystemdProvider` (Linux)
