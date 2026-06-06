@@ -6,7 +6,9 @@ import contextlib
 import hmac
 import json
 import math
+import os
 import socket
+import socketserver
 import threading
 import time
 from collections import deque
@@ -41,6 +43,37 @@ _IDLE_TTL = timedelta(minutes=10)
 # Oldest-by-last-update entries are evicted; a real editor has very few live.
 _MAX_OTEL_SESSIONS = 1000
 _MAX_SSE_CONNECTIONS = 32  # v5.19/B4: bound SSE worker threads
+# v5.19/B4: AF_UNIX peer-cred is available only on POSIX (not Windows TCP).
+_AF_UNIX_AVAILABLE = hasattr(socket, "AF_UNIX")
+
+
+def hub_socket_path(port: int) -> Path:
+    """Path to the Hub's AF_UNIX ingest socket for a given port.
+
+    Port-keyed so a test hub (e.g. :54318) and a real hub (:4318) use distinct
+    sockets and never clobber each other; the client derives the same path from
+    its configured port.
+    """
+    return Path.home() / ".halyard" / f"hub-{port}.sock"
+
+
+if _AF_UNIX_AVAILABLE:
+
+    class _ThreadingUnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+        """A threaded HTTP server over an AF_UNIX socket.
+
+        ``UnixStreamServer`` (unlike ``HTTPServer``) does not populate
+        ``server_name``/``server_port`` and would choke on the AF_UNIX
+        ``getsockname`` (a path, not ``(host, port)``); set sane stand-ins so
+        the ``BaseHTTPRequestHandler`` machinery is happy.
+        """
+
+        daemon_threads = True
+
+        def server_bind(self) -> None:
+            socketserver.UnixStreamServer.server_bind(self)
+            self.server_name = "localhost"
+            self.server_port = 0
 # Single source of truth for the auto-timer idle policy lives in auto_timer.
 _AUTO_INACTIVITY = timedelta(minutes=INACTIVITY_MINUTES)
 _MAX_BODY = 25 * 1024 * 1024  # 25 MB
@@ -283,6 +316,7 @@ class HubServer:
         self._write_queue: deque[AiSession] = deque()
         self._lock = threading.Lock()
         self._server: ThreadingHTTPServer | None = None
+        self._unix_server: socketserver.BaseServer | None = None
         self._stop = threading.Event()
 
         # v4.3: Real-time eventing
@@ -403,8 +437,37 @@ class HubServer:
             target=self._server.serve_forever, name="halyard-hub-server", daemon=True
         ).start()
 
+        # v5.19/B4: AF_UNIX ingest listener for same-host emitters. Auth is by
+        # OS peer-credential (no token), and a co-located *other* user's UID
+        # won't match ours — a guarantee TCP can't give. Best-effort: a failure
+        # here never blocks the TCP server.
+        self._start_unix_listener()
+
         # Flush/Worker thread
         threading.Thread(target=self._worker_loop, name="halyard-hub-worker", daemon=True).start()
+
+    def _start_unix_listener(self) -> None:
+        if not _AF_UNIX_AVAILABLE:
+            return
+        sock_path = hub_socket_path(self.port)
+        try:
+            sock_path.parent.mkdir(parents=True, exist_ok=True)
+            with contextlib.suppress(OSError):
+                sock_path.parent.chmod(0o700)
+            # Remove a stale socket from a crashed run (a live one would still
+            # be connectable, but the bind below would EADDRINUSE — we own this
+            # path, so unlinking is safe).
+            with contextlib.suppress(FileNotFoundError):
+                sock_path.unlink()
+            server = _ThreadingUnixHTTPServer(str(sock_path), self._handler())
+            os.chmod(sock_path, 0o600)
+        except OSError:
+            self._unix_server = None
+            return
+        self._unix_server = server
+        threading.Thread(
+            target=server.serve_forever, name="halyard-hub-unix", daemon=True
+        ).start()
 
     def stop(self) -> None:
         """Graceful shutdown: flush everything and stop serving."""
@@ -412,6 +475,11 @@ class HubServer:
         if self._server:
             self._server.shutdown()
             self._server.server_close()
+        if self._unix_server is not None:
+            self._unix_server.shutdown()
+            self._unix_server.server_close()
+            with contextlib.suppress(OSError):
+                hub_socket_path(self.port).unlink()
         self._flush_all()
 
     def emit(self, event_type: str, data: dict[str, Any]) -> None:
@@ -971,6 +1039,12 @@ class HubServer:
 
             def _host_ok(self) -> bool:
                 """Reject non-loopback Host headers (DNS-rebinding / browser CSRF)."""
+                # v5.19/B4: the Host allowlist is a browser/DNS-rebinding
+                # defense; an AF_UNIX peer is a local process (no DNS, no
+                # browser), authenticated by peer-credential instead.
+                conn = getattr(self, "connection", None)
+                if conn is not None and getattr(conn, "family", None) == socket.AF_UNIX:
+                    return True
                 host = self.headers.get("Host", "")
                 return host in {f"127.0.0.1:{hub.port}", f"localhost:{hub.port}"}
 

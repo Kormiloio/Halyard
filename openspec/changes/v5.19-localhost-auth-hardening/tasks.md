@@ -58,14 +58,25 @@ ingest listener.
       `/v1/state` unauth → 401; SSE `?token=` → 200; SSE no-token → 401;
       `/health` stays open. Full suite incl. TUI green.
 
-## B4-auth — AF_UNIX ingest listener (new) [hub_server.py, hub_client.py]
+## B4-auth — AF_UNIX ingest listener (new) [hub_server.py, hub_client.py] ✅
 
-- [ ] AF_UNIX `ThreadingHTTPServer`-style listener on `~/.halyard/hub.sock`
-      (0o600, in 0o700 dir); same ingest routing as TCP.
-- [ ] Authenticate by peer-cred (`peer_is_self`); no token required on socket.
-- [ ] `hub_client` prefers the socket where present, falls back to TCP+token.
-- [ ] Lifecycle: create/unlink socket on start/stop; handle stale socket file.
-- [ ] Regression test: same-uid peer accepted; ingest via socket writes ledger.
+- [x] `_ThreadingUnixHTTPServer` (ThreadingMixIn + UnixStreamServer) on a
+      **port-keyed** socket `~/.halyard/hub-{port}.sock` (0o600, dir 0o700),
+      reusing the same `_Handler` → identical routing/auth. Port-keying stops a
+      test hub (:54318) from clobbering a real hub (:4318).
+- [x] Authenticates by peer-cred via the transport-aware `_authorized()`
+      (`peer_is_self`); `_host_ok()` skips the Host check for AF_UNIX (no
+      browser/DNS). No token required on the socket.
+- [x] `hub_client` prefers the socket (`_UnixHTTPConnection`, port-keyed
+      `_unix_socket_path`; skipped on Windows / `HALYARD_HUB_HOST` override);
+      falls back to TCP+token only on a *connection* failure.
+- [x] Lifecycle: `_start_unix_listener` (best-effort; never blocks TCP) unlinks
+      a stale socket then binds + chmods 0o600; `stop()` shuts it down and
+      unlinks. POSIX-only (`_AF_UNIX_AVAILABLE`).
+- [x] Regression test (tests/test_v519_afunix_listener.py, 3 tests): socket
+      0o600 + removed on stop; ingest over the socket with **no token**
+      succeeds (peer-cred) and writes the ledger; CSRF Content-Type still
+      enforced. Broader hub suite (75 tests) unaffected.
 
 ## B3 — token disclosure [dashboard.py] ✅
 
@@ -105,9 +116,10 @@ ingest listener.
       the `.hmac` sidecar forces HMAC; genuine hash-only file still reads. 43
       existing integrity tests green.
 
-## Gate
+## Gate ✅
 
-- [ ] `uv run pytest --ignore=tests/test_tui.py` green.
-- [ ] `uv run ruff check .` + `ruff format --check .` clean.
-- [ ] `uv run mypy src/` clean.
-- [ ] Roadmap entry; audit report §0 → all 23 blockers fixed.
+- [x] `uv run pytest` (full suite **incl. TUI**) green.
+- [x] `uv run ruff check .` + `ruff format --check .` clean.
+- [x] `uv run mypy src/` clean.
+- [x] Roadmap entry (project.md #90); audit report §0 → all 23 blockers fixed,
+      AF_UNIX listener done, nothing outstanding.

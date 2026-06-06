@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import socket
 from pathlib import Path
 from typing import Any
 
@@ -38,27 +39,38 @@ def hub_url() -> str:
     return f"http://{_hub_host()}:{_hub_port()}"
 
 
-def _request(
+class _UnixHTTPConnection(http.client.HTTPConnection):
+    """HTTPConnection over an AF_UNIX stream socket (v5.19/B4)."""
+
+    def __init__(self, sock_path: str, timeout: float) -> None:
+        super().__init__("localhost", timeout=timeout)
+        self._sock_path = sock_path
+
+    def connect(self) -> None:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(self.timeout)
+        s.connect(self._sock_path)
+        self.sock = s
+
+
+def _unix_socket_path() -> Path | None:
+    """The Hub's AF_UNIX socket for the configured port, or None when the
+    socket path doesn't apply (Windows, or an explicit remote host override)."""
+    if not hasattr(socket, "AF_UNIX") or os.environ.get("HALYARD_HUB_HOST"):
+        return None
+    from halyard.hub_server import hub_socket_path
+
+    return hub_socket_path(_hub_port())
+
+
+def _send(
+    conn: http.client.HTTPConnection,
     method: str,
     path: str,
-    *,
-    payload: dict[str, Any] | None = None,
-    token: bool = False,
+    body: bytes | None,
+    headers: dict[str, str],
 ) -> tuple[int, dict[str, Any]] | None:
-    if _hub_disabled():
-        return None
-
-    body = None if payload is None else json.dumps(payload).encode()
-    headers: dict[str, str] = {}
-    if body is not None:
-        headers["Content-Type"] = "application/json"
-    if token:
-        from halyard.service import _load_or_create_token
-
-        headers["X-Halyard-Token"] = _load_or_create_token()
-
     try:
-        conn = http.client.HTTPConnection(_hub_host(), _hub_port(), timeout=_TIMEOUT)
         conn.request(method, path, body=body, headers=headers)
         resp = conn.getresponse()
         raw = resp.read().decode()
@@ -77,6 +89,43 @@ def _request(
     except json.JSONDecodeError:
         data = {}
     return resp.status, data
+
+
+def _request(
+    method: str,
+    path: str,
+    *,
+    payload: dict[str, Any] | None = None,
+    token: bool = False,
+) -> tuple[int, dict[str, Any]] | None:
+    if _hub_disabled():
+        return None
+
+    body = None if payload is None else json.dumps(payload).encode()
+    json_headers: dict[str, str] = {"Content-Type": "application/json"} if body is not None else {}
+
+    # v5.19/B4: prefer the AF_UNIX socket — a same-user process authenticates by
+    # OS peer-credential, no token needed. Only fall back to TCP+token on a
+    # connection failure (a real HTTP response, even non-200, is returned).
+    sock_path = _unix_socket_path()
+    if sock_path is not None and sock_path.exists():
+        unix_conn = _UnixHTTPConnection(str(sock_path), _TIMEOUT)
+        result = _send(unix_conn, method, path, body, json_headers)
+        if result is not None:
+            return result
+
+    headers = dict(json_headers)
+    if token:
+        from halyard.service import _load_or_create_token
+
+        headers["X-Halyard-Token"] = _load_or_create_token()
+    return _send(
+        http.client.HTTPConnection(_hub_host(), _hub_port(), timeout=_TIMEOUT),
+        method,
+        path,
+        body,
+        headers,
+    )
 
 
 def ping() -> bool:
