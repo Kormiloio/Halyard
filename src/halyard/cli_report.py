@@ -8,6 +8,7 @@ from typing import NoReturn
 
 import typer
 from rich.console import Console
+from rich.markup import escape  # v5.16/B19: escape session-derived fields before Rich render
 
 console = Console()
 err_console = Console(stderr=True)
@@ -271,7 +272,7 @@ def register(app: typer.Typer) -> None:
             console.print("\n[bold]By project[/]")
             for bucket in ai_report.by_project:
                 console.print(
-                    f"  {bucket.label:<32} [green]${bucket.cost_usd:.2f}[/]"
+                    f"  {escape(bucket.label):<32} [green]${bucket.cost_usd:.2f}[/]"
                     f"  {bucket.sessions} sessions"
                 )
 
@@ -279,7 +280,7 @@ def register(app: typer.Typer) -> None:
             console.print("\n[bold]By model[/]")
             for bucket in ai_report.by_model:
                 console.print(
-                    f"  {bucket.label:<32} [green]${bucket.cost_usd:.2f}[/]"
+                    f"  {escape(bucket.label):<32} [green]${bucket.cost_usd:.2f}[/]"
                     f"  {bucket.sessions} sessions"
                 )
 
@@ -288,7 +289,7 @@ def register(app: typer.Typer) -> None:
             for sbucket in ai_report.by_tool_surface:
                 tok_label = f"{sbucket.tokens:,} tokens  " if sbucket.tokens else ""
                 console.print(
-                    f"  {sbucket.tool:<32} [green]${sbucket.cost_usd:.2f}[/]"
+                    f"  {escape(sbucket.tool):<32} [green]${sbucket.cost_usd:.2f}[/]"
                     f"  {sbucket.sessions} sessions  {tok_label}"
                 )
         elif by_surface:
@@ -300,7 +301,7 @@ def register(app: typer.Typer) -> None:
             for tbucket in ai_report.by_tool_usage:
                 tok_label = f"{tbucket.tokens:,} tokens  " if tbucket.tokens else ""
                 console.print(
-                    f"  {tbucket.tool:<32} [green]${tbucket.cost_usd:.2f}[/]"
+                    f"  {escape(tbucket.tool):<32} [green]${tbucket.cost_usd:.2f}[/]"
                     f"  {tbucket.sessions} sessions  {tok_label}"
                 )
 
@@ -320,9 +321,8 @@ def register(app: typer.Typer) -> None:
                 commits = sum(s.commit_count or 0 for s in branch_sessions_list)
                 added = sum(s.code_added or 0 for s in branch_sessions_list)
                 meta = f"  [dim]{commits} commits  +{added} lines[/]" if commits or added else ""
-                console.print(
-                    f"  {branch_name:<32} [dim]{count} session{'s' if count != 1 else ''}[/]{meta}"
-                )
+                bplural = "s" if count != 1 else ""
+                console.print(f"  {escape(branch_name):<32} [dim]{count} session{bplural}[/]{meta}")
 
         if outcomes:
             from halyard.ai_log import parse_sessions
@@ -336,15 +336,16 @@ def register(app: typer.Typer) -> None:
                     continue
                 cost_col = f"[green]${b.total_cost:.2f}[/]" if b.trust else "[dim]—[/]"
                 plural = "s" if b.session_count != 1 else ""
+                olabel = escape(b.label)
                 console.print(
-                    f"  {b.label:<30} [bold]{b.session_count:>4}[/] session{plural}  {cost_col}"
+                    f"  {olabel:<30} [bold]{b.session_count:>4}[/] session{plural}  {cost_col}"
                 )
 
         if human.by_project:
             console.print("\n[bold]Human time by project[/]")
             for time_bucket in human.by_project:
                 mins = format_minutes(time_bucket.minutes)
-                console.print(f"  {time_bucket.label:<32} [cyan]{mins}[/]")
+                console.print(f"  {escape(time_bucket.label):<32} [cyan]{mins}[/]")
 
         if ledger:
             from halyard.ai_plans import read_ai_plans
@@ -875,7 +876,7 @@ def register(app: typer.Typer) -> None:
             console.print("\n[bold]Tools[/]")
             for tbucket in analytics.by_tool:
                 console.print(
-                    f"  {tbucket.tool:<30} "
+                    f"  {escape(tbucket.tool):<30} "
                     f"{tbucket.sessions:>5} sessions  "
                     f"{compact_number(tbucket.tokens):>8} tokens"
                 )

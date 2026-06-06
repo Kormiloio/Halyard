@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import hmac
 import json
+import math
 import threading
 import time
 from collections import deque
@@ -139,8 +140,13 @@ def _parse_ingest_float(value: Any, key: str) -> float:
     if not isinstance(value, int | float) or isinstance(value, bool):
         raise ValueError(f"{key} must be a number")
     parsed = float(value)
-    if parsed < 0:
-        raise ValueError(f"{key} must be non-negative")
+    # v5.16/B1 (Hub ingest path): the parse-side guard in ai_log only protects
+    # the file parser; the Hub's /v1/ingest had its own float path that still
+    # admitted inf/nan (inf later raises decimal.InvalidOperation, nan poisons
+    # totals to NaN). With the unauthenticated endpoint (B4), a hostile local
+    # webpage could poison or crash financial reports. Reject non-finite here.
+    if not math.isfinite(parsed) or parsed < 0:
+        raise ValueError(f"{key} must be a finite non-negative number")
     return parsed
 
 

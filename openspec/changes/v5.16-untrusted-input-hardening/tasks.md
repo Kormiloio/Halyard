@@ -87,6 +87,22 @@ Fix order: cheapest/highest-leverage first.
 - [x] Roadmap entry in `openspec/project.md` (entry 90); audit report
       fix-status table updated (`docs/reviews/2026-06-pre-release-audit.md` §0).
 
+## Follow-up fixes (owner code review, 2026-06-05) ✅
+
+- [x] **B1 (Hub ingest path):** the audit B1 fix only hardened the `ai_log`
+      file parser + `usage.sum_spend`. The Hub's own `/v1/ingest` float path
+      (`hub_server._parse_ingest_float`) still admitted `inf`/`nan`. Added the
+      `math.isfinite` guard there too — closes the "hostile website poisons
+      financial reports" chain at the value boundary even before B4-auth.
+      Test in `tests/test_review_p1_followups.py`.
+- [x] **B19 (second render site):** the audit B19 fix covered the TUI
+      `leverage_pane`. `cli_report.py` rendered session-derived labels
+      (model/project/tool/branch names, outcome + human-time labels) into Rich
+      markup unescaped at ~7 sites — a crafted `model="[red]x[/]"` spoofs
+      output or crashes `report` with `MarkupError`. Added a module-level
+      `rich.markup.escape` and wrapped every session-derived field. Test in
+      `tests/test_review_p1_followups.py`.
+
 ## Scope note
 
 The outcomes agent grouped B11 (cache failure) and B12 (merged-PR state) into

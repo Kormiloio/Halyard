@@ -149,7 +149,10 @@ def generate_invoice(
     line_items: list[InvoiceLineItem] = []
     for account, minutes in sorted(minutes_by_account.items()):
         _, account_project = account.split(":", 1)
-        project = projects.get(account_project)
+        # Look up by the full "client_slug:slug" account, not the bare slug —
+        # otherwise a slug shared by two clients resolves to the wrong project
+        # (wrong name + wrong hourly rate). See _read_projects keying.
+        project = projects.get(account)
         description = project.name if project else account_project
         # v5.17/B15: select rate by explicit `is not None`, not truthiness, so a
         # legitimate 0.0 (comp/free invoice override, or a $0 project rate) bills
@@ -160,13 +163,17 @@ def generate_invoice(
             rate = project.hourly_rate
         else:
             rate = _effective_rate(client, period_start)
-        hours = round(minutes / 60, 2)
+        # Round the MONEY, not the hours: compute the amount from exact minutes
+        # and round only the final dollar figure. Rounding hours to 0.01 first
+        # over-billed sub-minute work (1 min @ $150/h billed $3.00 via 0.02h
+        # instead of the exact $2.50). `hours` stays 2-decimal for display.
+        exact_hours = minutes / 60
         line_items.append(
             InvoiceLineItem(
                 description=description,
-                hours=hours,
+                hours=round(exact_hours, 2),
                 rate=rate,
-                amount=round_money(hours * rate, 2),
+                amount=round_money(exact_hours * rate, 2),
             )
         )
 
@@ -529,7 +536,12 @@ def _read_projects(project_dir: Path) -> dict[str, ProjectRecord]:
         if not _SLUG_RE.match(slug) or not _SLUG_RE.match(client_slug):
             continue
         rate = raw.get("hourly_rate")
-        result[slug] = ProjectRecord(
+        # Key by the fully-qualified "client_slug:slug". Project slugs are only
+        # unique *within* a client, so a bare-slug key let two clients sharing a
+        # slug (e.g. "web") collide — an invoice could pick the wrong client's
+        # project name and hourly rate. The account strings everywhere else are
+        # already "client_slug:slug", so the lookup key must match.
+        result[f"{client_slug}:{slug}"] = ProjectRecord(
             slug=slug,
             client_slug=client_slug,
             name=str(raw.get("name") or slug),

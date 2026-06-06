@@ -80,3 +80,16 @@ depends on now being *later* than May.
       `render_dashboard`, no clock injection) got the same
       `_freeze_to_may_2026` autouse fixture. This is the "separate additive
       ticket" the original proposal anticipated, folded in here.
+
+## Phase 6 — TUI hang correction (owner code review, 2026-06-05)
+
+- [x] The `test_tui.py` autouse freeze used a HARD freeze, which also freezes
+      `time.monotonic` and starves the asyncio/Textual event loop the pilot
+      tests (`app.run_test()`) drive — their timers never fire, so the suite
+      hung (previously misattributed to "sandbox environment only" and worked
+      around with `--ignore=tests/test_tui.py`). Fixed by switching that
+      module's fixture to `freeze_time("2026-05-15 12:00:00", tick=True)`:
+      the clock advances in real time from the frozen instant, so "today"
+      stays 2026-05-15 (month filter satisfied) while `monotonic` moves and
+      the loop runs. **`tests/test_tui.py` now passes in full — the
+      `--ignore` workaround is no longer needed and the suite is releasable.**

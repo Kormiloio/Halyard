@@ -20,9 +20,16 @@ runner = CliRunner()
 
 @pytest.fixture(autouse=True)
 def _freeze_to_may_2026():
-    # v5.14: pin wall clock so May-2026 fixtures survive build_ai_report's
+    # v5.14: pin the wall clock so May-2026 fixtures survive build_ai_report's
     # current-month filter.
-    with freeze_time("2026-05-15 12:00:00"):
+    #
+    # v5.19 correction (owner code review): tick=True is REQUIRED here. A hard
+    # freeze also freezes time.monotonic, which starves the asyncio/Textual
+    # event loop the pilot tests (app.run_test()) drive — their timers never
+    # fire and the test hangs forever. tick=True lets the clock advance in real
+    # time from the frozen instant, so "today" stays 2026-05-15 (the month
+    # filter is satisfied) while monotonic still moves and the loop runs.
+    with freeze_time("2026-05-15 12:00:00", tick=True):
         yield
 
 

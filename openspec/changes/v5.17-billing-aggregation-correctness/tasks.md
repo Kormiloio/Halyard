@@ -37,6 +37,24 @@ gate (see v5.16 tasks.md Gate section: 1614 passed, ruff+mypy clean).
 - Behavior change recorded: headline now excludes credit/subscription cost;
       no existing test encoded the old inconsistent numbers (searched).
 
+## Follow-up fixes (owner code review, 2026-06-05) ✅
+
+Two billing bugs the multi-agent audit missed, found by the owner's parallel
+review:
+
+- [x] **B24 — cross-client project-slug collision:** `_read_projects` keyed
+      projects by bare `slug`, but slugs are only unique *within* a client, so
+      two clients sharing a slug (e.g. `web`) collided — an invoice could use
+      the wrong client's project name and hourly rate (confirmed: an Acme
+      invoice billed Globex's $220 rate). Key by `f"{client_slug}:{slug}"` and
+      look up by the full account. Test in `tests/test_review_p1_followups.py`.
+- [x] **B25 — round the money, not the hours:** the line-item amount was
+      computed from hours pre-rounded to 0.01, over-billing sub-minute work
+      (1 min @ $150/h billed $3.00 via 0.02h instead of the exact $2.50).
+      Compute the amount from exact minutes and round only the final dollar
+      figure (owner decision); `hours` stays 2-decimal for display. Test in
+      `tests/test_review_p1_followups.py`.
+
 ## Gate ✅
 
 Run as part of the whole v5.16–v5.18 batch — see

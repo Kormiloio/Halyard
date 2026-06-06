@@ -35,6 +35,15 @@ ingest listener.
       TCP → token.
 - [ ] `/v1/traces` stays unauthenticated (loopback-only) for Copilot OTLP
       compat; add a forged-timestamp plausibility bound instead.
+- [ ] **Browser-CSRF hardening (owner review, finding #1):** a cross-origin
+      `text/plain` POST is a CORS "simple request" — it reaches the hub with
+      no preflight, so even a plain malicious webpage (not just DNS-rebinding)
+      can forge writes. On the write endpoints, **require
+      `Content-Type: application/json`** and **reject requests carrying a
+      browser `Origin`/`Sec-Fetch-Site: cross-site`**. This also hardens the
+      deliberately-open `/v1/traces` against browser CSRF without breaking
+      Copilot (its OTLP exporter sends neither a browser Origin nor
+      text/plain). Add a hostile-origin regression test.
 - [ ] Cap concurrent SSE connections + idle timeout on `/v1/events`.
 - [ ] `hub_client.ingest_line` sends `token=True`.
 - [ ] Regression tests.
