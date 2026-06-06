@@ -1385,9 +1385,31 @@ layers must read from this local source of truth; they do not replace it.
     hang in this sandbox's event loop — environmental), ruff + mypy clean.
     The gate also surfaced a 10th time-cliff test file
     (`test_v54_dashboard_templating.py`) that v5.14 had deferred; fixed with
-    the same freeze fixture. **Status: v5.16/v5.17/v5.18 complete; the 5
-    localhost-auth / shared-host blockers (B2, B3, B4-auth, B5, B13) remain
-    as v5.19, in progress with the owner in the loop.**
+    the same freeze fixture.
+
+    - **v5.19 — Localhost auth & secret hardening:** the shared-host /
+      browser-CSRF cluster. B2 secure 0o600 token creation
+      (`O_CREAT|O_EXCL|O_NOFOLLOW`, no temp/symlink/race window); B3 the
+      dashboard no longer leaks the token via an unconditional `Set-Cookie`
+      (cookie only on a token-bearing request; browser gets it via the launch
+      URL); B4-auth a transport-aware `_authorized()` (AF_UNIX peer-cred / TCP
+      token via header, cookie, or `?token=` for EventSource) on
+      `/v1/ingest`, `/v1/state`, `/v1/collisions`, `/v1/events`, plus a
+      `_csrf_ok()` Content-Type=application/json + Sec-Fetch-Site guard that
+      defeats the cross-origin `text/plain` simple-request CSRF the owner's
+      review found, plus an SSE connection cap; B5 the timer path constrained
+      to the `read_registry()` allowlist + `_safe_field`; B13 the integrity
+      sidecar enforced as a strength floor so HMAC can't be downgraded.
+      `/v1/traces` stays open for zero-config Copilot OTLP (it can't send a
+      token) but is covered by CSRF + the v5.18 caps. Spec in
+      `openspec/changes/v5.19-localhost-auth-hardening/`. Also folded in the
+      owner's parallel-review findings (B24 cross-client invoice slug
+      collision, B25 round-money-not-hours, a Hub-path non-finite gap, a
+      second `cli_report` markup site, and the TUI-freeze `tick=True` fix that
+      makes the full suite — incl. TUI — runnable). **Status: all 23 audit
+      blockers + B24/B25 fixed and gated (full suite incl. TUI green). One
+      optional defense-in-depth item remains — the AF_UNIX peer-cred ingest
+      listener — additive, not a launch blocker.**
 
 ## Deferred or gated
 
