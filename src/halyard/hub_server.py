@@ -6,6 +6,7 @@ import contextlib
 import hmac
 import json
 import math
+import socket
 import threading
 import time
 from collections import deque
@@ -39,6 +40,7 @@ _IDLE_TTL = timedelta(minutes=10)
 # local client spamming distinct session ids cannot grow memory without bound.
 # Oldest-by-last-update entries are evicted; a real editor has very few live.
 _MAX_OTEL_SESSIONS = 1000
+_MAX_SSE_CONNECTIONS = 32  # v5.19/B4: bound SSE worker threads
 # Single source of truth for the auto-timer idle policy lives in auto_timer.
 _AUTO_INACTIVITY = timedelta(minutes=INACTIVITY_MINUTES)
 _MAX_BODY = 25 * 1024 * 1024  # 25 MB
@@ -285,6 +287,10 @@ class HubServer:
 
         # v4.3: Real-time eventing
         self._events = EventEmitter()
+        # v5.19/B4: bound concurrent SSE connections — each holds a worker
+        # thread in a keep-alive loop, so an unbounded count is a thread-
+        # exhaustion DoS.
+        self._sse_active = 0
 
         # v4.0: Coalesce cache syncs so a burst of writes to one dir does not
         # spawn one full-log re-sync thread per write.
@@ -295,6 +301,17 @@ class HubServer:
         # v4.2: Active state tracking
         self.state = ActiveState()
         self._load_state()
+
+    def _sse_acquire(self) -> bool:
+        with self._lock:
+            if self._sse_active >= _MAX_SSE_CONNECTIONS:
+                return False
+            self._sse_active += 1
+            return True
+
+    def _sse_release(self) -> None:
+        with self._lock:
+            self._sse_active = max(0, self._sse_active - 1)
 
     def _load_state(self) -> None:
         """Load state from ~/.halyard/active if present."""
@@ -684,10 +701,17 @@ class HubServer:
 
             def _handle_get_state(self) -> None:
                 """v4.2: Return the current active project and timer."""
+                # v5.19/B4: the state payload leaks home-dir/project paths — auth it.
+                if not self._authorized():
+                    self._respond_error(HTTPStatus.UNAUTHORIZED, "missing or invalid token")
+                    return
                 self._respond_json(HTTPStatus.OK, hub._state_payload())
 
             def _handle_collision_check(self, params: dict[str, str]) -> None:
                 """v5.0: Check for collisions without ingesting a session."""
+                if not self._authorized():
+                    self._respond_error(HTTPStatus.UNAUTHORIZED, "missing or invalid token")
+                    return
                 remote = params.get("remote")
                 branch = params.get("branch")
                 if not remote or not branch:
@@ -730,6 +754,11 @@ class HubServer:
             def do_POST(self) -> None:
                 if not self._host_ok():
                     self._respond_error(HTTPStatus.BAD_REQUEST, "invalid Host header")
+                    return
+                if not self._csrf_ok():
+                    self._respond_error(
+                        HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "expected Content-Type application/json"
+                    )
                     return
                 path = self.path.split("?", 1)[0].rstrip("/")
 
@@ -874,6 +903,14 @@ class HubServer:
 
             def _handle_sse(self) -> None:
                 """v4.3: Handle a Server-Sent Events (SSE) connection."""
+                # v5.19/B4: auth (token via ?token= query for EventSource) +
+                # bound the number of concurrent streams.
+                if not self._authorized():
+                    self._respond_error(HTTPStatus.UNAUTHORIZED, "missing or invalid token")
+                    return
+                if not hub._sse_acquire():
+                    self._respond_error(HTTPStatus.SERVICE_UNAVAILABLE, "too many SSE connections")
+                    return
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", "text/event-stream")
                 self.send_header("Cache-Control", "no-cache")
@@ -898,6 +935,7 @@ class HubServer:
                     pass
                 finally:
                     hub._events.unsubscribe(queue)
+                    hub._sse_release()
 
             def _handle_otlp(self) -> None:
                 body = self._read_body()
@@ -911,6 +949,11 @@ class HubServer:
                     self.send_error(HTTPStatus.BAD_REQUEST, "invalid OTLP/JSON")
 
             def _handle_ingest(self) -> None:
+                # v5.19/B4: require auth — this writes attacker-chosen sessions
+                # into the exclusive ledger. (AF_UNIX peers pass via peer-cred.)
+                if not self._authorized():
+                    self._respond_error(HTTPStatus.UNAUTHORIZED, "missing or invalid token")
+                    return
                 body = self._read_body()
                 if body is None:
                     return
@@ -969,6 +1012,15 @@ class HubServer:
                 self.wfile.write(body)
 
             def _authorized(self) -> bool:
+                # v5.19/B4: an AF_UNIX peer authenticates by OS peer-credential
+                # (same-user) — no token needed. TCP can't provide peer creds,
+                # so it falls through to the bearer token.
+                conn = getattr(self, "connection", None)
+                if conn is not None and getattr(conn, "family", None) == socket.AF_UNIX:
+                    from halyard.peercred import peer_is_self
+
+                    return peer_is_self(conn)
+
                 from halyard.service import _load_or_create_token
 
                 expected = _load_or_create_token()
@@ -980,7 +1032,28 @@ class HubServer:
                         if part.startswith("halyard_token="):
                             submitted = part[len("halyard_token=") :]
                             break
+                if not submitted:
+                    # SSE EventSource cannot set request headers, so the
+                    # dashboard renders the events URL with a ?token= param.
+                    from urllib.parse import parse_qs, urlsplit
+
+                    vals = parse_qs(urlsplit(self.path).query).get("token")
+                    if vals:
+                        submitted = vals[0]
                 return bool(submitted) and hmac.compare_digest(submitted, expected)
+
+            def _csrf_ok(self) -> bool:
+                # v5.19/B4 (owner review): defeat browser cross-site CSRF /
+                # DNS-rebinding writes. A malicious page can only send a CORS
+                # "simple request" (text/plain, form-encoded, multipart) without
+                # a preflight; requiring application/json forces a preflight the
+                # hub never answers, blocking it. An explicit cross-site
+                # Sec-Fetch-Site is also rejected. Machine clients (hub_client,
+                # Copilot OTLP) send application/json and no Sec-Fetch-Site.
+                if self.headers.get("Sec-Fetch-Site", "") == "cross-site":
+                    return False
+                ctype = self.headers.get("Content-Type", "").split(";", 1)[0].strip()
+                return ctype == "application/json"
 
             def log_message(self, *args: Any) -> None:
                 pass

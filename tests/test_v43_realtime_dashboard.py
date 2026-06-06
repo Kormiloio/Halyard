@@ -110,7 +110,8 @@ def test_dashboard_renders_collisions_panel(
 def test_event_stream_delivers_emitted_event(hub) -> None:
     server, port, _ = hub
     conn = client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("GET", "/v1/events")
+    # v5.19/B4: /v1/events now requires auth (header here; the browser uses ?token=).
+    conn.request("GET", "/v1/events", headers={"X-Halyard-Token": _load_or_create_token()})
     resp = conn.getresponse()
 
     assert resp.status == 200

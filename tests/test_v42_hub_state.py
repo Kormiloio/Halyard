@@ -61,7 +61,8 @@ def _post_state_timer(
 
 def _get_state(port: int) -> dict[str, object]:
     conn = client.HTTPConnection("127.0.0.1", port)
-    conn.request("GET", "/v1/state")
+    # v5.19/B4: /v1/state now requires auth (it leaks home/project paths).
+    conn.request("GET", "/v1/state", headers={"X-Halyard-Token": _load_or_create_token()})
     resp = conn.getresponse()
     assert resp.status == 200
     return json.loads(resp.read().decode())

@@ -969,10 +969,16 @@ def _refresh_script() -> str:
     auto-update).
     """
     import json
+    from urllib.parse import urlencode
 
     from halyard.hub_client import hub_url
+    from halyard.service import _load_or_create_token
 
-    events_url = json.dumps(f"{hub_url()}/v1/events")
+    # v5.19/B4: the hub's /v1/events now requires auth, but EventSource cannot
+    # set request headers — pass the token as a query param. The dashboard page
+    # is itself auth-gated (B3), so only the legitimate user receives this URL.
+    _qs = urlencode({"token": _load_or_create_token()})
+    events_url = json.dumps(f"{hub_url()}/v1/events?{_qs}")
     return """<script>
 (function(){
   try {

@@ -12,6 +12,12 @@ import pytest
 
 from halyard.ai_log import AiSession
 from halyard.hub_server import HubServer
+from halyard.service import _load_or_create_token
+
+
+def _auth() -> dict[str, str]:
+    # v5.19/B4: /v1/ingest and /v1/collisions now require auth.
+    return {"Content-Type": "application/json", "X-Halyard-Token": _load_or_create_token()}
 
 
 @pytest.fixture()
@@ -52,7 +58,7 @@ def test_collision_detection_on_ingestion(hub, tmp_path: Path):
         "POST",
         "/v1/ingest",
         body=json.dumps({"line": s1.to_log_line()}),
-        headers={"Content-Type": "application/json"},
+        headers=_auth(),
     )
     assert conn.getresponse().status == 200
 
@@ -86,7 +92,7 @@ def test_collision_detection_on_ingestion(hub, tmp_path: Path):
         "POST",
         "/v1/ingest",
         body=json.dumps({"line": s2.to_log_line()}),
-        headers={"Content-Type": "application/json"},
+        headers=_auth(),
     )
     assert conn.getresponse().status == 200
 
@@ -122,7 +128,7 @@ def test_cli_collision_warning_ping(hub, tmp_path: Path):
         "POST",
         "/v1/ingest",
         body=json.dumps({"line": s1.to_log_line()}),
-        headers={"Content-Type": "application/json"},
+        headers=_auth(),
     )
     conn.getresponse()
 
@@ -135,7 +141,11 @@ def test_cli_collision_warning_ping(hub, tmp_path: Path):
         time.sleep(0.1)
 
     # 2. Check the collisions endpoint directly
-    conn.request("GET", "/v1/collisions?remote=kormilo/halyard&branch=feat/hub")
+    conn.request(
+        "GET",
+        "/v1/collisions?remote=kormilo/halyard&branch=feat/hub",
+        headers={"X-Halyard-Token": _load_or_create_token()},
+    )
     resp = conn.getresponse()
     assert resp.status == 200
     data = json.loads(resp.read())

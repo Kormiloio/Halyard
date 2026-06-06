@@ -87,7 +87,9 @@ def ping() -> bool:
 
 def ingest_line(line: str) -> bool:
     """Send a canonical session line to the Hub. Return True on success."""
-    response = _request("POST", "/v1/ingest", payload={"line": line})
+    # v5.19/B4: /v1/ingest now requires auth — send the token (a same-user
+    # process can read the 0o600 token file; another user cannot).
+    response = _request("POST", "/v1/ingest", payload={"line": line}, token=True)
     return response is not None and response[0] == 200
 
 
@@ -96,7 +98,7 @@ def check_collisions(remote: str, branch: str) -> list[dict[str, Any]] | None:
     from urllib.parse import urlencode
 
     query = urlencode({"remote": remote, "branch": branch})
-    response = _request("GET", f"/v1/collisions?{query}")
+    response = _request("GET", f"/v1/collisions?{query}", token=True)  # v5.19/B4
     if response is None:
         return None
     status, data = response
@@ -107,7 +109,7 @@ def check_collisions(remote: str, branch: str) -> list[dict[str, Any]] | None:
 
 
 def read_state() -> dict[str, Any] | None:
-    response = _request("GET", "/v1/state")
+    response = _request("GET", "/v1/state", token=True)  # v5.19/B4
     if response is None:
         return None
     status, data = response

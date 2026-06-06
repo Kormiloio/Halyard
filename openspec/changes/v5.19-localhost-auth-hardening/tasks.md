@@ -28,25 +28,35 @@ ingest listener.
 - [x] Unit test (tests/test_v519_peercred.py, 4 tests): AF_UNIX pair → self;
       non-unix → None; Windows-sim fails closed.
 
-## B4-auth — TCP endpoints [hub_server.py, hub_client.py]
+## B4-auth — TCP endpoints [hub_server.py, hub_client.py, dashboard.py] ✅
 
-- [ ] `_authorized()` on `/v1/ingest`, `/v1/events`, `/v1/state` (the
-      Halyard-controlled endpoints). Transport-aware: AF_UNIX → peer-cred,
-      TCP → token.
-- [ ] `/v1/traces` stays unauthenticated (loopback-only) for Copilot OTLP
-      compat; add a forged-timestamp plausibility bound instead.
-- [ ] **Browser-CSRF hardening (owner review, finding #1):** a cross-origin
-      `text/plain` POST is a CORS "simple request" — it reaches the hub with
-      no preflight, so even a plain malicious webpage (not just DNS-rebinding)
-      can forge writes. On the write endpoints, **require
-      `Content-Type: application/json`** and **reject requests carrying a
-      browser `Origin`/`Sec-Fetch-Site: cross-site`**. This also hardens the
-      deliberately-open `/v1/traces` against browser CSRF without breaking
-      Copilot (its OTLP exporter sends neither a browser Origin nor
-      text/plain). Add a hostile-origin regression test.
-- [ ] Cap concurrent SSE connections + idle timeout on `/v1/events`.
-- [ ] `hub_client.ingest_line` sends `token=True`.
-- [ ] Regression tests.
+- [x] Transport-aware `_authorized()`: AF_UNIX peer → `peer_is_self`; TCP →
+      bearer token via `X-Halyard-Token` header, `halyard_token` cookie, **or
+      `?token=` query param** (EventSource cannot set headers).
+- [x] `_authorized()` guards on `/v1/ingest`, `/v1/state`, `/v1/collisions`,
+      and `/v1/events` (`/health` stays open).
+- [x] `/v1/traces` stays unauthenticated (loopback) for Copilot OTLP compat.
+- [x] **Browser-CSRF hardening (owner finding #1):** `_csrf_ok()` requires
+      `Content-Type: application/json` on every POST (a cross-origin CORS
+      "simple request" can only be text/plain/form-encoded → blocked; JSON
+      forces a preflight the hub never answers) and rejects
+      `Sec-Fetch-Site: cross-site`. Applied in `do_POST` (covers ingest +
+      the open `/v1/traces`). Machine clients already send application/json.
+- [x] `_MAX_SSE_CONNECTIONS` cap (32) via `_sse_acquire`/`_sse_release`.
+- [x] `hub_client.ingest_line`/`read_state`/`check_collisions` send
+      `token=True`; `dashboard.py` renders the SSE URL with `?token=`.
+- [x] Updated 5 existing hub test files (v4/v41/v42/v43/v5-collision) to send
+      the token; 87 hub blast-radius tests green.
+- [ ] Forged-timestamp plausibility bound on `/v1/traces` — deferred (minor;
+      `/v1/traces` only writes telemetry, and the v5.18 cap/timeout already
+      bound impact). Tracked as a follow-up.
+
+### Regression test for the CSRF / auth surface ✅
+
+- [x] `tests/test_v519_b04_auth.py` (8 tests): unauth ingest → 401; valid
+      token → 200; text/plain → 415; `Sec-Fetch-Site: cross-site` → 415;
+      `/v1/state` unauth → 401; SSE `?token=` → 200; SSE no-token → 401;
+      `/health` stays open. Full suite incl. TUI green.
 
 ## B4-auth — AF_UNIX ingest listener (new) [hub_server.py, hub_client.py]
 

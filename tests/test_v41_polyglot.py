@@ -27,12 +27,18 @@ def hub(tmp_path: Path):
 
 
 def _post_ingest(port: int, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
+    from halyard.service import _load_or_create_token
+
     conn = client.HTTPConnection("127.0.0.1", port)
     conn.request(
         "POST",
         "/v1/ingest",
         body=json.dumps(payload),
-        headers={"Content-Type": "application/json"},
+        # v5.19/B4: /v1/ingest now requires auth.
+        headers={
+            "Content-Type": "application/json",
+            "X-Halyard-Token": _load_or_create_token(),
+        },
     )
     resp = conn.getresponse()
     body = resp.read().decode()

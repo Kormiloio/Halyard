@@ -37,9 +37,20 @@ def test_hub_ingest_direct_session(hub, tmp_path: Path):
         cost_usd=0.01,
     )
 
+    from halyard.service import _load_or_create_token
+
     conn = client.HTTPConnection("127.0.0.1", port)
     payload = json.dumps({"line": session.to_log_line()})
-    conn.request("POST", "/v1/ingest", body=payload, headers={"Content-Type": "application/json"})
+    # v5.19/B4: /v1/ingest now requires auth.
+    conn.request(
+        "POST",
+        "/v1/ingest",
+        body=payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-Halyard-Token": _load_or_create_token(),
+        },
+    )
     resp = conn.getresponse()
     assert resp.status == 200
 
