@@ -13,6 +13,7 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.11",
@@ -60,6 +61,20 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/halyard"]
+
+[tool.hatch.build.targets.sdist]
+# Without an explicit list hatchling ships the entire repo (openspec/, docs/,
+# vscode-extension/, ...). The sdist needs only what a from-source build and
+# test run require: the package, the test suite, and samples/ (asserted to
+# exist by test_v41_polyglot). pyproject.toml, README, and LICENSE are
+# auto-included by hatchling.
+include = [
+    "/src/halyard",
+    "/tests",
+    "/samples",
+    "/CHANGELOG.md",
+    "/SECURITY.md",
+]
 
 [tool.ruff]
 line-length = 100

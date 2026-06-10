@@ -5,6 +5,19 @@ name: Publish to PyPI
 #      Owner: Kormiloio  |  Repo: Halyard  |  Workflow: publish.yml  |  Environment: pypi
 #   3. On GitHub: repo Settings → Environments → create "pypi" environment.
 #   After that, pushing a v*.*.* tag publishes automatically — no API token needed.
+#
+# The publish job is a release gate, not a blind upload. A pushed tag must clear
+# the same quality bar as `main` (lint, format, types, tests, CVE audit) AND
+# three release-only invariants before anything reaches PyPI:
+#   - the git tag matches the pyproject version (no mismatched release),
+#   - the built sdist/wheel pass `twine check` (valid metadata + long desc),
+#   - the built wheel actually installs and runs in a clean venv.
+# A broken or mismatched build fails here instead of becoming a permanent,
+# unyankable bad release on PyPI.
+#
+# Action pins: all `uses:` are pinned to immutable commit SHAs (a moving tag
+# like @v4 lets the upstream owner change what runs in our id-token context).
+# The trailing comment records the human-readable version for review/renovate.
 
 on:
   push:
@@ -16,21 +29,85 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
+      # Defining job-level permissions makes every omitted permission
+      # *unavailable*, so `actions/checkout` would otherwise fail to read
+      # the repo. Keep the (recommended) minimum read scope alongside the
+      # OIDC token needed for PyPI trusted publishing.
+      contents: read
       id-token: write  # trusted publishing — no API token needed
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.12"
 
-      - name: Install build tools
-        run: python -m pip install --upgrade pip build
+      - name: Install project, dev tooling, and build backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" build twine
+
+      - name: Verify the git tag matches the pyproject version
+        # A v*.*.* tag must name the version it ships. tomllib is stdlib on
+        # 3.11+. GITHUB_REF_NAME is the tag (e.g. "v0.2.1"); strip the leading
+        # "v" and compare. A mismatch here means the tag and the artifact would
+        # disagree — fail before the artifact is built or published.
+        run: |
+          PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "pyproject version: $PKG_VERSION"
+          echo "git tag:           $GITHUB_REF_NAME (version part: $TAG_VERSION)"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match pyproject version $PKG_VERSION — refusing to publish."
+            exit 1
+          fi
+
+      - name: Lint with ruff
+        run: ruff check .
+
+      - name: Format check with ruff
+        run: ruff format --check .
+
+      - name: Type-check with mypy
+        run: mypy src
+
+      - name: Test with pytest
+        # Full suite, including the Textual pilot tests (runnable since the
+        # v5.19 tick=True freeze fix). The local quality gate that mirrors this
+        # is `uv run pytest`; CI runs it on every push to main, and the release
+        # gate re-runs it against the exact tagged tree.
+        run: pytest -q
 
       - name: Build wheel and sdist
         run: python -m build
 
+      - name: Audit dependencies for known CVEs
+        # Same gate as ci.yml: inspect the installed environment in place.
+        # --skip-editable drops the local editable halyard so pip-audit does
+        # not try to re-resolve it from a git URL (see ci.yml for the history).
+        run: pip-audit --skip-editable
+
+      - name: Audit built artifacts (metadata + long description render)
+        # twine check validates the sdist/wheel metadata and that the README
+        # renders as the PyPI long description — catches a broken upload before
+        # it becomes a permanent bad release.
+        run: twine check dist/*
+
+      - name: Verify the built wheel installs and runs in a clean venv
+        # Install the freshly built wheel into a throwaway venv outside the
+        # source tree (no editable fallback, no source on the path) and run the
+        # entry point. This is the gate that catches an un-importable build or a
+        # missing packaged data file (the v2.16 templates/ class of bug) before
+        # publish.
+        run: |
+          mkdir -p /tmp/halyard-wheel-check
+          cd /tmp/halyard-wheel-check
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install "$GITHUB_WORKSPACE"/dist/*.whl
+          .venv/bin/halyard --version
+
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1.14.0

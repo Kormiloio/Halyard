@@ -9,6 +9,11 @@ dist/
 *.egg-info/
 .eggs/
 .pytest_cache/
+# Hypothesis writes a self-ignoring .gitignore inside this dir, which git
+# honors but hatchling's sdist file selection does not — without this root
+# entry a `pytest → python -m build` sequence (publish.yml's exact order)
+# ships the local example-database cache inside the public sdist.
+.hypothesis/
 .mypy_cache/
 .ruff_cache/
 .coverage

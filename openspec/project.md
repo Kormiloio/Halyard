@@ -120,7 +120,7 @@ layers must read from this local source of truth; they do not replace it.
    in a clean venv. Gate: zero-friction first-use experience confirmed. Then
    HN / Reddit / Lobsters post.
    Pre-flight checklist (in order):
-   - [ ] Make GitHub repo public (currently private).
+   - [ ] Make GitHub repo public.
    - [ ] Configure PyPI trusted publisher: PyPI project → Settings →
      Trusted Publishers → Add (Owner: Kormiloio, Repo: Halyard,
      Workflow: publish.yml, Environment: pypi).
@@ -1410,6 +1410,23 @@ layers must read from this local source of truth; they do not replace it.
       blockers + B24/B25 fixed and gated (full suite incl. TUI green). One
       optional defense-in-depth item remains — the AF_UNIX peer-cred ingest
       listener — additive, not a launch blocker.**
+
+    - **v5.20 — CI & release-workflow hardening:** the last unhardened launch
+      surface, flagged in the owner's 2026-06-05 pre-release review and
+      scheduled during the v5.19 audit. `publish.yml` turned from a blind
+      `build → upload` into a release gate: tag-vs-`pyproject`-version check,
+      the full quality gate (ruff/format/mypy/`pytest`/`pip-audit`), `twine
+      check` on the artifact, and a clean-venv install smoke test
+      (`halyard --version`) — a broken or mismatched build now fails CI instead
+      of becoming an un-yankable PyPI release. All `uses:` across
+      `publish.yml`/`ci.yml`/`install-test.yml` pinned to immutable commit SHAs
+      (incl. `gh-action-pypi-publish` off the mutable `@release/v1` branch),
+      closing the trusted-publishing supply-chain gap. New `vscode-extension`
+      CI job (`npm ci`/compile/`vitest`/`npm audit --audit-level=high`) so the
+      TypeScript extension can no longer break or pick up a high-severity npm
+      advisory unnoticed. CI/release-process only — no application source
+      changes. Spec in `openspec/changes/v5.20-ci-release-hardening/`.
+      **Status: done; YAML valid and both new gates verified locally.**
 
 ## Deferred or gated
 
