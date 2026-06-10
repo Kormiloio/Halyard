@@ -10,7 +10,10 @@ _UNKNOWN_MODELS = {"", "default"}
 
 # A single AI turn captured by a stop hook cannot plausibly span this
 # long. Synthetic/broken payloads (e.g. a frozen session-start that
-# never advances) produce multi-day "sessions"; reject them.
+# never advances) produce multi-day "sessions"; reject them. Importers
+# share the bound: a whole-transcript row spanning days is mostly idle
+# wall-clock and corrupts duration reporting — skip it rather than
+# stretch the guard (v5.21; active-period segmentation is the real fix).
 _MAX_SESSION_SECONDS = 12 * 3600
 
 # Grace for benign clock skew / timezone slop. A session whose start is

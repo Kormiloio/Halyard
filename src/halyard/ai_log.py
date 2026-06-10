@@ -792,6 +792,7 @@ def parse_sessions(project_dir: Path, *, now: datetime | None = None) -> list[Ai
 
 _GEMINI_JOB_PREFIX = "gemini:"
 _CODEX_JOB_PREFIX = "codex:"
+_CLAUDE_JOB_PREFIX = "claude:"
 
 
 def _gemini_session_key(session: AiSession) -> str | None:
@@ -827,6 +828,23 @@ def _codex_session_key(session: AiSession) -> str | None:
     return None
 
 
+def _claude_session_key(session: AiSession) -> str | None:
+    """A stable id for a Claude Code *import* row, else None.
+
+    The v5.21 transcript importer tags rows with ``job_id=claude:<id>``; a
+    live transcript imported mid-session re-imports as it grows (codex
+    pattern), so those rows must collapse to one. Deliberately narrower than
+    the Gemini key: there is NO ``session_id`` fallback, because the Stop
+    hook's rows are per-turn deltas — collapsing them by session id would
+    destroy real turns. Only importer-tagged rows participate.
+    """
+    if session.tool != "claude-code":
+        return None
+    if session.job_id and session.job_id.startswith(_CLAUDE_JOB_PREFIX):
+        return session.job_id[len(_CLAUDE_JOB_PREFIX) :]
+    return None
+
+
 def _redundant_session_key(session: AiSession) -> str | None:
     """Namespaced collapse key spanning every tool with multi-row sessions.
 
@@ -839,6 +857,9 @@ def _redundant_session_key(session: AiSession) -> str | None:
     codex = _codex_session_key(session)
     if codex is not None:
         return f"{_CODEX_JOB_PREFIX}{codex}"
+    claude = _claude_session_key(session)
+    if claude is not None:
+        return f"{_CLAUDE_JOB_PREFIX}{claude}"
     return None
 
 

@@ -83,7 +83,20 @@ def run_gemini_import(*, dry_run: bool, all_projects: bool, quiet: bool = False)
         if cached is None:
             cached = set()
             if (target / AI_LOG_FILENAME).exists():
+                # Collect BOTH id forms, mirroring ai_log._gemini_session_key.
+                # parse_sessions collapses each gemini session to one
+                # canonical row at read time, and when hook rows exist the
+                # better-attributed hook row wins — exposing session_id, not
+                # the importer's job_id. Reading job_id alone made every
+                # hook-covered session invisible to this dedup, so each run
+                # re-imported it and collapse re-hid the evidence: an
+                # unbounded append loop on the 30-minute timer (v5.21; the
+                # repaired Halyard ledger had accumulated ~447 such rows).
                 for s in parse_sessions(target):
+                    if s.tool != "gemini-cli":
+                        continue
+                    if s.session_id:
+                        cached.add(s.session_id)
                     if s.job_id and s.job_id.startswith("gemini:"):
                         cached.add(s.job_id[len("gemini:") :])
             dedup_cache[rd] = cached
@@ -219,18 +232,62 @@ def register(app: typer.Typer) -> None:
         """Import Gemini CLI session history into ai-sessions.log."""
         run_gemini_import(dry_run=dry_run, all_projects=all_projects)
 
+    @app.command(name="import-claude")
+    def import_claude(
+        dry_run: bool = typer.Option(
+            False, "--dry-run", help="Show what would be imported without writing anything."
+        ),
+        all_projects: bool = typer.Option(
+            False,
+            "--all",
+            help="Import sessions for all Halyard projects, not just the current one.",
+        ),
+    ) -> None:
+        """Import Claude Code session history into ai-sessions.log."""
+        from halyard.ai_log import find_project_dir
+        from halyard.collectors.claude_code import import_claude_sessions
+
+        project_dir = find_project_dir()
+        if project_dir is None and not all_projects:
+            console.print(
+                "[bold red]Error:[/] No Halyard project found. "
+                "Run [bold]halyard init[/] first or use [bold]--all[/]."
+            )
+            raise typer.Exit(code=1)
+
+        sessions = import_claude_sessions(
+            project_dir=project_dir,
+            dry_run=dry_run,
+            all_projects=all_projects,
+        )
+
+        if not sessions:
+            console.print("[yellow]No new Claude Code sessions to import.[/]")
+            return
+
+        label = "[dim](dry run)[/dim] " if dry_run else ""
+        console.print(f"{label}[bold green]Imported[/] {len(sessions)} Claude Code session(s).")
+        for s in sessions:
+            proj = s.project or "(unattributed)"
+            console.print(
+                f"  {s.start:%Y-%m-%d %H:%M} → {s.end:%H:%M}  "
+                f"[cyan]{s.model}[/]  out={s.output_tokens}  "
+                f"[dim]{proj}[/dim]"
+            )
+
     @app.command(name="import-all")
     def import_all(
         dry_run: bool = typer.Option(
             False, "--dry-run", help="Show what would be imported without writing anything."
         ),
     ) -> None:
-        """Run every importer (Codex, Copilot, Gemini) across all projects.
+        """Run every importer (Codex, Copilot, Gemini, Claude) across all projects.
 
         Idempotent — already-imported sessions are skipped — so it is safe to
         run on a schedule to keep importer-based tools current.
         """
         from halyard.ai_log import find_project_dir
+        from halyard.collectors.claude_code import import_claude_sessions
         from halyard.collectors.codex_app import import_codex_sessions
         from halyard.collectors.copilot import import_copilot_sessions
 
@@ -239,12 +296,14 @@ def register(app: typer.Typer) -> None:
         copilot = import_copilot_sessions(
             project_dir=project_dir, dry_run=dry_run, all_projects=True
         )
+        claude = import_claude_sessions(project_dir=project_dir, dry_run=dry_run, all_projects=True)
         gemini_n = run_gemini_import(dry_run=dry_run, all_projects=True, quiet=True)
 
         label = "(dry run) " if dry_run else ""
         console.print(
             f"[bold green]{label}import-all:[/] "
-            f"Codex {len(codex)}, Copilot {len(copilot)}, Gemini {gemini_n} session(s)."
+            f"Codex {len(codex)}, Copilot {len(copilot)}, Gemini {gemini_n}, "
+            f"Claude {len(claude)} session(s)."
         )
 
     @app.command(name="install-import-timer")

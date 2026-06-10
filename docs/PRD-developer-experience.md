@@ -3,7 +3,7 @@
 **Status:** Historical wave, partially implemented
 **Covers:** v0.1 (log + invoice), v0.2/v0.3 (`halyard log` agents),
 v2.4 (data integrity), v4 (TUI)
-**Last meaningful update:** May 2026
+**Last meaningful update:** June 2026
 **Current direction:** See [`current-direction.md`](current-direction.md).
 
 This document records the developer-experience wave that closed early product

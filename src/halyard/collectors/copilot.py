@@ -154,14 +154,24 @@ def _apply_patch(state: dict[str, Any], key_path: list[Any], value: Any) -> None
 
     VS Code chat sessions are an incremental log: a kind-0 snapshot followed by
     kind-1/kind-2 events that each set a value at a nested key path (e.g.
-    ``["requests", 0, "response"]``). A path that doesn't resolve (an update for
-    an index/key not yet present) is skipped rather than raising.
+    ``["requests", 0, "response"]``).
     """
     cur: Any = state
     try:
         for key in key_path[:-1]:
+            if isinstance(key, int) and isinstance(cur, list):
+                # Grow the list so a patch targeting an index beyond the
+                # kind-0 snapshot (a request added after the snapshot was
+                # taken) materialises instead of being dropped (v5.21).
+                while len(cur) <= key:
+                    cur.append({})
             cur = cur[key]
-        cur[key_path[-1]] = value
+
+        last_key = key_path[-1]
+        if isinstance(last_key, int) and isinstance(cur, list):
+            while len(cur) <= last_key:
+                cur.append({})
+        cur[last_key] = value
     except (KeyError, IndexError, TypeError):
         return
 
@@ -179,6 +189,10 @@ def parse_chat_session(path: Path) -> AiSession | None:
     content is ever read.
     """
     state: dict[str, Any] = {}
+    # Track response parts per request index to handle incremental patches
+    # that would otherwise overwrite previous parts in the reconstructed state.
+    all_response_parts: dict[int, list[dict[str, Any]]] = {}
+
     try:
         if path.stat().st_size > 50 * 1024 * 1024:  # 50MB safety cap
             return None
@@ -195,7 +209,23 @@ def parse_chat_session(path: Path) -> AiSession | None:
                 if kind == 0 and isinstance(event.get("v"), dict):
                     state = event["v"]
                 elif kind in (1, 2) and isinstance(event.get("k"), list):
-                    _apply_patch(state, event["k"], event.get("v"))
+                    key_path = event["k"]
+                    val = event.get("v")
+                    _apply_patch(state, key_path, val)
+
+                    # Evidence aggregation: if this is a response patch,
+                    # keep it even if a later patch overwrites it in 'state'.
+                    if (
+                        len(key_path) == 3
+                        and key_path[0] == "requests"
+                        and isinstance(key_path[1], int)
+                        and key_path[2] == "response"
+                        and isinstance(val, list)
+                    ):
+                        parts = all_response_parts.setdefault(key_path[1], [])
+                        for part in val:
+                            if isinstance(part, dict) and part not in parts:
+                                parts.append(part)
     except OSError:
         return None
 
@@ -213,7 +243,13 @@ def parse_chat_session(path: Path) -> AiSession | None:
         start_dt = _safe_fromtimestamp_ms(created)
 
     requests = state.get("requests")
-    for req in requests if isinstance(requests, list) else []:
+    req_list = requests if isinstance(requests, list) else []
+
+    # Every patched request index already exists in req_list: _apply_patch
+    # grows the list on out-of-bounds indices. Iterating beyond it (an
+    # earlier revision padded missing indices with ``{}``) only fabricates
+    # phantom user turns — never do that.
+    for i, req in enumerate(req_list):
         if not isinstance(req, dict):
             continue
         user_count += 1
@@ -229,7 +265,11 @@ def parse_chat_session(path: Path) -> AiSession | None:
         ct = req.get("completionTokens")
         if isinstance(ct, (int, float)):
             output_tokens += int(ct)
-        response = req.get("response")
+
+        # Prefer the aggregated response parts: VS Code emits the model
+        # output as successive ["requests", N, "response"] patches and a
+        # later patch overwrites earlier parts in the reconstructed state.
+        response = all_response_parts.get(i) or req.get("response")
         if isinstance(response, list):
             for part in response:
                 if not isinstance(part, dict):

@@ -120,6 +120,296 @@ def record_session_start() -> int:
     return 0
 
 
+_IMPORTED_STATE_FILE = Path.home() / ".halyard" / "claude-imported"
+_CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
+
+
+def import_claude_sessions(
+    project_dir: Path | None = None,
+    *,
+    dry_run: bool = False,
+    all_projects: bool = False,
+) -> list[AiSession]:
+    """Import Claude Code sessions the Stop hook never recorded.
+
+    Walks every transcript under ``~/.claude/projects``. Attribution comes
+    from the ``cwd`` recorded inside the transcript — never from the storage
+    folder name, which encodes ``/``, ``.``, and ``-`` all as ``-`` and is
+    therefore not invertible (v5.21). A session with any hook row already in
+    the target ledger is skipped: hook rows are per-turn deltas, and a whole
+    -transcript row on top would double-count every turn (the hook's own
+    watermark catch-up heals intra-session gaps). Dedup state follows the
+    codex v5.2 pattern (``id→size``) so a live, still-growing transcript is
+    re-imported; re-imported rows carry ``job_id=claude:<id>`` and collapse
+    to one at read time (``ai_log._claude_session_key``). Tracked projects
+    only: a transcript whose cwd resolves to no initialised project is
+    skipped — there is deliberately no hub fallback (the transcript corpus
+    is dominated by headless/observer sessions that would swamp the hub
+    ledger with unattributed rows). ``all_projects=True`` is sweep mode:
+    per-transcript resolution requiring an inferable project slug, and it
+    wins over ``project_dir`` (import-all passes both). ``project_dir``
+    alone is an explicit run: only transcripts resolving to that project,
+    no slug requirement.
+    """
+    projects_root = _CLAUDE_PROJECTS_DIR
+    if not projects_root.exists():
+        return []
+
+    already_imported = _load_imported_state()
+    hook_covered: dict[Path, tuple[set[str], list[tuple[datetime, datetime]]]] = {}
+
+    imported: list[AiSession] = []
+    newly_imported: dict[str, int] = {}
+
+    transcript_files = sorted(projects_root.glob("*/*.jsonl"))
+    for path in transcript_files:
+        file_id = path.stem
+        current_size = _transcript_size(path)
+        if file_id in already_imported:
+            prior_size = already_imported[file_id]
+            if prior_size is not None and prior_size == current_size:
+                continue
+
+        # v5.16/B08: one malformed transcript must skip-and-continue, never
+        # abort the batch and silently drop every later session.
+        try:
+            parsed = _parse_claude_transcript(path)
+        except (OSError, ValueError, TypeError, OverflowError):
+            continue
+        if parsed is None:
+            continue
+        session, cwd = parsed
+
+        # Resolve the target ledger from the transcript's own cwd. Tracked
+        # projects only (owner decision, 2026-06-10): the corpus is dominated
+        # by headless/observer transcripts with no resolvable project —
+        # routing those to the hub (the codex fallback) would make the hub
+        # ledger ~90% unattributed noise. A transcript that resolves to no
+        # initialised project is skipped, not guessed at.
+        #
+        # Two modes, and ``all_projects`` (sweep) deliberately wins over
+        # ``project_dir``: import-all passes both, and treating that as
+        # explicit mode would absorb every transcript on the machine into
+        # the current project's ledger.
+        resolved = find_project_dir(start=Path(cwd)) if cwd is not None else None
+        if project_dir is not None and not all_projects:
+            # Explicit single-project run: only transcripts that resolve
+            # here (the copilot semantic — filter, don't absorb).
+            if resolved is None or not _same_dir(resolved, project_dir):
+                continue
+            target_dir = project_dir
+        else:
+            if resolved is None:
+                continue
+            target_dir = resolved
+        if not (target_dir / AI_LOG_FILENAME).exists():
+            continue  # project not initialised
+
+        # Sessions the ledger already accounts for belong to their original
+        # writer. Two layers: a precise session-id match (modern hook rows
+        # tag session_id=<id>), then a time-window overlap check for the
+        # legacy era whose hook rows carry neither session_id nor source.
+        # Double-counting a hooked session is worse than missing a parallel
+        # one that overlaps it, so overlap errs toward skipping.
+        coverage = hook_covered.get(target_dir)
+        if coverage is None:
+            coverage = _existing_coverage(target_dir)
+            hook_covered[target_dir] = coverage
+        covered_ids, covered_windows = coverage
+        if session.session_id in covered_ids:
+            continue
+        if any(
+            session.start < w_end and session.end > w_start for w_start, w_end in covered_windows
+        ):
+            continue
+
+        if (
+            not session_has_evidence(session)
+            or session_is_implausible(session)
+            or session_is_synthetic_telemetry(session)
+        ):
+            continue
+
+        # Enrich attribution and outcome context from the historical cwd.
+        if cwd is not None:
+            cwd_path = Path(cwd)
+            if session.project is None:
+                project, rung = infer_project_with_source(cwd_path)
+                session.project = project
+                session.attr_method = rung
+                if project:
+                    session.tags = ["attribution:inferred"]
+            session.commit_count = commits_in_window(cwd_path, session.start, session.end)
+            session.outcome_data_available = (
+                session.branch is not None or session.commit_count is not None
+            )
+
+        # Sweep mode requires positive attribution. A catch-all project root
+        # (e.g. an initialised home directory) resolves a target for nearly
+        # every headless transcript, but no slug is inferable — appending
+        # those rows is unattributed noise at corpus scale. An explicit
+        # ``project_dir`` run is user-directed and exempt. The id stays out
+        # of the state file so initialising the project later backfills it.
+        sweep = project_dir is None or all_projects
+        if sweep and session.project is None:
+            continue
+
+        if not dry_run:
+            append_session(target_dir, session)
+
+        imported.append(session)
+        newly_imported[file_id] = current_size
+
+    if not dry_run and newly_imported:
+        # Prune ids whose transcript no longer exists (rotated away — can
+        # never re-import); carry forward sizes for unchanged sessions.
+        present_ids = {p.stem for p in transcript_files}
+        updated: dict[str, int | None] = {
+            sid: size for sid, size in already_imported.items() if sid in present_ids
+        }
+        updated.update(newly_imported)
+        _save_imported_state(updated)
+
+    return imported
+
+
+def _parse_claude_transcript(path: Path) -> tuple[AiSession, str | None] | None:
+    """Parse one transcript into a whole-session import row, or None to skip.
+
+    Timestamps come from the transcript events (already UTC→local-naive via
+    ``_transcript_ts``, ADR-0001); a transcript with no timestamped turns or
+    no assistant activity is skipped rather than guessed at from mtime.
+    """
+    stats = _read_from_transcript(str(path))
+    if stats.start_dt is None or stats.end_dt is None or not stats.assistant_count:
+        return None
+
+    session_id = stats.session_id or path.stem
+
+    # Costing matches handle_stop_hook: per-model breakdown when the session
+    # spans models; cache tokens priced in either way.
+    model = stats.model or "claude-unknown"
+    breakdown = stats.model_breakdown
+    if breakdown and stats.primary_model:
+        model = stats.primary_model
+    cost: float | None = _breakdown_cost(breakdown) if breakdown else None
+    if cost is None:
+        cost = calculate_cost(
+            model, stats.input_tokens, stats.output_tokens, stats.cache_read, stats.cache_write
+        )
+
+    session = AiSession(
+        start=stats.start_dt,
+        end=stats.end_dt,
+        tool="claude-code",
+        model=model,
+        input_tokens=stats.input_tokens,
+        output_tokens=stats.output_tokens,
+        cost_usd=cost,
+        cache_read=stats.cache_read or None,
+        cache_write=stats.cache_write or None,
+        tokens_available=stats.input_tokens > 0 or stats.output_tokens > 0,
+        source="import",
+        branch=stats.branch,
+        session_id=session_id,
+        job_id=f"claude:{session_id}",
+        user_message_count=stats.user_count,
+        tool_calls=stats.tool_calls,
+        tool_errors=stats.tool_errors,
+        rejected_suggestion_count=stats.rejected_suggestion_count,
+        mcp_servers_used=stats.mcp_servers_used,
+        mcp_server_names=stats.mcp_server_names,
+        wall_seconds=stats.wall_seconds,
+        model_breakdown=breakdown,
+        interaction_count=stats.interaction_count,
+        assistant_message_count=stats.assistant_count,
+        interaction_data_available=True,
+        telemetry_source="claude-code-transcript",
+        telemetry_trust="observed",
+    )
+    return session, stats.cwd
+
+
+def _existing_coverage(target_dir: Path) -> tuple[set[str], list[tuple[datetime, datetime]]]:
+    """What the target ledger already records for claude-code sessions.
+
+    Returns (session ids, time windows) of every claude-code row that was
+    NOT written by this importer (``job_id=claude:<id>`` rows are excluded —
+    otherwise a grown live transcript could never re-import past its own
+    earlier row). Ids give a precise skip for modern rows; windows cover the
+    legacy era whose hook rows carry neither ``session_id`` nor ``source``.
+    Mirrors ``copilot._otel_captured_ids``: read the ledger once per target;
+    failures yield empty coverage so the importer degrades to the state-file
+    fast path rather than aborting the batch.
+    """
+    if not (target_dir / AI_LOG_FILENAME).exists():
+        return set(), []
+    try:
+        sessions = parse_sessions(target_dir)
+    except (OSError, ValueError):
+        return set(), []
+    ids: set[str] = set()
+    windows: list[tuple[datetime, datetime]] = []
+    for s in sessions:
+        if s.tool != "claude-code":
+            continue
+        if s.job_id and s.job_id.startswith("claude:"):
+            continue
+        if s.session_id:
+            ids.add(s.session_id)
+        windows.append((s.start, s.end))
+    return ids, windows
+
+
+def _load_imported_state() -> dict[str, int | None]:
+    """Map each imported transcript id to the file size recorded at import.
+
+    Codex v5.2 format: ``"<id>\\t<size>"`` per line. Legacy bare-id lines
+    parse to None, which forces a one-time re-check.
+    """
+    if not _IMPORTED_STATE_FILE.exists():
+        return {}
+    try:
+        text = _IMPORTED_STATE_FILE.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    state: dict[str, int | None] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        sid, _, size_str = line.partition("\t")
+        sid = sid.strip()
+        if not sid:
+            continue
+        try:
+            state[sid] = int(size_str) if size_str else None
+        except ValueError:
+            state[sid] = None
+    return state
+
+
+def _save_imported_state(state: dict[str, int | None]) -> None:
+    _IMPORTED_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"{sid}\t{size}" if size is not None else sid for sid, size in sorted(state.items())]
+    _IMPORTED_STATE_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _transcript_size(path: Path) -> int:
+    """Current byte size of ``path``, or -1 if it can't be stat'd."""
+    try:
+        return path.stat().st_size
+    except OSError:
+        return -1
+
+
+def _same_dir(p1: Path, p2: Path) -> bool:
+    try:
+        return p1.resolve() == p2.resolve()
+    except (OSError, ValueError):
+        return p1 == p2
+
+
 def handle_stop_hook() -> int:
     """Called by Stop hook. Reads JSON payload from stdin, writes session record."""
     payload = _read_payload()
@@ -472,6 +762,12 @@ class _TranscriptStats:
     mcp_servers_used: int | None = None
     mcp_server_names: str | None = None
     session_id: str | None = None
+    start_dt: datetime | None = None
+    end_dt: datetime | None = None
+    # Working directory recorded in the transcript events — the only
+    # trustworthy attribution source for imports (the storage folder name
+    # is a lossy path encoding; see import_claude_sessions, v5.21).
+    cwd: str | None = None
     wall_seconds: int | None = None
     # model -> [input, output, cache_read, cache_write] (v2.61 usage form)
     model_usage: dict[str, list[int]] = field(default_factory=dict)
@@ -562,6 +858,11 @@ def _read_from_transcript(
                     if sid:
                         stats.session_id = str(sid)
 
+                if stats.cwd is None:
+                    raw_cwd = obj.get("cwd")
+                    if isinstance(raw_cwd, str) and raw_cwd:
+                        stats.cwd = raw_cwd
+
                 if ts is not None:
                     if first_ts is None or ts < first_ts:
                         first_ts = ts
@@ -631,6 +932,8 @@ def _read_from_transcript(
             stats.rejected_suggestion_count = rejections
             stats.interaction_count = stats.assistant_count + user_count
             stats.mcp_servers_used, stats.mcp_server_names = reduce_mcp(mcp_servers)
+            stats.start_dt = first_ts
+            stats.end_dt = last_ts
             if first_ts is not None and last_ts is not None and last_ts >= first_ts:
                 stats.wall_seconds = int((last_ts - first_ts).total_seconds())
         return stats

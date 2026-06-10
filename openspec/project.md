@@ -21,7 +21,7 @@ additive and gated on design-partner pull plus security readiness.
 The individual experience is the entry point. The enterprise layer is
 optional, additive, and built on the same open data format.
 
-**Strategic posture (May 2026):** OSS-first, trust-first. The product is
+**Strategic posture (June 2026):** OSS-first, trust-first. The product is
 launching to developer communities (HN, Reddit, Lobsters) before any
 commercial motion. Users and community trust come before paid tiers. No
 proposal should introduce paid-tier language, upsell surfaces, or
@@ -109,7 +109,7 @@ are reserved exclusively for user-driven interactive triage
 (`halyard adopt` command).  Cloud sync and enterprise
 layers must read from this local source of truth; they do not replace it.
 
-## Active focus (May 2026)
+## Active focus (June 2026)
 
 **Current sequence — do not reorder without explicit justification:**
 
@@ -1412,21 +1412,48 @@ layers must read from this local source of truth; they do not replace it.
       listener — additive, not a launch blocker.**
 
     - **v5.20 — CI & release-workflow hardening:** the last unhardened launch
-      surface, flagged in the owner's 2026-06-05 pre-release review and
-      scheduled during the v5.19 audit. `publish.yml` turned from a blind
-      `build → upload` into a release gate: tag-vs-`pyproject`-version check,
-      the full quality gate (ruff/format/mypy/`pytest`/`pip-audit`), `twine
-      check` on the artifact, and a clean-venv install smoke test
-      (`halyard --version`) — a broken or mismatched build now fails CI instead
-      of becoming an un-yankable PyPI release. All `uses:` across
-      `publish.yml`/`ci.yml`/`install-test.yml` pinned to immutable commit SHAs
-      (incl. `gh-action-pypi-publish` off the mutable `@release/v1` branch),
-      closing the trusted-publishing supply-chain gap. New `vscode-extension`
-      CI job (`npm ci`/compile/`vitest`/`npm audit --audit-level=high`) so the
-      TypeScript extension can no longer break or pick up a high-severity npm
-      advisory unnoticed. CI/release-process only — no application source
-      changes. Spec in `openspec/changes/v5.20-ci-release-hardening/`.
-      **Status: done; YAML valid and both new gates verified locally.**
+       surface, flagged in the owner's 2026-06-05 pre-release review and
+       scheduled during the v5.19 audit. `publish.yml` turned from a blind
+       `build → upload` into a release gate: tag-vs-`pyproject`-version check,
+       the full quality gate (ruff/format/mypy/`pytest`/`pip-audit`), `twine
+       check` on the artifact, and a clean-venv install smoke test
+       (`halyard --version`) — a broken or mismatched build now fails CI instead
+       of becoming an un-yankable PyPI release. All `uses:` across
+       `publish.yml`/`ci.yml`/`install-test.yml` pinned to immutable commit SHAs
+       (incl. `gh-action-pypi-publish` off the mutable `@release/v1` branch),
+       closing the trusted-publishing supply-chain gap. New `vscode-extension`
+       CI job (`npm ci`/compile/`vitest`/`npm audit --audit-level=high`) so the
+       TypeScript extension can no longer break or pick up a high-severity npm
+       advisory unnoticed. CI/release-process only — no application source
+       changes. Spec in `openspec/changes/v5.20-ci-release-hardening/`.
+       **Status: done; YAML valid and both new gates verified locally.**
+
+    - **v5.21 — Transcript importer hardening:** salvage and correction of an
+      unsupervised agent session's work (2026-06-10). Keeps the two wanted
+      capabilities — a `halyard import-claude` bulk backfill for sessions the
+      Stop hook missed, and Copilot incremental-patch aggregation — and fixes
+      the five defects they shipped with: lossy folder-name path decoding
+      (1,841 sessions misattributed to the home ledger) replaced by
+      transcript-`cwd` attribution; the global plausibility guard restored to
+      12h (had been bumped to 7 days to make suspicious data pass, and is now
+      pinned by a test); ledger-aware dedup so hook-recorded sessions are
+      never re-imported as double-counting whole-transcript rows; codex-style
+      `id→size` state (only actually-imported ids recorded, growing live
+      transcripts re-import and collapse via `job_id=claude:<id>`); and the
+      Copilot phantom-request loop removed. Also fixed during verification:
+      the gemini importer's dedup (it read only `job_id` rows, but read-time
+      collapse canonicalises hook-covered sessions to the hook row — the
+      actual engine of the timer's duplicate factory), a coverage overlap
+      layer for legacy hook rows without session ids, and sweep mode
+      requiring positive slug attribution (owner decision: tracked projects
+      only — 1,648 of 1,656 backfill candidates were headless/observer
+      noise; the 8 attributable sessions, $8.59, were backfilled). One-time ledger repair performed
+      with the hub paused: 1,888 misattributed import rows and ~415
+      timer-duplicated rows removed across three ledgers (backups taken),
+      poisoned import state reset, the 30-minute `import-all` launchd timer
+      booted out during repair and re-enabled only after all gates passed.
+      Spec in `openspec/changes/v5.21-transcript-importer-hardening/`.
+      **Status: done; 1753 tests passing.**
 
 ## Deferred or gated
 

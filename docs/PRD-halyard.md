@@ -464,7 +464,7 @@ adding POSIX/macOS classifiers and a platform note to the README install section
 
 ## Open Questions and Next Bets
 
-These are the open questions as of May 2026 — not committed roadmap, but the
+These are the open questions as of June 2026 — not committed roadmap, but the
 decisions that shape the current work.
 
 **OSS community launch.** The gate is `pipx install halyard && halyard init`
