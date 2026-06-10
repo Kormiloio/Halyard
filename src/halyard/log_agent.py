@@ -701,8 +701,17 @@ def _filter_sessions(sessions: list[AiSession], filters: LogQueryFilters) -> lis
         model = filters.model.lower()
         result = [session for session in result if model in session.model.lower()]
     if filters.branch:
+        # v5.19/B-log-agent-branch: prefer the first-class `AiSession.branch`
+        # field; fall back to the legacy `branch:<x>` tag for ledger lines
+        # written before that column existed. Filtering only on the retired
+        # tag dropped every modern session — the field is populated by all
+        # collectors today, but the tag is not.
         branch_tag = f"branch:{filters.branch}"
-        result = [session for session in result if branch_tag in session.tags]
+        result = [
+            session
+            for session in result
+            if session.branch == filters.branch or branch_tag in session.tags
+        ]
     return result
 
 

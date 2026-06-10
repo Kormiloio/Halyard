@@ -77,6 +77,19 @@ _TELEMETRY_TRUST = "observed"
 # OTLP status code for an errored span (STATUS_CODE_ERROR).
 _STATUS_ERROR = 2
 
+# v5.19/B-followup: per-accumulator caps that bound memory growth from a
+# single (token-less) ingest path. The session-count cap in hub_server.py
+# only bounds the *number* of accumulators; without these a single accumulator
+# can grow without bound:
+#  * unbounded session_id length (a 1 MB session id is accepted today)
+#  * unbounded model_counts cardinality (any model string OTLP carries is
+#    folded into the dict)
+# A real editor has session ids of <100 chars and ≤10 distinct models, so
+# these ceilings are comfortably above legitimate use.
+_MAX_SESSION_ID_LEN = 256
+_MAX_MODEL_NAME_LEN = 128
+_MAX_MODELS_PER_SESSION = 32
+
 
 # ── OTLP/JSON value decoding ───────────────────────────────────────────
 
@@ -208,6 +221,11 @@ def _ingest_span(
     sid = _first_attr(attrs, _SESSION_ID_KEYS) or resource_sid
     if not isinstance(sid, str) or not sid:
         return  # cannot attribute a span with no session id
+    # v5.19/B-followup: bound session-id length. An attacker on a shared host
+    # (or a buggy emitter) could otherwise grow accumulator memory by sending
+    # multi-megabyte session ids. A real session id is a short opaque token.
+    if len(sid) > _MAX_SESSION_ID_LEN:
+        return
 
     start = _unix_nano_to_dt(span.get("startTimeUnixNano"))
     end = _unix_nano_to_dt(span.get("endTimeUnixNano"))
@@ -243,7 +261,16 @@ def _ingest_span(
         acc.tokens_seen = True
 
     model = _first_attr(attrs, _MODEL_KEYS)
-    if isinstance(model, str) and model:
+    # v5.19/B-followup: cap per-session model cardinality so an emitter sending
+    # unique model strings (`m-0`, `m-1`, …) cannot grow the dict without
+    # bound. Bump the count of an already-tracked model in any case; only
+    # refuse to add new entries once the ceiling is reached.
+    if (
+        isinstance(model, str)
+        and model
+        and len(model) <= _MAX_MODEL_NAME_LEN
+        and (model in acc.model_counts or len(acc.model_counts) < _MAX_MODELS_PER_SESSION)
+    ):
         acc.model_counts[model] = acc.model_counts.get(model, 0) + 1
 
     if kind == "tool":

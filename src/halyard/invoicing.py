@@ -280,6 +280,7 @@ def render_ai_evidence_appendix(
     *,
     ledger_year: int | None = None,
     ledger_month: int | None = None,
+    aggregate_months: bool = False,
 ) -> str:
     """Render a markdown AI usage evidence appendix for an invoice.
 
@@ -287,23 +288,34 @@ def render_ai_evidence_appendix(
 
     ``ledger_year``/``ledger_month`` pin the ledger period when the caller
     selected sessions by an invoice period; pass both or neither.
+
+    ``aggregate_months`` runs one ledger per (year, month) covered by
+    ``sessions`` and sums — used by the all-time evidence path so a
+    multi-month subscription is charged per month, not collapsed to one.
     """
     if not sessions:
         return "\n\n---\n\n## AI Usage Evidence\n\nNo AI sessions recorded for this period.\n"
 
-    from halyard.ledger import build_ledger
+    from halyard.ledger import build_aggregated_ledger, build_ledger
 
-    # v5.17/B16: derive the ledger month from the invoice PERIOD when the caller
-    # supplies it, not from min(s.start). Sessions are selected by `end`
-    # (half-open period_start<=end<period_end), so a session that begins on the
-    # last day of the prior month but ends in this one would otherwise run the
-    # ledger for the wrong month (mis-labelled period, wrong AiPlan.is_active_in).
-    if ledger_year is not None and ledger_month is not None:
-        year, month = ledger_year, ledger_month
+    if aggregate_months:
+        # v5.19/B-evidence: a $100/month subscription with sessions in two
+        # months must report $200, not $100. The single-month build_ledger
+        # call would otherwise allocate only the earliest month's cost.
+        summary = build_aggregated_ledger(sessions, plans, tc_entries, period_label=period_label)
     else:
-        period_start = min(s.start for s in sessions)
-        year, month = period_start.year, period_start.month
-    summary = build_ledger(sessions, plans, tc_entries, year=year, month=month)
+        # v5.17/B16: derive the ledger month from the invoice PERIOD when the
+        # caller supplies it, not from min(s.start). Sessions are selected by
+        # `end` (half-open period_start<=end<period_end), so a session that
+        # begins on the last day of the prior month but ends in this one would
+        # otherwise run the ledger for the wrong month (mis-labelled period,
+        # wrong AiPlan.is_active_in).
+        if ledger_year is not None and ledger_month is not None:
+            year, month = ledger_year, ledger_month
+        else:
+            period_start = min(s.start for s in sessions)
+            year, month = period_start.year, period_start.month
+        summary = build_ledger(sessions, plans, tc_entries, year=year, month=month)
 
     tools = sorted({s.tool for s in sessions})
     models = sorted({s.model for s in sessions})

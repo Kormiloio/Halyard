@@ -112,9 +112,20 @@ def _spend(now: datetime, sessions: list[AiSession]) -> SpendStatus:
     month = sum_spend(sessions, period_start=month_start, period_end=now)
     in_month = [s for s in sessions if month_start <= s.end < now]
     rep = summarize_ai_sessions(in_month, period_label="month")
+    # v5.19/B-status-client: `by_project` is keyed by the full slug
+    # ``client:project`` (e.g. ``acme:web``, ``acme:api``), so feeding it
+    # straight into ``by_client`` listed sibling projects as separate
+    # "clients". Roll up to the client prefix before sorting/truncating, so
+    # ``acme:web`` and ``acme:api`` are reported under one ``acme`` bucket
+    # and the top-N truncation isn't dominated by one heavy client's
+    # internal projects.
+    client_totals: dict[str, float] = {}
+    for bucket in rep.by_project:
+        client = bucket.label.split(":", 1)[0] if ":" in bucket.label else bucket.label
+        client_totals[client] = client_totals.get(client, 0.0) + bucket.cost_usd
     by_client = [
-        ClientSpend(slug=b.label, month_usd=round(b.cost_usd, 4))
-        for b in sorted(rep.by_project, key=lambda b: -b.cost_usd)[:_TOP_CLIENTS]
+        ClientSpend(slug=client, month_usd=round(total, 4))
+        for client, total in sorted(client_totals.items(), key=lambda kv: -kv[1])[:_TOP_CLIENTS]
     ]
     return SpendStatus(today_usd=today, month_usd=month, by_client=by_client)
 

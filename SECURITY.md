@@ -25,7 +25,7 @@ will follow up off-list.
 A useful report typically has:
 
 - The Halyard version (`halyard --version`) and Python version.
-- The platform (macOS / Linux distro).
+- The platform (macOS / Linux distro / Windows).
 - A minimal reproduction — config files, environment, steps.
 - The expected vs. observed behavior.
 - The privacy / integrity / availability impact you see (e.g. "this lets

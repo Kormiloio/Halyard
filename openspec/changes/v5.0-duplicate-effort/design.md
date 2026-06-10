@@ -4,7 +4,7 @@
 A new utility module `halyard.collisions` will handle the overlap logic.
 ```python
 def find_collisions(session: AiSession, history: list[AiSession]) -> list[AiSession]:
-    # Logic to find sessions with matching (remote, branch) 
+    # Logic to find sessions with matching (remote, branch)
     # that overlap in time with [session.start, session.end]
 ```
 

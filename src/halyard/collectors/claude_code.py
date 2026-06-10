@@ -21,6 +21,7 @@ from typing import Any
 from halyard.ai_log import (
     AI_LOG_FILENAME,
     AiSession,
+    _log_error,
     append_session,
     find_project_dir,
     maybe_emit_milestones,
@@ -104,8 +105,8 @@ def record_session_start() -> int:
         if at_project_dir and (at_project_dir / "time.timeclock").exists():
             at_project = read_active_project() or infer_project(cwd) or "unattributed"
             auto_timer_activity(at_project, at_project_dir / "time.timeclock")
-    except Exception:  # auto-timer must never crash a hook
-        pass
+    except Exception as exc:  # auto-timer must never crash a hook
+        _log_error("auto-timer failed in record_session_start", exc)
 
     # Late-night easter egg — fires once per session start between midnight and 5am
     try:
@@ -113,8 +114,8 @@ def record_session_start() -> int:
 
         if is_late_night():
             print(f"[halyard] {late_night_message()}", file=sys.stderr)
-    except Exception:  # easter eggs must never crash a hook
-        pass
+    except Exception as exc:  # easter eggs must never crash a hook
+        _log_error("late-night easter egg failed in record_session_start", exc)
 
     return 0
 
@@ -319,8 +320,8 @@ def handle_stop_hook() -> int:
         from halyard.auto_timer import auto_timer_update_activity
 
         auto_timer_update_activity()
-    except Exception:  # auto-timer must never crash a hook
-        pass
+    except Exception as exc:  # auto-timer must never crash a hook
+        _log_error("auto-timer update failed in handle_stop_hook", exc)
 
     maybe_show_dashboard_hint()
     return 0
@@ -353,7 +354,8 @@ def _last_recorded_end(project_dir: Path, session_id: str) -> datetime | None:
             for s in parse_sessions(project_dir)
             if s.tool == "claude-code" and s.session_id == session_id
         ]
-    except Exception:
+    except Exception as exc:
+        _log_error("last recorded end lookup failed in _last_recorded_end", exc)
         return None
     return max(ends) if ends else None
 

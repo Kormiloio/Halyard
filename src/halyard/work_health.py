@@ -103,7 +103,15 @@ def detect_high_spend_low_delta(sessions: list[AiSession]) -> HealthSignal:
 
 
 def _day_key(s: AiSession) -> tuple[str, str, str]:
-    branch = next((t.removeprefix("branch:") for t in s.tags if t.startswith("branch:")), "")
+    # v5.19/B-health-branch: prefer the first-class `branch` field. Reading
+    # only the legacy `branch:` tag falsely flagged three sessions on three
+    # distinct modern branches as the "same" key (all empty), so unrelated
+    # work was reported as "repeated attempts". The legacy tag is the
+    # fallback for ledger lines written before AiSession.branch existed.
+    branch = s.branch or next(
+        (t.removeprefix("branch:") for t in s.tags if t.startswith("branch:")),
+        "",
+    )
     return (s.project or "", branch, s.start.strftime("%Y-%m-%d"))
 
 

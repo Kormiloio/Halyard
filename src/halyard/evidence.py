@@ -75,7 +75,22 @@ def build_evidence_artifact(
     )
     plans = read_ai_plans(project_dir)
     tc_entries = parse_timeclock(project_dir / "time.timeclock")
-    body = render_ai_evidence_appendix(report.sessions, plans, tc_entries, report.period_label)
+    body = render_ai_evidence_appendix(
+        report.sessions,
+        plans,
+        tc_entries,
+        report.period_label,
+        # v5.19/B-evidence: all-time evidence sums per-month subscription
+        # allocations; a single-month ledger call collapses N months to one.
+        aggregate_months=all_time,
+        # v5.19/B-evidence-month: when the caller requested a specific month
+        # (either explicit `--month` or the current month via `now`), pin the
+        # ledger to THAT month. Otherwise `render_ai_evidence_appendix` falls
+        # back to `min(s.start)`, which for a session ending May 1 (starting
+        # Apr 30) bills against April and silently zeroes out the May plan.
+        ledger_year=None if all_time else period.year,
+        ledger_month=None if all_time else period.month,
+    )
     return assemble_artifact(body)
 
 
@@ -98,7 +113,7 @@ def build_evidence_data(
     from collections import defaultdict
 
     from halyard.ai_plans import read_ai_plans
-    from halyard.ledger import build_ledger
+    from halyard.ledger import build_aggregated_ledger, build_ledger
     from halyard.reports import build_filtered_ai_report, parse_timeclock
 
     clock = now or datetime.now()
@@ -137,14 +152,26 @@ def build_evidence_data(
     }
 
     if sessions:
-        ps = min(s.start for s in sessions)
-        summary = build_ledger(
-            sessions,
-            read_ai_plans(project_dir),
-            parse_timeclock(project_dir / "time.timeclock"),
-            year=ps.year,
-            month=ps.month,
-        )
+        plans = read_ai_plans(project_dir)
+        tc_entries = parse_timeclock(project_dir / "time.timeclock")
+        # v5.19/B-evidence: subscription/seat plans charge per month, so an
+        # all-time appendix must run one ledger per (year, month) and sum,
+        # not collapse to the earliest session's month. `build_aggregated_ledger`
+        # also handles the single-month case correctly so we use it
+        # unconditionally rather than branch on all_time.
+        if all_time:
+            summary = build_aggregated_ledger(
+                sessions, plans, tc_entries, period_label=report.period_label
+            )
+        else:
+            # v5.19/B-evidence-month: pin to the REQUESTED evidence month, not
+            # the earliest session's start month. A session ending May 1 (and
+            # therefore selected into a May report) starts Apr 30 — using
+            # `min(s.start)` here ran build_ledger for April, so the active
+            # May plan never contributed and the report showed $0.
+            summary = build_ledger(
+                sessions, plans, tc_entries, year=period.year, month=period.month
+            )
         data["cost"] = {
             "direct_usd": round(summary.total_direct_usd, 4),
             "allocated_usd": round(summary.total_allocated_usd, 4),

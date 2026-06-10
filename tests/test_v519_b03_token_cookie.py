@@ -3,6 +3,12 @@ already presents the token (launch-URL ?token=, header, or cookie).
 
 Previously every GET set the cookie, so a co-located local user could `curl`
 the page and harvest the token — which (post-B4) grants full write access.
+
+v5.19/B3-page (parallel-review follow-up): the page *itself* is gated too.
+The original B3 fix only stopped the Set-Cookie leak; the HTML body still
+rendered the full ledger (costs, projects, branches, home-directory paths)
+for any unauthenticated GET. The dashboard now returns 401 unless the
+request carries the token.
 """
 
 from __future__ import annotations
@@ -25,8 +31,11 @@ def _init_project(tmp_path: Path) -> None:
 
 
 def _one_get(
-    tmp_path: Path, path: str, extra_headers: dict[str, str] | None = None
-) -> tuple[int, str | None]:
+    tmp_path: Path,
+    path: str,
+    extra_headers: dict[str, str] | None = None,
+    method: str = "GET",
+) -> tuple[int, str | None, bytes]:
     handler_cls = _handler_for(tmp_path, token=_VALID_TOKEN)
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
     port = server.server_port
@@ -36,43 +45,72 @@ def _one_get(
     if extra_headers:
         headers.update(extra_headers)
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("GET", path, headers=headers)
+    conn.request(method, path, headers=headers)
     resp = conn.getresponse()
-    resp.read()
+    body = resp.read()
     set_cookie = resp.getheader("Set-Cookie")
     status = resp.status
     conn.close()
     t.join(timeout=2)
     server.server_close()
-    return status, set_cookie
+    return status, set_cookie, body
 
 
-def test_unauthenticated_get_does_not_leak_token(tmp_path: Path) -> None:
+# ---------------------------------------------------------------------------
+# B3-page: unauthenticated GET must NOT render the dashboard body.
+# ---------------------------------------------------------------------------
+
+
+def test_unauthenticated_get_returns_401(tmp_path: Path) -> None:
     _init_project(tmp_path)
-    status, set_cookie = _one_get(tmp_path, "/")
-    assert status == 200
+    status, set_cookie, body = _one_get(tmp_path, "/")
+    assert status == 401
     assert set_cookie is None  # token NOT handed to an unauthenticated client
+    # The 401 body is a fixed terse hint; no dashboard markup.
+    assert b"<html" not in body.lower()
+    assert b"unauthorized" in body.lower()
 
 
-def test_get_with_launch_url_token_sets_cookie(tmp_path: Path) -> None:
+def test_unauthenticated_head_returns_401(tmp_path: Path) -> None:
     _init_project(tmp_path)
-    status, set_cookie = _one_get(tmp_path, f"/?token={_VALID_TOKEN}")
+    status, set_cookie, body = _one_get(tmp_path, "/", method="HEAD")
+    assert status == 401
+    assert set_cookie is None
+    # HEAD never carries a body regardless of status.
+    assert body == b""
+
+
+def test_get_with_launch_url_token_renders_and_sets_cookie(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    status, set_cookie, body = _one_get(tmp_path, f"/?token={_VALID_TOKEN}")
     assert status == 200
     assert set_cookie is not None
     assert _VALID_TOKEN in set_cookie
+    assert b"<html" in body.lower()
 
 
-def test_get_with_valid_cookie_refreshes_cookie(tmp_path: Path) -> None:
+def test_get_with_valid_cookie_renders_and_refreshes_cookie(tmp_path: Path) -> None:
     _init_project(tmp_path)
-    status, set_cookie = _one_get(
+    status, set_cookie, body = _one_get(
         tmp_path, "/", extra_headers={"Cookie": f"halyard_token={_VALID_TOKEN}"}
     )
     assert status == 200
     assert set_cookie is not None
+    assert b"<html" in body.lower()
 
 
-def test_get_with_wrong_token_does_not_set_cookie(tmp_path: Path) -> None:
+def test_get_with_valid_header_renders(tmp_path: Path) -> None:
     _init_project(tmp_path)
-    status, set_cookie = _one_get(tmp_path, "/?token=" + ("b" * 64))
+    status, _set_cookie, body = _one_get(
+        tmp_path, "/", extra_headers={"X-Halyard-Token": _VALID_TOKEN}
+    )
     assert status == 200
+    assert b"<html" in body.lower()
+
+
+def test_get_with_wrong_token_returns_401(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    status, set_cookie, body = _one_get(tmp_path, "/?token=" + ("b" * 64))
+    assert status == 401
     assert set_cookie is None
+    assert b"<html" not in body.lower()

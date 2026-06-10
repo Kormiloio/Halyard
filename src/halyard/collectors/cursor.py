@@ -96,21 +96,36 @@ def handle_stop_hook() -> int:
     session_state = _read_session_state()
     start = session_state.get("start_dt") or now
     sha_at_start: str | None = session_state.get("sha")
-    _clear_session_start()
 
+    # v5.19/B-cursor-order: parse every untrusted field BEFORE the destructive
+    # `_clear_session_start()`. A malformed token field (e.g. `"abc"`) used to
+    # raise inside the bare `int(...)` calls below, which the outer
+    # `_run_hook` wrapper (cli_hooks.py:34) swallows to a clean exit 0. With
+    # state already cleared, the legitimate turn was permanently discarded
+    # and the next stop fire saw a clean slate. Defensive int parsing keeps
+    # the session — a malformed field just goes to 0 — and only then do we
+    # clear state.
     usage = payload.get("usage") or payload.get("message", {}).get("usage", {}) or {}
-    input_tokens = int(usage.get("input_tokens", 0))
-    output_tokens = int(usage.get("output_tokens", 0))
-    cache_read = int(usage.get("cache_read_input_tokens", 0) or usage.get("cache_read", 0))
-    cache_write = int(usage.get("cache_creation_input_tokens", 0) or usage.get("cache_write", 0))
+    input_tokens = _coerce_int(usage.get("input_tokens"))
+    output_tokens = _coerce_int(usage.get("output_tokens"))
+    cache_read = _coerce_int(usage.get("cache_read_input_tokens"), fallback=usage.get("cache_read"))
+    cache_write = _coerce_int(
+        usage.get("cache_creation_input_tokens"), fallback=usage.get("cache_write")
+    )
     tokens_available = input_tokens > 0 or output_tokens > 0
 
+    # v5.19/B-cursor-defer-clear: the session-start file is destroyed ONLY
+    # after persistence succeeds (or we deliberately reject the row as
+    # non-turn). A crash anywhere from workspace parsing onward used to
+    # discard the turn because the clear had already run; deferring it
+    # means the next stop fire (or `halyard repair`) can still claim it.
     model = payload.get("model") or payload.get("stop_model") or "cursor-unknown"
 
     # D-1: resolve attribution source so provenance is recorded in the log.
     # Priority: active timer > workspace root git inference.
     roots = payload.get("workspace_roots") or []
-    cwd_for_git = Path(roots[0]) if roots else None
+    cwd_for_git = Path(roots[0]) if roots and isinstance(roots[0], str) else None
+
     branch = current_branch(cwd_for_git) if cwd_for_git else None
 
     # v2.24: commit count and code delta (numstat uses workspace cwd; sha captured at hook-fire cwd)
@@ -190,20 +205,27 @@ def handle_stop_hook() -> int:
 
     # A stop fire with no evidence of a real turn (the beforeSubmitPrompt
     # /stop chain can fire — incl. via other vendors sharing the hook
-    # array — without a Cursor turn) must not become a ledger row. The
-    # session-start state was already cleared above.
+    # array — without a Cursor turn) must not become a ledger row.
     if (
         not session_has_evidence(session)
         or session_is_implausible(session)
         or session_is_synthetic_telemetry(session)
     ):
+        # v5.19/B-cursor-defer-clear: deliberate rejection — the turn isn't
+        # a real one (or is structurally impossible), so the state was for
+        # a phantom fire. Clear it so the next legitimate prompt starts
+        # fresh.
+        _clear_session_start()
         return 0
 
     if can_append_project_log and project_dir is not None:
         append_session(project_dir, session)
+        # Persistence succeeded; only NOW retire the session-start file.
+        _clear_session_start()
         maybe_emit_milestones(project_dir)
     else:
         path = write_unattributed_session(session)
+        _clear_session_start()
         # stderr: hooks communicate back to the tool via stderr, not stdout
         print(
             f"[halyard] session saved to {path} — run 'halyard adopt' in this directory.",
@@ -318,6 +340,27 @@ def _optional_int(payload: dict, *keys: str) -> int | None:  # type: ignore[type
         with suppress(TypeError, ValueError):
             return max(0, int(value))
     return None
+
+
+def _coerce_int(*values: Any, fallback: Any = None) -> int:
+    """Coerce the first non-None value in ``values`` to a non-negative int.
+
+    v5.19/B-cursor-order: replaces the bare ``int(usage.get(...))`` calls in
+    :func:`handle_stop_hook`. A malformed token field (``"abc"``, ``[]``,
+    ``{"x": 1}``) used to raise inside the hook *after* the session-start
+    file was already cleared, which the outer ``_run_hook`` swallowed to a
+    clean exit 0 — silently discarding the turn. Now an unparseable value
+    falls through to ``fallback`` (typically the alternate key the original
+    code OR'd in), and ultimately to ``0`` — the row is still recorded,
+    just with token counts marked as zero, which trust labels already
+    treat as "unavailable, not zero".
+    """
+    for value in (*values, fallback):
+        if value is None:
+            continue
+        with suppress(TypeError, ValueError):
+            return max(0, int(value))
+    return 0
 
 
 def _read_session_state() -> dict[str, Any]:

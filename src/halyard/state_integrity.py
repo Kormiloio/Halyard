@@ -234,6 +234,41 @@ def write_trusted_state(path: Path, content: str, *, mode: IntegrityMode | None 
     _atomic_write(path, content)
 
 
+def migrate_integrity_mode(path: Path, content: str, *, new_mode: IntegrityMode) -> None:
+    """Trusted migration from a stronger sidecar to ``new_mode``.
+
+    Mirror image of :func:`write_trusted_state` for the *reset* path. The
+    B13 sidecar-strength floor means a routine ``write_trusted_state`` in
+    ``off`` (or ``hash``) leaves any prior ``.hmac`` sidecar on disk, and
+    the next read enforces the orphaned sidecar — so the documented
+    "switch integrity off / downgrade" workflow is otherwise impossible.
+
+    This function is the *explicit, trusted* operation that:
+      1. writes ``content`` (and its new sidecar, if any) via
+         :func:`write_trusted_state`, then
+      2. removes any sidecar at the *strictly stronger* level so the
+         floor no longer pins reads to a stale scheme.
+
+    Use only when the caller has authority to change the mode (CLI
+    --migrate flag, owner of ``halyard.toml``). A misbehaving non-owner
+    process MUST NOT reach this function.
+    """
+    write_trusted_state(path, content, mode=new_mode)
+    new_strength = _MODE_STRENGTH[new_mode]
+    candidates: tuple[IntegrityMode, ...] = ("hmac", "hash")
+    for candidate in candidates:
+        if _MODE_STRENGTH[candidate] > new_strength:
+            stale = _sidecar(path, candidate)
+            try:
+                stale.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                # Leave the stale sidecar in place; the next read will fail
+                # closed (IntegrityError) rather than silently downgrade.
+                pass
+
+
 def _atomic_write(path: Path, content: str) -> None:
     """Write *content* to *path* via tmp + fsync + atomic rename."""
     from halyard.ai_log import atomic_replace

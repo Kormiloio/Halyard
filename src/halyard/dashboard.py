@@ -107,15 +107,27 @@ def run_dashboard(
         # treat it the same as POSIX's EADDRINUSE.
         if exc.errno in (errno.EADDRINUSE, errno.EACCES):
             raise DashboardError(
-                f"port {resolved} is already in use — a Halyard Bridge is "
-                f"likely already running at http://{display_host}:{resolved}/.\n"
-                f"Open that URL, or stop the old one with "
-                f"'lsof -ti :{resolved} | xargs kill', "
-                f"or start this one on another port with '--port <N>'."
+                f"port {resolved} is already in use — another `halyard dashboard` "
+                f"is likely running. Open the existing one at "
+                f"http://{display_host}:{resolved}/, stop it with "
+                f"'lsof -ti :{resolved} | xargs kill', or start this one on "
+                f"another port with '--port <N>'."
             ) from exc
         raise
-    url = f"http://{display_host}:{server.server_port}/"
-    print(f"Halyard · The Bridge: {url}")
+
+    # v5.19/B3-page-followup: every GET now requires the token, so the URL we
+    # PRINT must carry it — otherwise the documented quickstart (`halyard
+    # dashboard`, then paste the URL into a browser) returns 401. The
+    # printed URL is local-only (loopback bind, Host allowlist) and the
+    # token is a per-user 0600 secret, so embedding it in the line we
+    # print to the user's own terminal is no worse than the launch URL we
+    # already feed to the browser.
+    from halyard.service import _load_or_create_token
+
+    token = _load_or_create_token()
+    base_url = f"http://{display_host}:{server.server_port}/"
+    auth_url = f"{base_url}?token={token}"
+    print(f"Halyard · The Bridge: {auth_url}")
     print("Press Ctrl-C to stop.")
 
     if open_browser:
@@ -123,9 +135,7 @@ def run_dashboard(
         # an unconditional Set-Cookie on every GET. The server only returns the
         # auth cookie to a request that already presents the token, so a
         # co-located user who GETs the page cannot harvest it.
-        from halyard.service import _load_or_create_token
-
-        webbrowser.open(f"{url}?token={_load_or_create_token()}")
+        webbrowser.open(auth_url)
 
     # v4.0: Halyard Hub. The Hub acts as a central telemetry broker and
     # exclusive writer for the ledger. It includes the OTLP/HTTP receiver
@@ -152,7 +162,7 @@ def run_dashboard(
         if hub is not None:
             hub.stop()
 
-    return url
+    return auth_url
 
 
 UsageRangeOpt = Literal["all", "30d", "7d"]
@@ -219,6 +229,15 @@ def _handler_for(
             if host not in {f"127.0.0.1:{server_port}", f"localhost:{server_port}"}:
                 self.send_error(HTTPStatus.BAD_REQUEST, "invalid Host header")
                 return
+            # v5.19/B3-page: require the token to render the page itself. The
+            # full dashboard HTML embeds ledger contents (costs, projects,
+            # branches, session metadata, home-directory paths) and on a
+            # shared host any co-located user could `curl /` for it. The
+            # browser arrives via the launch URL `?token=`, which authorises
+            # this request and earns the Set-Cookie for subsequent loads.
+            if not self._request_token_valid():
+                self._send_unauthorized()
+                return
             self._send_dashboard(include_body=True)
 
         def do_HEAD(self) -> None:
@@ -226,6 +245,9 @@ def _handler_for(
             host = self.headers.get("Host", "")
             if host not in {f"127.0.0.1:{server_port}", f"localhost:{server_port}"}:
                 self.send_error(HTTPStatus.BAD_REQUEST, "invalid Host header")
+                return
+            if not self._request_token_valid():
+                self._send_unauthorized(include_body=False)
                 return
             self._send_dashboard(include_body=False)
 
@@ -387,6 +409,24 @@ def _handler_for(
                 if vals:
                     submitted = vals[0]
             return bool(submitted) and hmac.compare_digest(submitted, _token)
+
+        def _send_unauthorized(self, *, include_body: bool = True) -> None:
+            """v5.19/B3-page: terse 401 with a hint to use the launch URL.
+            Plain text so curl users get an actionable error; no token leak."""
+            body = (
+                b"401 Unauthorized\n\n"
+                b"The Halyard dashboard requires the local token. Start it "
+                b"with `halyard dashboard --open` (which launches a browser "
+                b"at the authorised URL), or copy the URL printed when you "
+                b"ran `halyard dashboard` (it includes a ?token=... query "
+                b"param) instead of navigating to this address directly.\n"
+            )
+            self.send_response(HTTPStatus.UNAUTHORIZED)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            if include_body:
+                self.wfile.write(body)
 
         def _send_json_error(self, status: HTTPStatus, reason: str) -> None:
             """Send a terse JSON error body with the given HTTP status."""

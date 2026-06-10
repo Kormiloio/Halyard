@@ -32,6 +32,7 @@ from typing import Any
 from halyard.ai_log import (
     AI_LOG_FILENAME,
     AiSession,
+    _log_error,
     append_session,
     find_project_dir,
     maybe_emit_milestones,
@@ -317,8 +318,8 @@ def handle_agent_stop() -> int:
                 api_s, tool_s = read_otel_durations(out_path, rich_session_id)
                 session.api_seconds = api_s
                 session.tool_seconds = tool_s
-        except Exception:
-            pass
+        except Exception as exc:
+            _log_error("gemini hook OTLP enrichment failed", exc)
 
     # A hook fire with no evidence of a real turn (aborted turn,
     # SessionStart-only state, or a spurious/shared invocation) must not

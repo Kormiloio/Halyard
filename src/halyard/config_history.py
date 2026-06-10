@@ -29,10 +29,13 @@ class AuditMismatch:
 
 
 def _safe_float(s: str) -> float | None:
-    """Parse a float from untrusted git-diff text; None if malformed.
+    """Parse a float from untrusted text; None if malformed.
 
-    The `[0-9.]+` capture can match e.g. `1.2.3`; a crafted commit diff
-    must not abort the whole rate-history audit with a ValueError.
+    Originally used by the line-by-line git-diff parser (v5.19/B-rate-structural
+    replaced that with structural TOML reads of each historical snapshot, so
+    untrusted regex-captured values no longer reach this helper). Retained
+    for the public security-test contract (v2.39): a crafted value must not
+    abort the audit with a ValueError.
     """
     try:
         return float(s)
@@ -59,10 +62,80 @@ def rate_history_from_toml(project_dir: Path) -> list[RateChange]:
 
 
 def rate_history_from_git(project_dir: Path) -> list[RateChange]:
-    """Derive rate changes from git log of clients.toml."""
+    """Derive rate changes from git log of clients.toml.
+
+    v5.19/B-rate-structural: this used to walk the unified diff line-by-line
+    and pull the governing slug from the same hunk. Git's default unified
+    diff exposes only ±3 context lines, so a client whose ``slug`` and
+    ``hourly_rate`` keys are >3 lines apart (a real config carrying name,
+    email, address, etc.) silently dropped rate changes. We now ask git
+    for the *full file contents* at every commit that touched
+    ``clients.toml``, parse each version as TOML, and emit a RateChange
+    whenever a slug's rate differs from the previous commit's rate.
+    Structural parsing makes the hunk geometry irrelevant.
+
+    v5.19/B-rate-rename: previously this used ``--reverse`` and assumed the
+    file was always named ``clients.toml``. ``git log --follow`` does
+    traverse renames, but ``git show <sha>:clients.toml`` fails for
+    pre-rename commits because the file was named something else then —
+    so the entire pre-rename history was silently dropped (e.g. a
+    ``customers.toml`` → ``clients.toml`` rename truncated the audit
+    trail to just the post-rename commits). We now walk newest-first
+    *with* ``--name-only`` so each commit reports its own path, then
+    reverse the collected snapshots in Python.
+    """
+    snapshots = _historical_clients_toml_snapshots(project_dir)
+    if not snapshots:
+        return []
+
+    changes: list[RateChange] = []
+    prev_rates: dict[str, float] = {}
+    # Oldest-first so a single linear scan emits one RateChange per slug
+    # per change in chronological order.
+    for sha, eff_date, contents in reversed(snapshots):
+        for slug, rate in _rates_from_clients_toml(contents):
+            if prev_rates.get(slug) == rate:
+                continue
+            changes.append(
+                RateChange(
+                    client_slug=slug,
+                    effective_date=eff_date,
+                    rate=rate,
+                    source=f"git:{sha[:8]}",
+                )
+            )
+            prev_rates[slug] = rate
+
+    return sorted(changes, key=lambda c: (c.effective_date, c.client_slug))
+
+
+def _historical_clients_toml_snapshots(
+    project_dir: Path,
+) -> list[tuple[str, date, str]]:
+    """Return ``(sha, effective_date, contents)`` newest-first for every
+    commit that touched the current ``clients.toml`` (or its predecessors
+    across renames).
+
+    Uses ``--follow --name-only`` so each commit reports the *path the
+    file had at that commit* — necessary to ``git show <sha>:<path>``
+    for pre-rename history. Newest-first traversal matches how
+    ``--follow`` works under the hood; the caller reverses if it wants
+    chronological order.
+    """
     try:
-        result = subprocess.run(
-            ["git", "log", "--follow", "-p", "--", "clients.toml"],
+        log = subprocess.run(
+            [
+                "git",
+                "log",
+                "--follow",
+                "--name-only",
+                # Sentinel-prefixed header so we can unambiguously split
+                # commit blocks even when the historical filename ever
+                # happened to start with the prefix.
+                "--format=__halyard_commit__ %H %aI",
+                "--",
+                "clients.toml",
+            ],
             cwd=project_dir,
             capture_output=True,
             text=True,
@@ -70,58 +143,96 @@ def rate_history_from_git(project_dir: Path) -> list[RateChange]:
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return []
-
-    if result.returncode != 0 or not result.stdout.strip():
+    if log.returncode != 0 or not log.stdout.strip():
         return []
 
-    changes: list[RateChange] = []
-    commit_sha = ""
-    commit_date: date | None = None
-    current_slug = ""
+    snapshots: list[tuple[str, date, str]] = []
+    current_sha = ""
+    current_date: date | None = None
+    current_path = ""
+    for raw_line in log.stdout.splitlines():
+        line = raw_line.rstrip()
+        if line.startswith("__halyard_commit__ "):
+            # Commit the previous block (if it had a path).
+            if current_sha and current_date and current_path:
+                contents = _git_show_path(project_dir, current_sha, current_path)
+                if contents is not None:
+                    snapshots.append((current_sha, current_date, contents))
+            # Start a new block.
+            parts = line.split(" ", 2)
+            current_sha = parts[1] if len(parts) > 1 else ""
+            current_date = _iso_to_date(parts[2]) if len(parts) > 2 else None
+            current_path = ""
+            continue
+        if not line.strip():
+            continue
+        # `--name-only` lists every file in the commit; with `--follow`
+        # against a single path, only the followed entry (or its
+        # rename source/dest) appears, so we just take the first one.
+        if not current_path:
+            current_path = line.strip()
+    # Flush the trailing block.
+    if current_sha and current_date and current_path:
+        contents = _git_show_path(project_dir, current_sha, current_path)
+        if contents is not None:
+            snapshots.append((current_sha, current_date, contents))
+    return snapshots
 
-    for line in result.stdout.splitlines():
-        if line.startswith("commit "):
-            commit_sha = line.split()[1][:8]
-            commit_date = None
-            current_slug = ""
-        elif line.startswith("Date:"):
-            commit_date = _parse_git_date(line[5:].strip())
-        elif line.startswith("@@") or line.startswith("diff --git"):
-            # Hunk / file boundary: the previous slug no longer governs the
-            # rate lines that follow, so don't carry it across.
-            current_slug = ""
-        elif re.match(r'^\+\s*slug\s*=\s*["\']?([A-Za-z0-9_:/-]+)', line):
-            # Anchored to the `slug` key itself — must not match
-            # `+client_slug =` or `+project_slug =`.
-            m = re.match(r'^\+\s*slug\s*=\s*["\']?([A-Za-z0-9_:/-]+)', line)
-            if m:
-                current_slug = m.group(1)
-        elif line.startswith("+hourly_rate") and "=" in line and commit_date:
-            m = re.search(r"hourly_rate\s*=\s*([0-9.]+)", line)
-            rate = _safe_float(m.group(1)) if m else None
-            if rate is not None and current_slug:
-                changes.append(
-                    RateChange(
-                        client_slug=current_slug,
-                        effective_date=commit_date,
-                        rate=rate,
-                        source=f"git:{commit_sha}",
-                    )
-                )
-        elif re.match(r"^\+rate\s*=", line) and commit_date and current_slug:
-            m = re.search(r"rate\s*=\s*([0-9.]+)", line)
-            rate = _safe_float(m.group(1)) if m else None
-            if rate is not None:
-                changes.append(
-                    RateChange(
-                        client_slug=current_slug,
-                        effective_date=commit_date,
-                        rate=rate,
-                        source=f"git:{commit_sha}",
-                    )
-                )
 
-    return sorted(changes, key=lambda c: (c.effective_date, c.client_slug))
+def _git_show_path(project_dir: Path, sha: str, path: str) -> str | None:
+    """Return ``path`` contents at ``sha``, or None if unavailable.
+
+    Replaces the prior ``_git_show_clients_toml`` (which hard-coded the
+    filename and therefore failed for every pre-rename commit).
+    """
+    try:
+        result = subprocess.run(
+            ["git", "show", f"{sha}:{path}"],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def _rates_from_clients_toml(contents: str) -> list[tuple[str, float]]:
+    """Return ``[(slug, hourly_rate), …]`` from a clients.toml snapshot.
+
+    Tolerant of malformed historical files: a parse error just yields an
+    empty list so a bad commit cannot abort the whole rate history.
+    Recognises both ``hourly_rate`` (canonical) and the legacy ``rate``
+    key, mirroring the diff-parser's behaviour.
+    """
+    import tomllib
+
+    try:
+        data = tomllib.loads(contents)
+    except (tomllib.TOMLDecodeError, ValueError):
+        return []
+
+    out: list[tuple[str, float]] = []
+    for client in data.get("client", []):
+        if not isinstance(client, dict):
+            continue
+        slug = client.get("slug")
+        if not isinstance(slug, str) or not slug:
+            continue
+        raw_rate = client.get("hourly_rate")
+        if raw_rate is None:
+            raw_rate = client.get("rate")
+        if raw_rate is None:
+            continue
+        if isinstance(raw_rate, bool):  # bool is a subclass of int
+            continue
+        if not isinstance(raw_rate, int | float):
+            continue
+        out.append((slug, float(raw_rate)))
+    return out
 
 
 def is_git_repo(project_dir: Path) -> bool:
@@ -306,6 +417,16 @@ def _parse_invoice_rates(text: str) -> list[float]:
                     pass
 
     return rates
+
+
+def _iso_to_date(iso: str) -> date | None:
+    """Parse an ISO-8601 timestamp (``%aI`` format) into a calendar date."""
+    try:
+        from datetime import datetime as _dt
+
+        return _dt.fromisoformat(iso.replace("Z", "+00:00")).date()
+    except (ValueError, TypeError):
+        return None
 
 
 def _parse_git_date(date_str: str) -> date | None:

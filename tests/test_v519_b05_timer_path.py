@@ -26,8 +26,17 @@ def test_b5_unregistered_dir_rejected(tmp_path: Path, monkeypatch: pytest.Monkey
     evil = tmp_path / "evil"
     evil.mkdir()
     monkeypatch.setattr("halyard.registry.read_registry", lambda: [reg])
-    # An attacker-supplied existing-but-unregistered dir must not be honoured.
-    assert hub_server._target_project_dir({"project_dir": str(evil)}) is None
+    # v5.19/B5-followup: a supplied-but-unregistered dir raises so the
+    # handler surfaces 400 instead of silently rewriting the hub's ledger.
+    with pytest.raises(hub_server._RejectedTargetDirError):
+        hub_server._target_project_dir({"project_dir": str(evil)})
+
+
+def test_b5_no_project_dir_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    reg = _make_project(tmp_path / "proj")
+    monkeypatch.setattr("halyard.registry.read_registry", lambda: [reg])
+    # No client-supplied target → None → caller falls back to hub default.
+    assert hub_server._target_project_dir({}) is None
 
 
 def test_b5_timeclock_parent_also_constrained(
@@ -38,7 +47,8 @@ def test_b5_timeclock_parent_also_constrained(
     evil.mkdir()
     monkeypatch.setattr("halyard.registry.read_registry", lambda: [reg])
     # The timeclock-parent fallback is constrained the same way.
-    assert hub_server._target_project_dir({"timeclock": str(evil / "time.timeclock")}) is None
+    with pytest.raises(hub_server._RejectedTargetDirError):
+        hub_server._target_project_dir({"timeclock": str(evil / "time.timeclock")})
     assert (
         hub_server._target_project_dir({"timeclock": str(reg / "time.timeclock")}) == reg.resolve()
     )

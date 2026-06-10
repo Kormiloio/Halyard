@@ -34,6 +34,8 @@ def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     _init_project(project_dir)
+    # v5.19/B5-followup: register so /v1/state/timer accepts this dir.
+    monkeypatch.setattr("halyard.registry.read_registry", lambda: [project_dir])
 
     server = HubServer(project_dir=project_dir, port=0)
     server.start()

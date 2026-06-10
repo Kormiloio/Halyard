@@ -126,9 +126,21 @@ unverified content.
 sidecar. The next read fails the integrity check; `halyard` degrades
 gracefully (the active-timer / hub lookups return "none" rather than
 crashing) and the next write through the Halyard CLI regenerates the key
-and sidecar. To reset deliberately, set `state_integrity = "off"`, run a
-command that rewrites the state (e.g. start/stop the timer), then
-re-enable `hmac`.
+and sidecar.
+
+To **downgrade** a level deliberately (`hmac` → `hash`/`off`, or
+`hash` → `off`), use:
+
+    halyard config integrity-migrate <off|hash|hmac>
+
+A plain `write_trusted_state` in a weaker mode is intentionally not
+sufficient — the v5.19/B13 sidecar-strength floor leaves any stronger
+pre-existing sidecar in place so verification can never silently
+downgrade. The `integrity-migrate` CLI is the *explicit*, trusted
+operation that removes the now-stale sidecar after writing the new one,
+and it confirms before stripping tamper-evidence on a downgrade to
+`off`. (Update `state_integrity` in `halyard.toml` first; the CLI also
+prints a reminder to do so.)
 
 ## Local dashboard
 
@@ -153,8 +165,11 @@ Protections on that server (hardened in v5.19):
   requires a 256-bit token, compared in constant time. The token is sent
   via the `X-Halyard-Token` header, the `halyard_token` cookie, or — for
   the SSE `EventSource`, which cannot set headers — a `?token=` query
-  param on a URL only the authenticated page receives. The dashboard no
-  longer hands the token to an unauthenticated `GET`: it is delivered via
+  param on a URL only the authenticated page receives. The dashboard
+  *page itself* is also auth-gated (`GET /` and `HEAD /` return 401
+  without the token); the HTML body embeds ledger contents (costs,
+  projects, branches, home-directory paths), so an unauthenticated
+  render would defeat the rest of the model. The token is delivered via
   the launch URL, not an unconditional `Set-Cookie`.
 - **Token file:** the token lives in a `0600` file under a `0700`
   `~/.halyard/`, created atomically with

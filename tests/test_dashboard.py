@@ -550,19 +550,27 @@ def test_csrf_allows_no_origin_post(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+_HOST_TEST_TOKEN = "t" * 64
+
+
 def _make_get_request(
     project_dir: Path,
     method: str = "GET",
     host_override: str | None = None,
 ) -> int:
-    """Spin up a real server, fire one GET or HEAD, return status code."""
+    """Spin up a real server, fire one GET or HEAD, return status code.
+
+    The dashboard page is token-gated (v5.19/B3-page), so the helper always
+    sends a valid token via header — these tests probe *Host* semantics, not
+    the auth path. Auth-failure paths are covered in test_v519_b03_token_cookie.
+    """
     import http.client
     import threading
     from http.server import ThreadingHTTPServer
 
     from halyard.dashboard import _handler_for
 
-    handler_cls = _handler_for(project_dir, token="t" * 64)
+    handler_cls = _handler_for(project_dir, token=_HOST_TEST_TOKEN)
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
     port = server.server_port
 
@@ -574,7 +582,11 @@ def _make_get_request(
 
     host_header = host_override if host_override is not None else f"127.0.0.1:{port}"
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request(method, "/", headers={"Host": host_header})
+    conn.request(
+        method,
+        "/",
+        headers={"Host": host_header, "X-Halyard-Token": _HOST_TEST_TOKEN},
+    )
     resp = conn.getresponse()
     status = resp.status
     conn.close()
@@ -606,7 +618,11 @@ def test_get_valid_host_localhost_returns_200(tmp_path: Path) -> None:
     t = threading.Thread(target=_serve, daemon=True)
     t.start()
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("GET", "/", headers={"Host": f"localhost:{port}"})
+    conn.request(
+        "GET",
+        "/",
+        headers={"Host": f"localhost:{port}", "X-Halyard-Token": "t" * 64},
+    )
     status = conn.getresponse().status
     conn.close()
     server.server_close()

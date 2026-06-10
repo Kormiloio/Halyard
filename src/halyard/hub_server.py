@@ -74,6 +74,8 @@ if _AF_UNIX_AVAILABLE:
             socketserver.UnixStreamServer.server_bind(self)
             self.server_name = "localhost"
             self.server_port = 0
+
+
 # Single source of truth for the auto-timer idle policy lives in auto_timer.
 _AUTO_INACTIVITY = timedelta(minutes=INACTIVITY_MINUTES)
 _MAX_BODY = 25 * 1024 * 1024  # 25 MB
@@ -276,14 +278,29 @@ def _parse_timer_started(value: str | None) -> datetime | None:
     return _parse_optional_iso(value)
 
 
+class _RejectedTargetDirError(Exception):
+    """The client supplied a project_dir/timeclock that is not a registered
+    Halyard project. v5.19/B5-followup: this used to silently fall back to the
+    hub's own project, so a token-holding client could redirect a timer write
+    by passing any path. We now raise so the handler responds 400 instead.
+    """
+
+
 def _target_project_dir(data: dict[str, Any]) -> Path | None:
     """Resolve a client-supplied target dir, constrained to registered projects.
 
     v5.19/B5: previously any existing directory was accepted, so a
     token-holding client could create ``time.timeclock`` (and inject fields)
     in an arbitrary location. Only honour a dir that is an already-registered
-    Halyard project (exists + has ``halyard.toml``); otherwise return None and
-    let the caller fall back to the hub's own project dir.
+    Halyard project (exists + has ``halyard.toml``).
+
+    Return value semantics:
+      - ``None`` — the client supplied no target at all; caller may fall back
+        to the hub's own project dir.
+      - registered :class:`Path` — the validated target.
+      - raises :class:`_RejectedTargetDirError` — the client supplied a target that
+        failed validation. Callers MUST surface this as 400/403 rather than
+        silently rewriting the hub's ledger.
     """
     raw = data.get("project_dir")
     candidate: Path | None = None
@@ -299,11 +316,11 @@ def _target_project_dir(data: dict[str, Any]) -> Path | None:
 
     try:
         resolved = candidate.resolve()
-    except OSError:
-        return None
+    except OSError as exc:
+        raise _RejectedTargetDirError("project_dir not a registered project") from exc
     if any(resolved == p.resolve() for p in read_registry()):
         return resolved
-    return None
+    raise _RejectedTargetDirError("project_dir not a registered project")
 
 
 class HubServer:
@@ -465,9 +482,7 @@ class HubServer:
             self._unix_server = None
             return
         self._unix_server = server
-        threading.Thread(
-            target=server.serve_forever, name="halyard-hub-unix", daemon=True
-        ).start()
+        threading.Thread(target=server.serve_forever, name="halyard-hub-unix", daemon=True).start()
 
     def stop(self) -> None:
         """Graceful shutdown: flush everything and stop serving."""
@@ -869,11 +884,15 @@ class HubServer:
                     from halyard.hub import find_hub
                     from halyard.orchestration import TimerAlreadyRunning, start_timer, stop_timer
 
+                    # v5.19/B5-followup: a rejected client-supplied target is a
+                    # 400, not a silent fall-back to the hub's ledger.
+                    try:
+                        client_target = _target_project_dir(data)
+                    except _RejectedTargetDirError as exc:
+                        self._respond_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
                     target_dir = (
-                        _target_project_dir(data)
-                        or hub.project_dir
-                        or find_project_dir()
-                        or find_hub()
+                        client_target or hub.project_dir or find_project_dir() or find_hub()
                     )
                     if not target_dir:
                         self._respond_error(HTTPStatus.INTERNAL_SERVER_ERROR, "no project dir")
@@ -1053,6 +1072,12 @@ class HubServer:
                     length = int(self.headers.get("Content-Length", "0"))
                 except ValueError:
                     self.send_error(HTTPStatus.BAD_REQUEST, "bad Content-Length")
+                    return None
+                # v5.19/B-followup: a negative Content-Length is not zero —
+                # `self.rfile.read(-1)` blocks until EOF/peer-close, a trivial
+                # local DoS. Reject anything outside [0, _MAX_BODY].
+                if length < 0:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "negative Content-Length")
                     return None
                 if length > _MAX_BODY:
                     self.send_error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "body too large")

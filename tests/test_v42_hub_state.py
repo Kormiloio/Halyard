@@ -33,6 +33,9 @@ def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     project_dir.mkdir()
     (project_dir / "halyard.toml").write_text("[business]\n", encoding="utf-8")
     (project_dir / "time.timeclock").write_text("; timeclock\n", encoding="utf-8")
+    # v5.19/B5-followup: the hub now rejects /v1/state/timer requests whose
+    # supplied project_dir is not in the registry. Register the fixture dir.
+    monkeypatch.setattr("halyard.registry.read_registry", lambda: [project_dir])
 
     server = HubServer(project_dir=project_dir, port=0)
     server.start()

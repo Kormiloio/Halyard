@@ -16,12 +16,17 @@ from halyard.hub_server import HubServer
 
 @pytest.fixture()
 def hub(tmp_path: Path):
-    """Start a HubServer on a random port for testing."""
-    # We'll use a high port to avoid conflict with a real hub
-    test_port = 54318
-    server = HubServer(project_dir=tmp_path, port=test_port)
+    """Start a HubServer on an OS-chosen free port for testing.
+
+    v5.19/B-port-flake: this used to hard-code 54318 ("a high port to avoid
+    conflict with a real hub"), but any other process — another concurrent
+    test invocation, a leftover hub, an unrelated local service — bound on
+    that port made the full suite fail. ``port=0`` lets the kernel pick a
+    free port and ``server.port`` reports back the bound number.
+    """
+    server = HubServer(project_dir=tmp_path, port=0)
     server.start()
-    yield server, test_port
+    yield server, server.port
     server.stop()
 
 

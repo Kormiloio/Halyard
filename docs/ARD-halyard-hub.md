@@ -38,9 +38,12 @@ Transition to a central Hub process that acts as the exclusive manager for `ai-s
   AF_UNIX peer-credential) — the read path is authenticated too, because the
   state payload leaks home-directory and project paths. The timer path also
   constrains a client-supplied `project_dir` to a registered project and runs
-  the project slug through `_safe_field` (v5.19/B5). The old `~/.halyard/active`
-  file remains the compatibility mirror and offline fallback, not a second
-  source of truth while the Hub is reachable.
+  the project slug through `_safe_field` (v5.19/B5). A rejected target now
+  returns 400 (v5.19/B5-followup) instead of silently falling back to the
+  hub's own project — the bare "no target supplied" path still falls back to
+  the hub default. The old `~/.halyard/active` file remains the
+  compatibility mirror and offline fallback, not a second source of truth
+  while the Hub is reachable.
 - **Auto-Timer Presence (v4.2):** `POST /v1/state/presence` lets collectors
   record, refresh, and close presence windows through the same Hub state store
   (token/peer-cred authenticated). The Hub worker also closes stale presence
@@ -60,11 +63,14 @@ Transition to a central Hub process that acts as the exclusive manager for `ai-s
   `0600`) for same-user machine-to-machine emitters. POST writes require
   `Content-Type: application/json` and reject a cross-site `Sec-Fetch-Site`
   (browser-CSRF / DNS-rebinding defence). Non-finite `cost`/`credits` are
-  rejected at the ingest boundary. `/v1/traces` stays open for the token-less
-  Copilot OTLP exporter, bounded by the CSRF rules, the finalize-on-eviction
-  accumulator cap, and a socket read timeout (a forged-timestamp plausibility
-  bound on spans is a tracked follow-up, not yet shipped). See
-  `docs/trust-model.md` for the full model.
+  rejected at the ingest boundary; negative `Content-Length` is rejected
+  before any body read (v5.19/B-DoS-clen). `/v1/traces` stays open for the
+  token-less Copilot OTLP exporter, bounded by the CSRF rules, the
+  finalize-on-eviction accumulator cap, a socket read timeout, and
+  per-accumulator caps on `session.id` length and `model_counts`
+  cardinality (v5.19/B-DoS-mem) so one session cannot grow memory without
+  bound. A forged-timestamp plausibility bound on spans is a tracked
+  follow-up, not yet shipped. See `docs/trust-model.md` for the full model.
 - **Service Abstraction:** Introduce a `ServiceManager` interface with providers:
   - `LaunchdProvider` (macOS)
   - `SystemdProvider` (Linux)
