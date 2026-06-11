@@ -96,7 +96,19 @@ not per-model token counts).
 
 **codex-app:** Data is imported from Codex Desktop's exported conversation
 files. Since v3.3, rejections are detected from rollout event statuses; these
-counts overlap with `tool_errors`.
+counts overlap with `tool_errors`. A rollout still being written is
+re-imported as it grows (v5.2); the redundant rows collapse to one canonical
+session (`job_id=codex:<id>`) at read time.
+
+**github-copilot (importer):** Data is imported from VS Code's chatSessions
+JSONL (incremental kind-0/1/2 patch log; reconstructed, metadata-only). Token
+counts are rarely present (`completionTokens` only); the OTel path
+(`docs/copilot-otel.md`) is the richer live source and always wins — the
+importer skips any session already recorded by OTel, a pre-v5.22 import, or a
+manual entry. Since v5.22 a chat session left open for days re-imports as its
+file grows, with rows collapsing to one canonical session
+(`job_id=copilot:<id>`) at read time — same pattern as codex (v5.2) and the
+claude-code transcript importer (v5.21).
 
 **windsurf:** Native collector for Codeium Windsurf IDE. Captures session
 timing and interaction counts (turns) autonomously via `hooks.json`. Token

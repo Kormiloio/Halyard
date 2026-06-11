@@ -793,6 +793,7 @@ def parse_sessions(project_dir: Path, *, now: datetime | None = None) -> list[Ai
 _GEMINI_JOB_PREFIX = "gemini:"
 _CODEX_JOB_PREFIX = "codex:"
 _CLAUDE_JOB_PREFIX = "claude:"
+_COPILOT_JOB_PREFIX = "copilot:"
 
 
 def _gemini_session_key(session: AiSession) -> str | None:
@@ -845,6 +846,24 @@ def _claude_session_key(session: AiSession) -> str | None:
     return None
 
 
+def _copilot_session_key(session: AiSession) -> str | None:
+    """A stable id for a Copilot *import* row, else None.
+
+    The v5.22 importer tags rows with ``job_id=copilot:<id>``; a chat
+    session imported mid-flight re-imports as its file grows (codex
+    pattern), so those rows must collapse to one. Same deliberately-narrow
+    shape as ``_claude_session_key``: NO ``session_id`` fallback — OTel
+    -sourced rows (``copilot-otel:<id>``, which does not match this prefix)
+    and pre-v5.22 import rows carry ``session_id`` without this job prefix
+    and must never collapse.
+    """
+    if session.tool != "github-copilot":
+        return None
+    if session.job_id and session.job_id.startswith(_COPILOT_JOB_PREFIX):
+        return session.job_id[len(_COPILOT_JOB_PREFIX) :]
+    return None
+
+
 def _redundant_session_key(session: AiSession) -> str | None:
     """Namespaced collapse key spanning every tool with multi-row sessions.
 
@@ -860,6 +879,9 @@ def _redundant_session_key(session: AiSession) -> str | None:
     claude = _claude_session_key(session)
     if claude is not None:
         return f"{_CLAUDE_JOB_PREFIX}{claude}"
+    copilot = _copilot_session_key(session)
+    if copilot is not None:
+        return f"{_COPILOT_JOB_PREFIX}{copilot}"
     return None
 
 

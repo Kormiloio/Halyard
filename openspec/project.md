@@ -1455,6 +1455,23 @@ layers must read from this local source of truth; they do not replace it.
       Spec in `openspec/changes/v5.21-transcript-importer-hardening/`.
       **Status: done; 1753 tests passing.**
 
+    - **v5.22 — Copilot importer growth re-import:** third instance of the
+      first-import-freeze defect class (codex fixed in v5.2, claude transcripts
+      in v5.21): the Copilot importer's plain id-set state froze every chat
+      session at its first import, so a VS Code window left open for days —
+      the normal workflow — silently lost everything after the first snapshot.
+      State upgraded to the codex `id→size` format (grown files re-import,
+      unchanged ones skip, legacy bare ids re-check once); imported rows carry
+      `job_id=copilot:<id>` and collapse at read time via a new
+      `_copilot_session_key` (job-prefix only — OTel `copilot-otel:` rows and
+      pre-v5.22 import rows never collapse); ledger coverage generalised from
+      the OTel-only check to every non-importer row so nothing double-counts.
+      The owner's live 4-day session (`78930975…`) was refreshed onto the new
+      tracking. PRD/ARD (vscode-extension-and-metadata-parity) and
+      `collector-coverage.md` updated. Spec in
+      `openspec/changes/v5.22-copilot-growth-reimport/`.
+      **Status: done; 1758 tests passing.**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

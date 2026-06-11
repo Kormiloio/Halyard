@@ -441,7 +441,9 @@ def test_importer_skips_otel_captured_via_ledger(
     [otel_row] = parse_traces_to_sessions(payload)
     append_session(project_dir, otel_row)
 
-    captured = copilot._otel_captured_ids(project_dir)
+    # v5.22: _otel_captured_ids generalised to _ledger_covered_ids (all
+    # non-importer rows); the OTel coexistence property is unchanged.
+    captured = copilot._ledger_covered_ids(project_dir)
     assert "session-123" in captured
 
 

@@ -209,6 +209,15 @@ status when user invokes extension commands. Mark unavailable fields honestly.
 > (`openspec/changes/v3.12-vscode-otel-collector/`, see `docs/copilot-otel.md`);
 > this PRD's extension-observed scope is unchanged and complementary.
 
+> **Update (v5.22):** long-lived chat sessions stay current. A VS Code chat
+> window routinely stays open for days; the v3.7 importer froze each session
+> at its first import, so everything after that snapshot was silently lost.
+> Requirement now met: a session whose chat file has grown since its last
+> import is re-imported on the next `import-all` run (the 30-minute timer),
+> and the redundant rows collapse to one canonical session in every report.
+> Sessions captured live via OTel are never double-counted by the importer.
+> Spec: `openspec/changes/v5.22-copilot-growth-reimport/`.
+
 ## Reporting Requirements
 
 Reports and dashboards should be able to answer:

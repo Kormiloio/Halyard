@@ -223,6 +223,31 @@ No migration is required for existing logs. Old sessions simply have missing
 metadata fields. The SQLite cache may need additive columns or a reset sentinel
 depending on implementation. Plain text remains authoritative.
 
+## Long-Lived Chat Sessions (v5.22)
+
+A VS Code chat window routinely stays open for days, so the chatSessions
+JSONL importer cannot treat "imported once" as "done" — that froze every
+session at its first import snapshot (the codex pre-v5.2 / claude pre-v5.21
+defect class, third instance). The mechanism, shared with those importers:
+
+- **Growth-aware state.** `~/.halyard/copilot-imported` records
+  `<session_id>\t<file_size>`; a session re-imports only when its chat file
+  has grown. Legacy bare-id entries (including OTel capture marks, which are
+  sizeless by nature) re-check once and are resolved by ledger coverage.
+- **Read-time collapse.** Import rows carry `job_id=copilot:<session_id>`;
+  `parse_sessions` collapses all rows sharing that job id to the
+  most-complete one, so every surface counts a re-imported session exactly
+  once. The key matches the job-id prefix only — OTel rows
+  (`copilot-otel:<id>`, a disjoint namespace) and pre-v5.22 import rows
+  carry `session_id` without it and never collapse.
+- **Ledger coverage.** Before importing, the id is checked against every
+  `github-copilot` row in the target ledger *not* written by this importer
+  (OTel, pre-v5.22 imports, manual entries). Those rows cannot collapse with
+  a fresh import row, so re-importing beside them would double-count; the
+  session is skipped instead. The append-only log is never rewritten.
+
+Spec: `openspec/changes/v5.22-copilot-growth-reimport/`.
+
 ## Open Questions
 
 > **Partially resolved (v3.12):** VS Code 1.119+ exposes a public,

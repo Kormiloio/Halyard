@@ -35,12 +35,17 @@ def import_copilot_sessions(
     workspaces = discover_workspaces()
 
     imported: list[AiSession] = []
-    new_ids: set[str] = set()
-    # v3.12 coexistence: sessions already captured live via the OTel
-    # receiver carry job_id=copilot-otel:<id> in the target ledger.
-    # Cache the captured-id set per target dir so the importer never
-    # double-counts an OTel-sourced session.
-    otel_captured: dict[Path, set[str]] = {}
+    newly_imported: dict[str, int] = {}
+    # Every chat session currently on disk (across ALL workspaces, not just
+    # the ones this run is scoped to) — state entries for vanished files
+    # are pruned; entries for unvisited workspaces must be carried forward.
+    present_ids = {p.stem for p in _VSCODE_STORAGE_DIR.glob("*/chatSessions/*.jsonl")}
+    # Sessions already recorded in the target ledger by anything other
+    # than this importer — OTel rows (v3.12 coexistence), pre-v5.22 import
+    # rows, manual rows — must be skipped: none of them collapse with a
+    # fresh job_id=copilot: row, so re-importing would double-count.
+    # Cached per target dir.
+    ledger_covered: dict[Path, set[str]] = {}
 
     for ws_id, project_path in workspaces.items():
         # 1. Scoping logic
@@ -66,18 +71,26 @@ def import_copilot_sessions(
         if not chat_dir.exists():
             continue
 
-        # Authoritative coexistence check: any session already recorded
-        # via OTel in the resolved target ledger is skipped (the state
-        # file is the fast path; this survives a cleared state file).
-        captured = otel_captured.get(target_dir) if target_dir is not None else None
+        # Authoritative coexistence check: any session already recorded in
+        # the resolved target ledger by a non-collapsing writer is skipped
+        # (the state file is the fast path; this survives a cleared state
+        # file).
+        captured = ledger_covered.get(target_dir) if target_dir is not None else None
         if target_dir is not None and captured is None:
-            captured = _otel_captured_ids(target_dir)
-            otel_captured[target_dir] = captured
+            captured = _ledger_covered_ids(target_dir)
+            ledger_covered[target_dir] = captured
 
         for session_path in chat_dir.glob("*.jsonl"):
             session_id = session_path.stem
+            # v5.22: codex-style growth re-import — skip only when the chat
+            # file hasn't grown since the recorded import. A sizeless entry
+            # (legacy bare id, or an OTel capture mark) re-checks once and
+            # is then resolved by the ledger coverage check below.
+            current_size = _chat_file_size(session_path)
             if session_id in already_imported:
-                continue
+                prior_size = already_imported[session_id]
+                if prior_size is not None and prior_size == current_size:
+                    continue
             if captured and session_id in captured:
                 continue
 
@@ -91,6 +104,11 @@ def import_copilot_sessions(
                 continue
 
             session.session_id = session_id
+            # Tag the row so redundant re-imports of a growing session
+            # collapse to one canonical row at read time (v5.22; see
+            # ai_log._copilot_session_key). Distinct from the
+            # ``copilot-otel:`` namespace.
+            session.job_id = f"copilot:{session_id}"
 
             # Enrich with edit metadata if present
             edit_state = ws_dir / "chatEditingSessions" / session_id / "state.json"
@@ -109,10 +127,16 @@ def import_copilot_sessions(
                 append_session(target_dir, session)
 
             imported.append(session)
-            new_ids.add(session_id)
+            newly_imported[session_id] = current_size
 
-    if not dry_run and new_ids:
-        _save_imported_state(already_imported | new_ids)
+    if not dry_run and newly_imported:
+        # Prune ids whose chat file no longer exists (VS Code cleared it —
+        # can never re-import); carry forward sizes for unchanged sessions.
+        updated: dict[str, int | None] = {
+            sid: size for sid, size in already_imported.items() if sid in present_ids
+        }
+        updated.update(newly_imported)
+        _save_imported_state(updated)
 
     return imported
 
@@ -329,26 +353,35 @@ def record_otel_capture(session_id: str) -> None:
     """Mark a session id as captured via the OTel receiver (v3.12).
 
     Adds the id to the shared importer dedup state so the v3.7 importer
-    skips it. Read-modify-write so a concurrent importer append is not
-    clobbered. Best-effort: a write failure must never break live capture.
+    skips it. The receiver cannot know the chat file's size, so the entry
+    is sizeless — the importer re-checks it once and the ledger coverage
+    check (the OTel row is there) resolves it, preserving the documented
+    "survives a cleared state file" guarantee. Read-modify-write so a
+    concurrent importer append is not clobbered. Best-effort: a write
+    failure must never break live capture.
     """
     if not session_id:
         return
     try:
-        ids = _load_imported_state()
-        if session_id in ids:
+        state = _load_imported_state()
+        if session_id in state:
             return
-        _save_imported_state(ids | {session_id})
+        state[session_id] = None
+        _save_imported_state(state)
     except OSError:
         pass
 
 
-def _otel_captured_ids(target_dir: Path) -> set[str]:
-    """Session ids already recorded in ``target_dir`` via the OTel path.
+def _ledger_covered_ids(target_dir: Path) -> set[str]:
+    """Session ids already recorded in ``target_dir`` by other writers.
 
-    Reads the ledger and collects the ``session_id`` of any row whose
-    ``job_id`` is ``copilot-otel:<id>`` (or whose telemetry source is the
-    OTel collector). Bounded by the existing parser; failures yield an
+    Collects the id of every ``github-copilot`` row this importer did not
+    write (``job_id=copilot:`` rows are excluded — they are the rows that
+    DO collapse with a re-import): OTel rows (``copilot-otel:<id>`` /
+    ``telemetry_source=copilot-otel``, the original v3.12 coexistence
+    check), pre-v5.22 import rows, and manual rows. None of those collapse
+    with a fresh ``copilot:`` row, so importing next to them would
+    double-count (v5.22). Bounded by the existing parser; failures yield an
     empty set so the importer degrades to the state-file fast path.
     """
     from halyard.ai_log import AI_LOG_FILENAME, parse_sessions
@@ -359,28 +392,61 @@ def _otel_captured_ids(target_dir: Path) -> set[str]:
         sessions = parse_sessions(target_dir)
     except (OSError, ValueError):
         return set()
-    captured: set[str] = set()
+    covered: set[str] = set()
     for s in sessions:
-        if s.telemetry_source == "copilot-otel" and s.session_id:
-            captured.add(s.session_id)
-        elif s.job_id and s.job_id.startswith(_OTEL_JOB_PREFIX):
-            captured.add(s.job_id[len(_OTEL_JOB_PREFIX) :])
-    return captured
+        if s.job_id and s.job_id.startswith(_OTEL_JOB_PREFIX):
+            covered.add(s.job_id[len(_OTEL_JOB_PREFIX) :])
+            continue
+        if s.tool != "github-copilot":
+            continue
+        if s.job_id and s.job_id.startswith("copilot:"):
+            continue
+        if s.session_id:
+            covered.add(s.session_id)
+    return covered
 
 
-def _load_imported_state() -> set[str]:
+def _load_imported_state() -> dict[str, int | None]:
+    """Map each imported chat session id to the file size recorded at import.
+
+    Codex v5.2 format: ``"<id>\\t<size>"`` per line. Legacy bare-id lines
+    (pre-v5.22 state, OTel capture marks) parse to None, which forces a
+    one-time re-check resolved by the ledger coverage check.
+    """
     if not _IMPORTED_STATE_FILE.exists():
-        return set()
-    return {
-        line.strip()
-        for line in _IMPORTED_STATE_FILE.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    }
+        return {}
+    try:
+        text = _IMPORTED_STATE_FILE.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    state: dict[str, int | None] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        sid, _, size_str = line.partition("\t")
+        sid = sid.strip()
+        if not sid:
+            continue
+        try:
+            state[sid] = int(size_str) if size_str else None
+        except ValueError:
+            state[sid] = None
+    return state
 
 
-def _save_imported_state(ids: set[str]) -> None:
+def _save_imported_state(state: dict[str, int | None]) -> None:
     _IMPORTED_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _IMPORTED_STATE_FILE.write_text("\n".join(sorted(ids)) + "\n", encoding="utf-8")
+    lines = [f"{sid}\t{size}" if size is not None else sid for sid, size in sorted(state.items())]
+    _IMPORTED_STATE_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _chat_file_size(path: Path) -> int:
+    """Current byte size of ``path``, or -1 if it can't be stat'd."""
+    try:
+        return path.stat().st_size
+    except OSError:
+        return -1
 
 
 def _safe_fromtimestamp_ms(ms: int | float) -> datetime | None:
