@@ -21,8 +21,12 @@ def peer_uid(sock: socket.socket) -> int | None:
     socket, or ``None`` if it cannot be determined (unsupported platform,
     non-AF_UNIX socket, or error)."""
     # Peer credentials are an AF_UNIX concept; a TCP/UDP socket has no peer
-    # UID. Guard here so the helpers return None uniformly across platforms.
-    if getattr(sock, "family", None) != socket.AF_UNIX:
+    # UID. Guard here so the helpers return None uniformly across platforms —
+    # including Windows, where socket.AF_UNIX does not exist and a bare
+    # attribute access raises AttributeError (the v5.19 regression that broke
+    # every Hub request on the Windows CI matrix).
+    af_unix = getattr(socket, "AF_UNIX", None)
+    if af_unix is None or getattr(sock, "family", None) != af_unix:
         return None
     try:
         if sys.platform.startswith("linux") and hasattr(socket, "SO_PEERCRED"):

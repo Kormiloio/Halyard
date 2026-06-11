@@ -1062,7 +1062,11 @@ class HubServer:
                 # defense; an AF_UNIX peer is a local process (no DNS, no
                 # browser), authenticated by peer-credential instead.
                 conn = getattr(self, "connection", None)
-                if conn is not None and getattr(conn, "family", None) == socket.AF_UNIX:
+                if (
+                    _AF_UNIX_AVAILABLE
+                    and conn is not None
+                    and getattr(conn, "family", None) == socket.AF_UNIX
+                ):
                     return True
                 host = self.headers.get("Host", "")
                 return host in {f"127.0.0.1:{hub.port}", f"localhost:{hub.port}"}
@@ -1115,7 +1119,11 @@ class HubServer:
                 # (same-user) — no token needed. TCP can't provide peer creds,
                 # so it falls through to the bearer token.
                 conn = getattr(self, "connection", None)
-                if conn is not None and getattr(conn, "family", None) == socket.AF_UNIX:
+                if (
+                    _AF_UNIX_AVAILABLE
+                    and conn is not None
+                    and getattr(conn, "family", None) == socket.AF_UNIX
+                ):
                     from halyard.peercred import peer_is_self
 
                     return peer_is_self(conn)

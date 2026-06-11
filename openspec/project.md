@@ -1470,7 +1470,7 @@ layers must read from this local source of truth; they do not replace it.
       tracking. PRD/ARD (vscode-extension-and-metadata-parity) and
       `collector-coverage.md` updated. Spec in
       `openspec/changes/v5.22-copilot-growth-reimport/`.
-      **Status: done; 1758 tests passing.**
+      **Status: done; 1760 tests passing.**
 
 ## Deferred or gated
 

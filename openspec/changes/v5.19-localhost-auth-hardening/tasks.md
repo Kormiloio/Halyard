@@ -399,3 +399,14 @@ ruff/format/mypy clean.
       no-rename happy path still returns ``[100, 150]``. 24 existing
       rate-history tests still green. Final gate: 1735 tests pass,
       ruff/format/mypy clean.
+
+## Post-release regression (fixed 2026-06-10)
+
+- [x] B4 follow-up: two bare `socket.AF_UNIX` accesses in the TCP request
+      path (`_host_ok`, ingest auth) raised AttributeError on Windows —
+      every Hub request died with RemoteDisconnected and the Windows CI
+      matrix was red from 2026-06-06. Both sites now gated on
+      `_AF_UNIX_AVAILABLE`; `peercred.peer_uid` guards the attribute too.
+      Regression suite: `tests/test_v519_windows_af_unix_guard.py`
+      (simulates the platform by deleting the attribute, exercises a real
+      TCP request end to end).

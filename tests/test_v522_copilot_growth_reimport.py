@@ -47,9 +47,7 @@ def _write_chat(tmp_path: Path, project: Path, *, requests: int) -> Path:
     base = datetime.now() - timedelta(hours=2)
     ws = tmp_path / "workspaceStorage" / "ws1"
     ws.mkdir(parents=True, exist_ok=True)
-    (ws / "workspace.json").write_text(
-        json.dumps({"folder": project.as_uri()}), encoding="utf-8"
-    )
+    (ws / "workspace.json").write_text(json.dumps({"folder": project.as_uri()}), encoding="utf-8")
     chat_dir = ws / "chatSessions"
     chat_dir.mkdir(exist_ok=True)
     reqs = [
