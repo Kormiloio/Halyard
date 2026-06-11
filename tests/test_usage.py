@@ -194,6 +194,9 @@ def test_cli_usage_json_output(
     monkeypatch.setattr(_Path, "home", lambda: tmp_path)
     (tmp_path / ".halyard").mkdir(parents=True, exist_ok=True)
     (tmp_path / ".halyard" / "hub").write_text(str(hub) + "\n", encoding="utf-8")
+    # v5.23 follow-up: conftest pins halyard.hub._HUB_POINTER to an empty
+    # isolation path; aim it at this test's fake-home pointer instead.
+    monkeypatch.setattr("halyard.hub._HUB_POINTER", tmp_path / ".halyard" / "hub")
 
     runner = CliRunner()
     result = runner.invoke(app, ["usage", "--json", "--range", "all"])

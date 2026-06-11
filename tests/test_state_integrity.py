@@ -153,6 +153,10 @@ def test_find_hub_returns_none_on_tamper(tmp_path: Path, monkeypatch: pytest.Mon
     from halyard.hub import find_hub
 
     pointer = tmp_path / ".halyard" / "hub"
+    # v5.23 follow-up: conftest pins halyard.hub._HUB_POINTER to an empty
+    # isolation path, under which this test passes vacuously (find_hub sees
+    # no pointer at all). Aim the override at the tampered pointer.
+    monkeypatch.setattr("halyard.hub._HUB_POINTER", pointer)
     fake_hub = tmp_path / "fake_hub"
     fake_hub.mkdir()
     write_trusted_state(pointer, str(fake_hub) + "\n", mode="hash")
@@ -225,6 +229,10 @@ def test_find_hub_blocks_downgrade(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     from halyard.hub import find_hub
 
     pointer = tmp_path / ".halyard" / "hub"
+    # v5.23 follow-up: conftest pins halyard.hub._HUB_POINTER to an empty
+    # isolation path, under which this test passes vacuously (find_hub sees
+    # no pointer at all). Aim the override at the tampered pointer.
+    monkeypatch.setattr("halyard.hub._HUB_POINTER", pointer)
     fake_hub = tmp_path / "fake_hub"
     fake_hub.mkdir()
     write_trusted_state(pointer, str(fake_hub) + "\n", mode="hash")

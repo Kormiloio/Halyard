@@ -52,10 +52,15 @@ def _session(*, end: datetime, project: str | None = "acme:auth") -> AiSession:
     )
 
 
-def _write_home_hub(home: Path, project_dir: Path) -> None:
+def _write_home_hub(home: Path, project_dir: Path, monkeypatch=None) -> None:  # type: ignore[no-untyped-def]
     state = home / ".halyard"
     state.mkdir(parents=True, exist_ok=True)
     (state / "hub").write_text(str(project_dir) + "\n", encoding="utf-8")
+    # The conftest hub-pointer isolation (v5.23 follow-up) overrides the
+    # home-based pointer; tests provisioning a fake-home hub must point the
+    # override at it too, or find_hub() reads the empty isolation path.
+    if monkeypatch is not None:
+        monkeypatch.setattr("halyard.hub._HUB_POINTER", state / "hub")
 
 
 def _write_claude_hooks(root: Path) -> None:
@@ -125,7 +130,7 @@ def test_doctor_healthy_project(tmp_path: Path, monkeypatch) -> None:  # type: i
     home = tmp_path / "home"
     project = _project(tmp_path / "project")
     monkeypatch.setattr(Path, "home", lambda: home)
-    _write_home_hub(home, project)
+    _write_home_hub(home, project, monkeypatch)
     _write_claude_hooks(project)
     _write_cursor_hooks(home)
     _write_gemini_hooks(home)
@@ -172,7 +177,7 @@ def test_doctor_no_project_valid_hub_warns_only(tmp_path: Path, monkeypatch) -> 
     home = tmp_path / "home"
     hub = _project(tmp_path / "hub")
     monkeypatch.setattr(Path, "home", lambda: home)
-    _write_home_hub(home, hub)
+    _write_home_hub(home, hub, monkeypatch)
 
     report = build_doctor_report(start=tmp_path / "empty")
 

@@ -46,3 +46,14 @@
       3-day codex session (48 advancing growth re-import rows) — no fixed
       raw count separates a long-lived live session from a loop. Growth
       always advances end time/tokens; loops never do. See design.md.
+
+## Follow-up (first live catch, 2026-06-11)
+
+- [x] The canary's first real finding was the test suite itself: two v5.21
+      test rows (`session_id=11111111-…`) had been direct-written into the
+      developer's real hub ledger. `_no_real_hub` blocks the Hub daemon
+      HTTP path, but `find_hub()` still read the real `~/.halyard/hub`
+      pointer and `append_session` fell back to a direct file write.
+      New autouse `_no_real_hub_pointer` conftest fixture redirects the
+      pointer to a temp path (tests provision their own via `set_hub`).
+      Leaked rows removed from the hub ledger (backup taken).

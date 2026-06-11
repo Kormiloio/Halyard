@@ -81,6 +81,26 @@ def _isolate_auto_timer(tmp_path_factory: pytest.TempPathFactory, monkeypatch: p
 
 
 @pytest.fixture(autouse=True)
+def _no_real_hub_pointer(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Make ``find_hub`` hermetic: never read the dev machine's real
+    ``~/.halyard/hub`` pointer.
+
+    v5.23 follow-up — the duplicate canary's first live catch was two v5.21
+    test rows direct-written into the developer's real hub ledger:
+    ``_no_real_hub`` below blocks the Hub *daemon* HTTP path, but
+    ``find_hub()`` still resolved the real hub *directory*, and
+    ``append_session`` fell back to a direct file write into it. Point the
+    pointer at an empty temp path; a test that needs a hub provisions its
+    own via ``set_hub`` (which goes through the same override).
+    """
+    from halyard import hub
+
+    monkeypatch.setattr(hub, "_HUB_POINTER", tmp_path_factory.mktemp("halyard-hub") / "hub-pointer")
+
+
+@pytest.fixture(autouse=True)
 def _no_real_hub(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make the suite hermetic against a Hub running on the dev machine.
 
