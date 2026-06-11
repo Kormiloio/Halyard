@@ -119,10 +119,20 @@ def test_event_stream_delivers_emitted_event(hub) -> None:
     assert resp.status == 200
     assert resp.getheader("Content-Type") == "text/event-stream"
 
+    # The handler sends headers BEFORE subscribing its queue to the bus, so
+    # an emit racing the request thread can land in a not-yet-registered bus
+    # and the stream shows keep-alives only (chronic intermittent failure,
+    # worst on slow Windows runners; first observed 2026-05-31). Keep-alives
+    # are written by the post-subscribe loop — seeing one proves the
+    # subscription is live; only then is the emit guaranteed observable.
+    for _ in range(8):
+        if "keep-alive" in resp.fp.readline().decode():
+            break
+
     server.emit("session_ingested", {"project": "acme:auth"})
 
     seen = ""
-    for _ in range(8):
+    for _ in range(16):
         line = resp.fp.readline().decode()
         seen += line
         if "session_ingested" in seen:
