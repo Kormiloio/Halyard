@@ -33,7 +33,7 @@ def peer_uid(sock: socket.socket) -> int | None:
             # struct ucred { pid_t pid; uid_t uid; gid_t gid; } — three ints.
             buf = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
             _pid, uid, _gid = struct.unpack("3i", buf)
-            return uid
+            return int(uid)
         if sys.platform == "darwin":
             return _getpeereid_darwin(sock)
     except OSError:

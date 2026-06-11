@@ -86,6 +86,16 @@ def _transcript_events(
     return evs
 
 
+def _encode_folder(path: Path) -> str:
+    """Mimic Claude Code's lossy storage-folder encoding for a local path.
+
+    Windows paths carry backslashes and a drive colon; collapse every
+    separator-ish character to '-' exactly because the folder name must be a
+    single path component (the importer must never decode it anyway).
+    """
+    return str(path).replace("\\", "-").replace("/", "-").replace(":", "-")
+
+
 def _write_transcript(
     tmp_path: Path,
     events: list[dict],  # type: ignore[type-arg]
@@ -124,7 +134,7 @@ def test_attribution_from_cwd_not_folder_name(tmp_path: Path) -> None:
     real = _project(tmp_path, "real-project")  # hyphen in the dir name
 
     # Folder name encodes the real project's path: '-' and '/' collapse.
-    folder = str(real).replace("/", "-")
+    folder = _encode_folder(real)
     _write_transcript(tmp_path, _transcript_events(cwd=str(real)), folder=folder)
 
     imported = import_claude_sessions(all_projects=True)
@@ -140,7 +150,7 @@ def test_transcript_without_cwd_is_skipped(tmp_path: Path) -> None:
     for e in events:
         del e["cwd"]
     # Folder name decodes (wrongly, by replacement) to the decoy project.
-    _write_transcript(tmp_path, events, folder=str(decoy).replace("/", "-"))
+    _write_transcript(tmp_path, events, folder=_encode_folder(decoy))
 
     # No cwd → no resolvable project → skipped. Never decoded from the
     # folder name, and deliberately no hub fallback (tracked projects only:
