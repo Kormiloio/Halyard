@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import sys
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -63,6 +64,7 @@ def build_doctor_report(
     checks.extend(_capture_coverage_checks(project_dir, hub_dir, now=now))
     checks.extend(_attribution_quality_checks(project_dir, hub_dir))
     checks.extend(_collector_state_checks(project_dir, hub_dir))
+    checks.extend(_ledger_duplicate_checks(project_dir, hub_dir))
     if first_capture:
         checks.append(_first_capture_check(project_dir, hub_dir, now=now or datetime.now()))
 
@@ -976,6 +978,133 @@ def _collector_state_checks(project_dir: Path | None, hub_dir: Path | None) -> l
         )
     )
 
+    return checks
+
+
+# Ledger duplicate canary (v5.23). Read-time collapse hides re-appended
+# rows from every report surface, so a runaway importer (the v5.21 gemini
+# loop — one session re-appended byte-identically 143 times by the
+# 30-minute timer) degrades nothing observable while the ledger grows
+# without bound. Counts raw `s` lines — deliberately NOT parse_sessions
+# output, whose final collapse step is the very layer that hid this.
+#
+# The job_id signal counts *stalled* rows, not raw rows. A growing live
+# transcript legitimately re-imports once per importer tick while its
+# file grows (codex/claude/copilot id→size state) — verified live: a
+# 3-day codex session accumulated 48 rows, every one advancing in end
+# time and token total, all collapsing correctly at read time. A raw
+# row-count threshold cannot separate that from a loop. What a loop can
+# never do is *advance*: re-appending an unchanged session repeats the
+# same end/token totals. So a row whose end time AND token total both
+# fail to exceed the group's running maxima counts as stalled; growth
+# re-imports score zero. A handful of stalled rows is still legitimate
+# (e.g. one re-append after an import-state reset, as in the v5.21
+# repair) — five distinct stalls means a writer is looping.
+_DUP_JOB_STALLED_THRESHOLD = 5
+
+_DUP_REMEDIATION = (
+    "find the re-appending writer first (a second `halyard import-all` run "
+    "should report 0 new; check the import timer); then optionally compact — "
+    "stop the hub daemon and import timer, back up ai-sessions.log, and "
+    "remove duplicate lines keeping the first occurrence"
+)
+
+
+def _ledger_duplicate_checks(project_dir: Path | None, hub_dir: Path | None) -> list[DoctorCheck]:
+    """Warn when a ledger holds duplicate `s` rows (detection only).
+
+    Two overlapping signals, both `warning` (never `error` — reports stay
+    correct because read-time collapse works; the file is what degrades):
+
+    - byte-identical duplicate `s` lines: genuine sessions have unique
+      timestamps, so a verbatim repeat is always a writer defect;
+    - a single job_id with many *stalled* rows (no growth in end time or
+      token total over the group's running maxima): catches a re-append
+      loop whose rows differ slightly (e.g. an embedded timestamp) and
+      would defeat byte-identity, while never firing on the legitimate
+      growth re-imports of a long-lived live session.
+    """
+    checks: list[DoctorCheck] = []
+    seen: set[Path] = set()
+    for d in (project_dir, hub_dir):
+        if d is None:
+            continue
+        rd = d.resolve()
+        if rd in seen:
+            continue
+        seen.add(rd)
+        checks.extend(_duplicate_checks_for_log(rd / AI_LOG_FILENAME))
+    return checks
+
+
+def _duplicate_checks_for_log(log_path: Path) -> list[DoctorCheck]:
+    try:
+        text = log_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    line_counts: Counter[str] = Counter()
+    job_rows: Counter[str] = Counter()
+    job_stalled: Counter[str] = Counter()
+    job_max: dict[str, tuple[datetime, int]] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line.startswith("s "):
+            continue
+        line_counts[line] += 1
+        # Cheap pre-filter; job_id rows need a real parse for end/tokens.
+        if " job_id=" not in line:
+            continue
+        session = AiSession.from_log_line(line)
+        if session is None or not session.job_id:
+            continue
+        jid = session.job_id
+        job_rows[jid] += 1
+        tokens = session.input_tokens + session.output_tokens
+        prev = job_max.get(jid)
+        if prev is None:
+            job_max[jid] = (session.end, tokens)
+        elif session.end <= prev[0] and tokens <= prev[1]:
+            job_stalled[jid] += 1
+        else:
+            job_max[jid] = (max(prev[0], session.end), max(prev[1], tokens))
+
+    checks: list[DoctorCheck] = []
+    duplicated = {ln: n for ln, n in line_counts.items() if n > 1}
+    if duplicated:
+        surplus = sum(n - 1 for n in duplicated.values())
+        worst = max(duplicated.values())
+        checks.append(
+            DoctorCheck(
+                id=f"ledger.duplicates.{log_path.parent}",
+                label="Ledger (duplicate rows)",
+                status="warning",
+                detail=(
+                    f"{surplus} surplus byte-identical `s` row(s) in {log_path} "
+                    f"({len(duplicated)} distinct line(s), worst x{worst}) — "
+                    "reports collapse them, but a writer is re-appending"
+                ),
+                fix=_DUP_REMEDIATION,
+            )
+        )
+
+    runaway = {jid: n for jid, n in job_stalled.items() if n >= _DUP_JOB_STALLED_THRESHOLD}
+    if runaway:
+        top = sorted(runaway.items(), key=lambda kv: (-kv[1], kv[0]))[:3]
+        listing = ", ".join(f"{jid} x{n} stalled (of {job_rows[jid]} rows)" for jid, n in top)
+        more = f" (+{len(runaway) - 3} more)" if len(runaway) > 3 else ""
+        checks.append(
+            DoctorCheck(
+                id=f"ledger.job_rows.{log_path.parent}",
+                label="Ledger (job_id row count)",
+                status="warning",
+                detail=(
+                    f"suspiciously many stalled re-appends per job_id in {log_path}: "
+                    f"{listing}{more} — growth re-imports always advance in end time "
+                    "or tokens; stalled rows mean a writer is looping"
+                ),
+                fix=_DUP_REMEDIATION,
+            )
+        )
     return checks
 
 

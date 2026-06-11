@@ -1472,6 +1472,33 @@ layers must read from this local source of truth; they do not replace it.
       `openspec/changes/v5.22-copilot-growth-reimport/`.
       **Status: done; 1760 tests passing.**
 
+    - **v5.23 — Ledger duplicate canary in doctor:** the v5.21 follow-up
+      (proposal "Out of scope"). During that incident `halyard doctor`
+      reported all OK while the repo ledger held ~447 byte-identical
+      duplicate `s` rows (one gemini session re-appended 143 times by the
+      30-minute import timer) — read-time collapse is a display defence,
+      not a detection one, and doctor was blind to the whole importer
+      re-append defect class (three instances already: v5.2, v5.21,
+      v5.22). New `_ledger_duplicate_checks` scans raw `s` lines
+      (deliberately not `parse_sessions` output — its collapse step is the
+      very layer that hid this) per consulted ledger (project + hub,
+      resolved-path dedup) for two overlapping signals: byte-identical
+      duplicate lines (a verbatim repeat is always a writer defect —
+      genuine sessions have unique timestamps) and a single `job_id` with
+      ≥ 5 *stalled* rows — no growth in end time or token total over the
+      group's running maxima (catches loops whose rows differ slightly; a
+      raw row-count threshold was falsified by the first live run, which
+      flagged a legitimate 3-day codex session with 48 advancing growth
+      re-import rows — growth always advances, loops never do). Always
+      `warning`, never `error` (reports
+      stay correct, the exit-code contract is preserved); detection only —
+      the `fix` text says to find the re-appending writer first, then
+      optionally compact with the v5.21 repair procedure (stop daemon +
+      timer, back up, drop duplicates keeping first occurrence). Flows
+      through `DoctorReport`, so dashboard/TUI health inherit it. Spec in
+      `openspec/changes/v5.23-ledger-duplicate-doctor/`.
+      **Status: done; 1770 tests passing.**
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
