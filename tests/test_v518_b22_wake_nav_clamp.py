@@ -55,7 +55,10 @@ def test_extreme_min_month_does_not_crash_render(tmp_path: Path) -> None:
 
     # Render must succeed and still draw the Wake panel.
     assert "Wake ·" in html
-    assert "January 0001" in html  # %B %Y label for the floor month
+    # %B %Y label for the floor month. strftime("%Y") on year 1 is
+    # platform-dependent: BSD/macOS zero-pads ("0001"), glibc does not
+    # ("1") — accept either; the clamp, not the padding, is under test.
+    assert re.search(r"January 0*1\b", html)
     # No prev link may point below the floor: there must be no month=0000-*
     # (or any sub-year-1) target. The clamp emits an empty href instead.
     assert "month=0000" not in html
