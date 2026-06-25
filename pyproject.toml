@@ -40,7 +40,7 @@ dev = [
     "hypothesis>=6.0",
     "ruff==0.15.12",
     "mypy>=1.10",
-    "pip-audit>=2.7",  # L-4: CVE scanning for dependencies
+    "pip-audit>=2.10.1",  # L-4: CVE scanning for dependencies
     "freezegun>=1.5",  # v5.14: pin wall clock in May-2026-anchored tests
 ]
 openai = ["openai>=1.0"]
