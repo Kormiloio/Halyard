@@ -10,7 +10,7 @@ import pytest
 from halyard.ai_log import AI_LOG_FILENAME, HEADER, AiSession, append_session, parse_sessions
 from halyard.collectors import session_is_synthetic_telemetry
 
-_BASE = datetime(2026, 5, 15, 21, 0, 0)
+_BASE = datetime.now().replace(hour=21, minute=0, second=0, microsecond=0) - timedelta(days=1)
 
 
 def _proj(p: Path) -> Path:

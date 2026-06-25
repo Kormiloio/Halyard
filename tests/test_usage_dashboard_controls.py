@@ -56,7 +56,7 @@ def test_default_render_shows_overview(tmp_path: Path) -> None:
 
 def test_models_tab_renders_models_panel(tmp_path: Path) -> None:
     _init_project(tmp_path)
-    _seed_sessions(tmp_path, datetime(2026, 5, 14, 12))
+    _seed_sessions(tmp_path, datetime.now())
     html = render_dashboard(tmp_path, usage_tab="models")
     assert "<div class='usage-models-tab'>" in html
     # Legend swatches present
@@ -116,7 +116,7 @@ def test_models_panel_empty_state_no_data(tmp_path: Path) -> None:
 @pytest.mark.parametrize("rng", ["7d", "30d", "all"])
 def test_each_range_renders_cleanly(tmp_path: Path, rng: str) -> None:
     _init_project(tmp_path)
-    _seed_sessions(tmp_path, datetime(2026, 5, 14, 12))
+    _seed_sessions(tmp_path, datetime.now())
     html = render_dashboard(tmp_path, usage_range=rng)  # type: ignore[arg-type]
     # The range option that's selected must be marked active
     active_link = f"?range={rng}&tab=overview"
