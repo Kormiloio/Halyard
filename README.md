@@ -13,6 +13,16 @@ in daily use.
 
 ---
 
+## What it looks like
+
+**CLI report**
+![halyard report output](docs/assets/screenshot-report.png)
+
+**The Bridge — local dashboard**
+![The Bridge dashboard](docs/assets/screenshot-dashboard.png)
+
+---
+
 ## The problem
 
 You're doing AI-assisted work. At the end of a sprint, a month, or a client engagement,
