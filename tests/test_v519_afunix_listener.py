@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import socket
 import time
@@ -82,6 +83,11 @@ def test_ingest_over_socket_needs_no_token(hub) -> None:
 def test_socket_still_enforces_content_type(hub) -> None:
     # CSRF Content-Type guard applies on the socket too (cheap, harmless).
     conn = _UnixConn(str(hub_socket_path(_PORT)))
-    conn.request("POST", "/v1/ingest", body=_line(), headers={"Content-Type": "text/plain"})
+    # The server rejects the bad Content-Type and closes without draining the
+    # request body; on some platforms (seen on CPython 3.11 in CI) the still
+    # in-flight body write then raises BrokenPipeError. The 415 response is
+    # already buffered on the client, so swallow the write error and read it.
+    with contextlib.suppress(BrokenPipeError):
+        conn.request("POST", "/v1/ingest", body=_line(), headers={"Content-Type": "text/plain"})
     assert conn.getresponse().status == HTTPStatus.UNSUPPORTED_MEDIA_TYPE
     conn.close()
