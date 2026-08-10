@@ -36,6 +36,13 @@ def _isolate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     home = tmp_path / "home"
     home.mkdir(parents=True, exist_ok=True)
+    # The importer resolves its target ledger from Path.cwd() when no
+    # workspace is known, walking *up* the tree. Without this chdir the
+    # cwd stays inside the repo, find_project_dir climbs to a real Halyard
+    # project on the developer's machine, and the tests append synthetic
+    # rows to a real ai-sessions.log. Patching Path.home() alone does not
+    # prevent it.
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.setattr(mod, "_ANTIGRAVITY_DIR", home / ".gemini" / "antigravity")
     monkeypatch.setattr(mod, "_BRAIN_DIR", home / ".gemini" / "antigravity" / "brain")
