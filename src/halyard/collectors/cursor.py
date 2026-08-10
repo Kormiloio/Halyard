@@ -34,6 +34,7 @@ from halyard.ai_log import (
     write_unattributed_session,
 )
 from halyard.collectors import (
+    foreign_harness,
     session_has_evidence,
     session_is_implausible,
     session_is_synthetic_telemetry,
@@ -88,6 +89,14 @@ def handle_stop_hook() -> int:
         return 0
 
     payload = _read_payload()
+
+    # v5.25: Grok CLI runs hooks straight out of ~/.cursor/hooks.json
+    # ([compat.cursor] hooks, on by default) and accepts Cursor's camelCase
+    # event names, so this command fires for Grok sessions too. Recording
+    # them as tool=cursor would mis-attribute real work.
+    if foreign_harness(payload) is not None:
+        _clear_session_start()
+        return 0
 
     project_dir = _resolve_project_dir(payload) or find_hub()
     can_append_project_log = project_dir is not None and (project_dir / AI_LOG_FILENAME).exists()

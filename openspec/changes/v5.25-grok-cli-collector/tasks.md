@@ -2,19 +2,23 @@
 
 ## P0 — contamination (ship first, independent of the collector)
 
-- [ ] Confirm empirically what a Grok-originated hook invocation does to
-      `halyard cc-hook` and the Cursor hook commands today: no-op, error,
-      or wrong-tool row. Record the answer in `design.md`.
-- [ ] Identify the discriminator that proves a payload came from its own
-      harness (env var, payload key, or absent `transcript_path`).
-- [ ] Harden `claude_code.py` and `cursor.py` to refuse foreign payloads
-      — fail-open, but never write a wrong-tool row.
-- [ ] `_grok_compat_check(...)` in `doctor.py`: Grok present + Halyard
-      hooks in `~/.claude/settings.json` or `~/.cursor/hooks.json` +
-      compat not disabled → warning, fix = the `[compat.*] hooks = false`
-      TOML snippet.
-- [ ] Document the remedy in `README.md` / troubleshooting. Do **not**
-      write `~/.grok/config.toml` on the user's behalf.
+> Shipped 2026-08-10. 17 tests in `tests/test_v525_grok_contamination.py`.
+
+- [x] Confirm what a Grok-originated hook invocation does today. Grok's
+      payload is camelCase (`hookEventName`, `workspaceRoot`,
+      `permissionMode`); `claude_code.py` already read
+      `session_id or sessionId`, so a Grok payload was picked up rather
+      than rejected — a wrong-tool row, not a safe no-op.
+- [x] Discriminator: the camelCase common fields Grok documents and
+      neither Claude Code nor Cursor emits. A *positive* signature, not a
+      heuristic on absence.
+- [x] `collectors.foreign_harness()` shared guard; wired into
+      `claude_code.handle_stop_hook` and `cursor.handle_stop_hook`.
+      Fail-open (exit 0), clears session state, writes nothing.
+- [x] `_grok_compat_check()` in `doctor.py`. Per-vendor: warns only for
+      the cells still at their default, and never re-suggests a toggle
+      already set. Tolerates a malformed `config.toml`.
+- [x] Documented in `README.md` § Troubleshooting.
 - [ ] Investigate the `sessions` compat cell — `on (default)` for cursor,
       claude, **and** codex, i.e. a second borrowing vector against three
       tools Halyard already collects from. Vendor docs say these cells

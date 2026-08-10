@@ -154,3 +154,34 @@ def session_has_evidence(session: AiSession, *, history: bool = False) -> bool:
     if session.commit_count:
         return True
     return _model_is_real(session.model)
+
+
+# --- foreign-harness detection (v5.25) ------------------------------------
+
+# Grok CLI merges hook definitions out of ~/.claude/settings.json and
+# ~/.cursor/hooks.json by default ([compat.claude] hooks / [compat.cursor]
+# hooks, both `true` unless the user disables them). Those are exactly the
+# files Halyard installs into, so a Grok session can invoke `halyard
+# cc-hook` / the Cursor hook commands. Writing a `tool=claude-code` or
+# `tool=cursor` row for that work is silent mis-attribution in a ledger
+# whose whole purpose is trustworthy attribution — and it reaches invoices.
+#
+# Grok's payload is camelCase (`hookEventName`, `workspaceRoot`,
+# `permissionMode`); Claude Code and Cursor both use snake_case
+# (`hook_event_name`, `workspace_roots`, `transcript_path`). These keys are
+# therefore a positive Grok signature, not a heuristic on absence.
+_GROK_PAYLOAD_MARKERS = ("hookEventName", "workspaceRoot", "permissionMode")
+
+
+def foreign_harness(payload: dict[str, object]) -> str | None:
+    """Name the *other* agent harness that produced this hook payload.
+
+    Returns None when the payload looks native to the collector that
+    received it. Callers must bail out (fail-open, exit 0) rather than
+    write a row under their own tool name.
+    """
+    if not isinstance(payload, dict):
+        return None
+    if any(marker in payload for marker in _GROK_PAYLOAD_MARKERS):
+        return "grok"
+    return None
