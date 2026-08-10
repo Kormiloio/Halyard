@@ -110,12 +110,41 @@ already in the ledger (161 `billing=credits` rows today), and
 `billing != "api"` condition — the same quarantine v5.24 relies on, but
 here with genuine token counts behind it.
 
-Recording the total: `input_tokens=0`, `output_tokens=total` would be a
-lie about the split. Prefer carrying the true total in the
-forward-compatible `extra` passthrough (`grok_total_tokens=`) and leaving
-`input_tokens`/`output_tokens` at 0 with `tokens_available=false`, **or**
-extending `AiSession` with a first-class `total_tokens` field. Pick one in
-review before coding — this is the one open design question left.
+### 5. Recording a total-only token count — resolved
+
+`input_tokens=0, output_tokens=total` is out: it lies about the split.
+
+**The `extra` passthrough is also out, and the v2.75 contract is what
+rules it out.** That archived proposal states plainly: "OSS writes nothing
+into `extra`; it only *preserves* what another writer put there", and
+"`extra` is opaque passthrough; it is never interpreted, scored, or
+trusted by OSS surfaces." `extra` exists so a *foreign* writer
+(Halyard-Enterprise's `cost_center=`, a newer Halyard, a third-party
+emitter) can round-trip through this parser. An OSS collector writing
+`grok_total_tokens=` there would break the first clause, and any report
+surface reading it back would break the second.
+
+**Decision: a first-class `total_tokens` field on `AiSession`,** added
+through the `FieldSpec` registry. This is the format's normal growth
+path — `api_seconds`/`tool_seconds` (v2.67), `client_surface`/
+`commit_count` (v2.24), and the v2.32 interaction counts all arrived this
+way. Non-negotiable 2 governs *publishing* a Halyard-owned spec, not
+extending one.
+
+Requirements that come with it:
+
+- Row in the `Optional fields` table in `cli_spec.py` — that is the
+  published spec surface, and it must not drift from the registry.
+- `compare=False` semantics reviewed: the field must not disturb the
+  content-addressed session id / hash used as the amendment join key.
+- Backward compat: an older parser must ignore the token; a newer one
+  must round-trip a row that lacks it.
+- **`tokens_available` must not be reused for this.** Today it implies
+  input *and* output are meaningful, and `_tool_buckets_for_report` sums
+  `input + output + cache` when it is set — a total-only row would
+  contribute 0 to that sum while claiming tokens are available. Give
+  `total_tokens` its own presence semantics and teach the report bucket
+  to prefer it when the split is absent.
 
 ## Capture path: hooks primary, importer as backfill
 

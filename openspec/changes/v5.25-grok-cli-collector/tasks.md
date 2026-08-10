@@ -42,15 +42,35 @@
       path.
 - [x] Note the free outcome metadata: `git_remotes`, `head_branch`,
       `head_commit`, `git_root_dir`.
-- [ ] **Open decision (blocks coding):** how to record a total-only token
-      count. Either carry it in the `extra` passthrough
-      (`grok_total_tokens=`) with `input_tokens`/`output_tokens` at 0 and
-      `tokens_available=false`, or add a first-class `total_tokens` field
-      to `AiSession`. Do not fabricate an input/output split.
+- [x] Decide how to record a total-only token count: **a first-class
+      `total_tokens` field on `AiSession`** (2026-08-10). The `extra`
+      passthrough is ruled out by the v2.75 contract — "OSS writes nothing
+      into `extra`" and it is "never interpreted, scored, or trusted by
+      OSS surfaces". See `design.md` § 5.
 - [ ] Capture a real hook payload for `SessionStart` / `Stop` /
       `StopFailure` — confirm session id, cwd, model, tokens.
 - [ ] Confirm `/resume` grows a session in place and `--fork-session`
       creates a new id with a parent reference.
+
+## Wire format — `total_tokens` (v2.75-compliant extension)
+
+- [ ] `FieldSpec("total_tokens", "total_tokens", FieldKind.INT)` +
+      `total_tokens: int | None` on `AiSession`.
+- [ ] Row in the `Optional fields` table in `cli_spec.py` — the published
+      spec surface must not drift from the registry.
+- [ ] Confirm the field does not disturb the content-addressed session id
+      / hash used as the amendment join key.
+- [ ] Backward compat: an older parser ignores the token; a newer parser
+      round-trips a row that lacks it.
+- [ ] Do **not** reuse `tokens_available` — it implies a meaningful
+      input/output split, and `_tool_buckets_for_report` sums
+      `input + output + cache` when set, so a total-only row would
+      contribute 0 while claiming tokens are available. Give
+      `total_tokens` its own presence semantics and teach the report
+      bucket to prefer it when the split is absent.
+- [ ] Test: total-only row renders real tokens in `report` / dashboard,
+      not 0.
+- [ ] Test: a split-bearing row is unaffected by the new path.
 
 ## Code
 
