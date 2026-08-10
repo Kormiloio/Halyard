@@ -20,7 +20,7 @@ hooks for Claude Code, Cursor, and Gemini CLI; dynamic pricing; budget alerts;
 a local dashboard; and a Beancount ledger. The `ai-sessions.log` protocol is
 proven in daily use.
 
-Three AI tools — Claude CLI, Cursor, and Antigravity (Gemini CLI) — were asked
+Three AI tools — Claude CLI, Cursor, and Antigravity — were asked
 independently to evaluate the project and recommend improvements. Their
 feedback converged on the same four gaps:
 

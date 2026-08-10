@@ -772,6 +772,9 @@ def _tool_buckets_for_report(sessions: list[AiSession]) -> list[ToolUsageBucket]
                 tokens=tokens,
                 cost_usd=sum_spend(s_list),
                 session_share=share(len(s_list)),
+                # Every session reported no tokens → the tool measures no
+                # spend at all, rather than having genuinely spent nothing.
+                spend_tracked=any(s.tokens_available for s in s_list),
             )
         )
 

@@ -15,7 +15,7 @@ from typing import Literal
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, find_project_dir, parse_sessions
 from halyard.hub import find_hub
 
-ToolScope = Literal["claude", "cursor", "gemini", "windsurf", "copilot", "all"]
+ToolScope = Literal["claude", "cursor", "gemini", "windsurf", "copilot", "antigravity", "all"]
 CheckStatus = Literal["ok", "warning", "error", "skipped"]
 ReportStatus = Literal["ok", "warning", "error"]
 
@@ -234,7 +234,7 @@ def _hub_checks(project_dir: Path | None, hub_dir: Path | None) -> list[DoctorCh
 
 
 def _hook_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
-    scopes = ("claude", "cursor", "gemini", "windsurf") if tool == "all" else (tool,)
+    scopes = ("claude", "cursor", "gemini", "windsurf", "antigravity") if tool == "all" else (tool,)
     checks: list[DoctorCheck] = []
     for scope in scopes:
         if scope == "copilot":
@@ -256,6 +256,10 @@ def _hook_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
                     checks.append(tel)
         elif scope == "windsurf":
             checks.append(_windsurf_hook_check(required=required))
+        elif scope == "antigravity":
+            ag = _antigravity_hook_check(required=required)
+            if ag is not None:
+                checks.append(ag)
     return checks
 
 
@@ -406,6 +410,70 @@ def _windsurf_hook_check(*, required: bool) -> DoctorCheck:
     )
 
 
+def _antigravity_hook_check(*, required: bool) -> DoctorCheck | None:
+    """Antigravity capture readiness. None when Antigravity is not installed.
+
+    Unlike the other tools, a missing Antigravity is not worth a row: it is
+    not part of a default toolchain, so an unconditional warning would be
+    noise on every machine that has never heard of it.
+    """
+    from halyard.collectors.antigravity import antigravity_present
+
+    if not antigravity_present():
+        return None
+
+    path = Path.home() / ".gemini" / "config" / "hooks.json"
+    if _has_command(_commands_from_antigravity_settings(path), "ag-hook"):
+        return DoctorCheck(
+            id="hook.antigravity",
+            label="Antigravity",
+            status="ok",
+            detail="hooks installed — time only, not spend-tracked",
+        )
+    return DoctorCheck(
+        id="hook.antigravity",
+        label="Antigravity",
+        status="error" if required else "warning",
+        detail="hooks missing",
+        fix="halyard install-hook-antigravity",
+    )
+
+
+def _commands_from_antigravity_settings(path: Path) -> list[str]:
+    """Hook commands from Antigravity's hooks.json.
+
+    Shape differs from every other tool: the top level is a map of *named*
+    hooks, each holding event → handler list. Handlers for non-tool events
+    are flat dicts; tool events wrap them in a ``hooks`` list under a
+    matcher. Both shapes are walked so a user's own named hooks (and any
+    future matcher use) do not hide Halyard's entry.
+    """
+    commands: list[str] = []
+    data = _read_json(path)
+    if not isinstance(data, dict):
+        return commands
+
+    def _collect(entry: object) -> None:
+        if not isinstance(entry, dict):
+            return
+        command = entry.get("command")
+        if isinstance(command, str):
+            commands.append(command)
+        nested = entry.get("hooks")
+        if isinstance(nested, list):
+            for item in nested:
+                _collect(item)
+
+    for named in data.values():
+        if not isinstance(named, dict):
+            continue
+        for entries in named.values():
+            if isinstance(entries, list):
+                for entry in entries:
+                    _collect(entry)
+    return commands
+
+
 # client -> mcpServers config file, relative to ~ (recomputed per call
 # so a relocated home in tests is honoured, matching the hook checks).
 _MCP_CONFIG_REL: dict[str, tuple[str, ...]] = {
@@ -448,6 +516,9 @@ def _unwired_tool_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
     Always `warning`, never `error`, so the doctor exit code is
     unaffected.
     """
+    # Antigravity is deliberately absent: this check keys on a PATH binary
+    # plus an MCP registration, and Antigravity is a GUI app with neither.
+    # Its readiness is covered by _antigravity_hook_check.
     scopes = ("claude", "cursor", "gemini", "windsurf") if tool == "all" else (tool,)
     hook_status: dict[str, Callable[[], CheckStatus]] = {
         "claude": lambda: _claude_hook_check(current, required=False).status,
@@ -455,12 +526,16 @@ def _unwired_tool_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
         "gemini": lambda: _gemini_hook_check(required=False).status,
         "windsurf": lambda: _windsurf_hook_check(required=False).status,
         "copilot": lambda: "skipped",  # Copilot has no hooks
+        "antigravity": lambda: (
+            check.status if (check := _antigravity_hook_check(required=False)) else "skipped"
+        ),
     }
     labels = {
         "claude": "Claude Code",
         "cursor": "Cursor",
         "gemini": "Gemini CLI",
         "windsurf": "Windsurf",
+        "antigravity": "Antigravity",
         "copilot": "GitHub Copilot",
     }
     install_hook = {
@@ -731,7 +806,7 @@ _COVERAGE_FIX = {
 # newer than the last captured row by > grace means capture is lagging — but a
 # broken importer is the failure this caught for Copilot (format drift made
 # every session silently skip).
-_COVERAGE_TOOLS = ("claude-code", "gemini-cli", "github-copilot", "codex")
+_COVERAGE_TOOLS = ("claude-code", "gemini-cli", "github-copilot", "codex", "antigravity")
 # Hook-only tools with no enumerable session files — probed via coarse storage
 # mtime with a wider grace (v3.15). See `_COVERAGE_LAG_DAYS_COARSE`.
 _COVERAGE_TOOLS_COARSE = ("cursor", "windsurf")
@@ -762,6 +837,10 @@ def _newest_disk_activity(tool: str) -> datetime | None:
 
             if _CODEX_SESSIONS_DIR.exists():
                 paths = list(_CODEX_SESSIONS_DIR.rglob("rollout-*.jsonl"))
+        elif tool == "antigravity":
+            from halyard.collectors.antigravity import discover_transcripts
+
+            paths = list(discover_transcripts().values())
         elif tool == "cursor":
             # Coarse signal (v3.15): mtime of Cursor's chat/composer SQLite
             # stores. Never read their contents — a schema change must not break

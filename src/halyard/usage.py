@@ -124,6 +124,10 @@ class ToolUsageBucket:
     tokens: int
     cost_usd: float
     session_share: float
+    # False when the tool reports no tokens or cost at all (Antigravity),
+    # so surfaces can render "n/a" instead of "$0.00". A zero reads as
+    # "this work was free"; n/a reads as "this was never measured".
+    spend_tracked: bool = True
 
 
 @dataclass(frozen=True)

@@ -794,6 +794,7 @@ _GEMINI_JOB_PREFIX = "gemini:"
 _CODEX_JOB_PREFIX = "codex:"
 _CLAUDE_JOB_PREFIX = "claude:"
 _COPILOT_JOB_PREFIX = "copilot:"
+_ANTIGRAVITY_JOB_PREFIX = "antigravity:"
 
 
 def _gemini_session_key(session: AiSession) -> str | None:
@@ -864,6 +865,24 @@ def _copilot_session_key(session: AiSession) -> str | None:
     return None
 
 
+def _antigravity_session_key(session: AiSession) -> str | None:
+    """A stable id for the Antigravity conversation a row belongs to, else None.
+
+    Both capture paths read the same growing transcript and both tag rows
+    with ``job_id=antigravity:<conversation-id>``: the Stop hook fires once
+    per turn, and the importer re-reads as the file grows. Every row is a
+    whole-conversation snapshot, not a per-turn delta, so they must collapse
+    to one — unlike ``_claude_session_key``, where the hook's rows *are*
+    deltas. No ``session_id`` fallback is needed: this collector is the only
+    writer of ``tool=antigravity`` rows.
+    """
+    if session.tool != "antigravity":
+        return None
+    if session.job_id and session.job_id.startswith(_ANTIGRAVITY_JOB_PREFIX):
+        return session.job_id[len(_ANTIGRAVITY_JOB_PREFIX) :]
+    return None
+
+
 def _redundant_session_key(session: AiSession) -> str | None:
     """Namespaced collapse key spanning every tool with multi-row sessions.
 
@@ -882,6 +901,9 @@ def _redundant_session_key(session: AiSession) -> str | None:
     copilot = _copilot_session_key(session)
     if copilot is not None:
         return f"{_COPILOT_JOB_PREFIX}{copilot}"
+    antigravity = _antigravity_session_key(session)
+    if antigravity is not None:
+        return f"{_ANTIGRAVITY_JOB_PREFIX}{antigravity}"
     return None
 
 

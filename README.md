@@ -68,7 +68,8 @@ design-partner pull, and will not change what local files mean.
 Halyard has three layers:
 
 **Collection** — Lightweight hooks that run where AI work happens. Claude Code,
-Cursor, Windsurf, and Gemini CLI hooks capture sessions automatically; a VS Code
+Cursor, Windsurf, Gemini CLI, and Antigravity hooks capture sessions
+automatically; a VS Code
 extension captures editing time, branch, and code delta — token counts
 unavailable until VS Code/Copilot exposes a public session hook. Since v3.5,
 Claude Code sessions are tagged with an advisory **client surface**
@@ -129,6 +130,14 @@ signal each tool exposes:
   exact API and tool-execution durations (`api_seconds`, `tool_seconds`) and enriches
   from Gemini's local history file for accurate multi-model token breakdowns, tool-call counts,
   and deterministic cost.
+- **Antigravity**: installs a `Stop` hook in `~/.gemini/config/hooks.json` and
+  reads the per-conversation transcript JSONL. Antigravity reports no tokens,
+  model id, or cost anywhere, so these sessions record **time only** — wall
+  clock, message counts, tool calls, errors — and are excluded from spend
+  totals rather than counted as `$0.00`. Its `conversations/*.db` store is
+  undocumented binary protobuf and is deliberately not read. Despite living
+  under `~/.gemini/`, it is a separate product from Gemini CLI and neither
+  collector reads the other's files.
 - **Codex Desktop**: imports local `~/.codex/sessions/.../rollout-*.jsonl`
   files, extracts timing/model/token metadata, and records imported session IDs
   so repeated imports do not duplicate entries.
@@ -226,6 +235,7 @@ halyard mcp            # stdio MCP server for Claude Code / Cursor
 halyard install-hook          # Claude Code
 halyard install-cursor-hook   # Cursor
 halyard install-gemini-hook   # Gemini CLI
+halyard install-hook-antigravity  # Antigravity (time only, no spend)
 halyard install-vscode-tasks  # VS Code manual capture task
 
 # Record VS Code/Copilot work manually

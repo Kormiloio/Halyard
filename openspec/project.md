@@ -1499,6 +1499,32 @@ layers must read from this local source of truth; they do not replace it.
       `openspec/changes/v5.23-ledger-duplicate-doctor/`.
       **Status: done; 1770 tests passing.**
 
+    - **v5.24 — Antigravity collector:** Antigravity (Google's agentic IDE)
+      was entirely uncaptured. A Phase-0 spike against a real 40-minute
+      conversation settled the format questions: the `conversations/*.db`
+      store is SQLite wrapping undocumented binary protobuf and is
+      **rejected as a source**; the real target is a clean JSONL transcript
+      at `brain/<conversation-id>/.system_generated/logs/transcript.jsonl`
+      (a path matching neither location the vendor docs give, so it is read
+      from the hook payload's `transcriptPath`, never hardcoded). A
+      documented `Stop` hook surface exists and is the primary capture path,
+      with the transcript importer as backfill.
+      The defining constraint: Antigravity reports **no tokens, no model id,
+      and no cost anywhere** (`modelName` is literally `"auto"`). Rows carry
+      real wall time, message counts, tool calls, and errors, but zero
+      tokens and zero cost, and are **quarantined from spend** rather than
+      counted as `$0.00` — `usage.sum_spend` already excludes them on both
+      its `billing != "api"` and `cost_usd <= 0` conditions. New
+      `ToolUsageBucket.spend_tracked` makes CLI and dashboard render `n/a`
+      instead of `$0.00`, so a zero never reads as free work.
+      Also: growth-aware import state from the first commit (avoiding the
+      v5.2/v5.21/v5.22 defect class), a `job_id=antigravity:` collapse key,
+      explicit path-ownership guards against the Gemini collectors that
+      share `~/.gemini/`, and UTC→local conversion for transcript stamps.
+      Spec in `openspec/changes/v5.24-antigravity-collector/`.
+      **Status: done; 1792 tests passing** (one pre-existing unrelated
+      failure, `test_v252_tool_detection.py::test_absent_tool_no_nudge`,
+      is non-hermetic and reads the real `$HOME` — tracked separately).
     - **v5.28 — Ambient-state test isolation:** the two axes v5.14 left
       open, same defect class (tests coupled to ambient machine state),
       both test-only. **(a) Day-field underflow:**

@@ -2116,12 +2116,20 @@ def _tool_table(buckets: Iterable[ToolUsageBucket]) -> str:
         pct = int((bucket.sessions / total_sessions) * 100)
         pct_label = f"{pct}%" if pct > 0 or bucket.sessions == 0 else "<1%"
         tok_label = compact_number(bucket.tokens) if bucket.tokens else "—"
+        # A "$0.00" cell reads as free work. Tools that report no spend at
+        # all get an explicit n/a instead (see ToolUsageBucket.spend_tracked).
+        cost_html = (
+            f"${bucket.cost_usd:.2f}"
+            if bucket.spend_tracked
+            else '<span class="muted" title="Tool reports no tokens or cost; '
+            'time is captured, spend is not tracked.">n/a</span>'
+        )
         rows.append(
             [
                 {"html": _e(bucket.tool)},
                 {"cls": "num", "html": str(bucket.sessions)},
                 {"cls": "num", "html": _e(tok_label)},
-                {"cls": "num", "html": f"${bucket.cost_usd:.2f}"},
+                {"cls": "num", "html": cost_html},
                 {"html": _bar_cell(pct, pct_label)},
             ]
         )

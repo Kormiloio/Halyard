@@ -23,6 +23,33 @@ _GEMINI_TMP = Path.home() / ".gemini" / "tmp"
 _GEMINI_HISTORY = Path.home() / ".gemini" / "history"
 
 
+def _foreign_roots() -> tuple[Path, ...]:
+    """Subtrees of ~/.gemini/ owned by a *different* collector.
+
+    v5.24: Antigravity is a separate product that shares this config root
+    (``~/.gemini/antigravity/``, owned by ``collectors/antigravity.py``).
+    The globs below are anchored at ``tmp/`` and ``history/`` so they do
+    not reach it today — this exists so that stays deliberate rather than
+    incidental. Widening any glob here to walk ``~/.gemini/`` directly must
+    exclude these, or the two collectors double-count the same work under
+    different tool names.
+
+    Recomputed per call so a relocated home (tests) is honoured.
+    """
+    return (Path.home() / ".gemini" / "antigravity",)
+
+
+def _is_foreign(path: Path) -> bool:
+    """True if ``path`` belongs to another collector's tree under ~/.gemini/."""
+    for root in _foreign_roots():
+        try:
+            path.relative_to(root)
+        except ValueError:
+            continue
+        return True
+    return False
+
+
 @dataclass
 class GeminiModelStats:
     model: str
@@ -478,7 +505,8 @@ def find_all_session_files() -> list[Path]:
     """
     files = list(_GEMINI_TMP.glob("*/chats/session-*.json"))
     files.extend(_GEMINI_TMP.glob("*/chats/session-*.jsonl"))
-    return files
+    # v5.24: never claim a file owned by another ~/.gemini/ collector.
+    return [f for f in files if not _is_foreign(f)]
 
 
 def project_dir_for_slug(slug: str) -> Path | None:
