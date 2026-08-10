@@ -128,20 +128,45 @@ def test_parse_transcript_reports_time_but_no_spend(tmp_path: Path) -> None:
     assert session.wall_seconds == 120
 
 
-def test_created_at_is_converted_from_utc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_created_at_is_converted_from_utc(tmp_path: Path) -> None:
     """Transcript stamps are UTC ``Z``; the ledger writes local time.
 
     Without conversion every Antigravity session is offset by the local UTC
-    offset — the bug this pins.
+    offset — the bug this pins. Platform-independent: the expectation is
+    derived from whatever zone the runner is in, so it holds on a UTC CI
+    box and on a developer machine alike.
+    """
+    session = parse_transcript(_write_transcript(tmp_path, turns=1, start="2026-08-09T18:58:04Z"))
+    assert session is not None
+
+    expected = datetime.fromisoformat("2026-08-09T18:58:04+00:00").astimezone().replace(tzinfo=None)
+    assert session.start == expected
+    assert session.start.tzinfo is None, "the ledger stores naive local datetimes"
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="time.tzset is POSIX-only")
+def test_created_at_conversion_against_a_fixed_zone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same conversion pinned to a concrete offset, where the OS allows it.
+
+    Complements the platform-independent test above, which cannot catch a
+    no-op conversion when the runner is already on UTC.
     """
     monkeypatch.setenv("TZ", "America/New_York")
     time.tzset()
-
-    session = parse_transcript(_write_transcript(tmp_path, turns=1, start="2026-08-09T18:58:04Z"))
-    assert session is not None
-    # 18:58:04Z is 14:58:04 in New York (EDT, UTC-4).
-    assert session.start == datetime(2026, 8, 9, 14, 58, 4)
-    assert session.start.tzinfo is None
+    try:
+        session = parse_transcript(
+            _write_transcript(tmp_path, turns=1, start="2026-08-09T18:58:04Z")
+        )
+        assert session is not None
+        # 18:58:04Z is 14:58:04 in New York (EDT, UTC-4).
+        assert session.start == datetime(2026, 8, 9, 14, 58, 4)
+    finally:
+        # monkeypatch restores TZ, but the C-level zone must be reloaded too
+        # or every later test in this process inherits New York.
+        monkeypatch.undo()
+        time.tzset()
 
 
 def test_prompt_content_is_never_captured(tmp_path: Path) -> None:
