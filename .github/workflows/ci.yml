@@ -25,8 +25,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
+        # setuptools is upgraded alongside pip because the 3.11 runner
+        # image ships 79.0.1, which carries PYSEC-2026-3447 (fixed in
+        # 83.0.0). The audit step below inspects the environment in
+        # place, so a stale build-time setuptools fails CI on 3.11 even
+        # though halyard neither depends on nor imports it. Pinning it in
+        # pyproject would be wrong — it is a runner artifact, not a
+        # project dependency. Only this job needs it; test-windows does
+        # not audit.
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools
           pip install -e ".[dev]"
 
       - name: Lint with ruff
