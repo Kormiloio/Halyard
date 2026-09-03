@@ -6,7 +6,7 @@ and the daily-by-model chart rendering.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -27,7 +27,13 @@ def _seed_sessions(tmp_path: Path, now: datetime) -> None:
     lines = ["; halyard test log\n"]
     for day_offset in range(3):
         for hour in (9, 14):
-            start = now.replace(hour=hour, minute=0, second=0).replace(day=now.day - day_offset)
+            # Subtract whole days rather than decrementing the day field:
+            # `.replace(day=now.day - offset)` underflows to day 0 (or below)
+            # in the first days of a month, so this suite failed every 1st-3rd
+            # with "day is out of range for month".
+            start = (now - timedelta(days=day_offset)).replace(
+                hour=hour, minute=0, second=0, microsecond=0
+            )
             end = start.replace(minute=10)
             lines.append(
                 f"s {start.strftime('%Y-%m-%dT%H:%M:%S')} "
