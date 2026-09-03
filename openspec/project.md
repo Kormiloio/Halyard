@@ -1543,6 +1543,35 @@ layers must read from this local source of truth; they do not replace it.
       `conftest.py` guard is the durable fix. Also deferred: the
       `vscode-extension` job is red on 2 high-severity `postcss`
       advisories — same colour, unrelated cause.
+    - **v5.29 — Stale hub pointer is silent, and its fix did not exist:**
+      found by diagnosing a live capture outage on 2026-09-03 — a day of
+      Claude Code sessions landing in `~/.halyard/unattributed.log` while
+      `halyard doctor` reported `no hub configured`, which was false. Two
+      defects compounded. **(a)** `~/.halyard/hub` is a pointer file, and
+      `find_hub()` ends `return path if path.is_dir() else None`, so a
+      pointer at a relocated directory is indistinguishable from no
+      pointer. That is the right contract for its ~40 call sites (which
+      only ask "is there a hub I can write to?") but wrong for the
+      doctor. `collectors/claude_code.py:423` resolves
+      `find_project_dir(cwd) or find_hub()`, and `find_project_dir` is a
+      pure CWD walk-up — so once the pointer goes stale, every ambient
+      session silently diverts to `unattributed.log` (recoverable, but
+      absent from reports). Fixed by adding `configured_hub_path()`
+      *beside* `find_hub()`, leaving its contract untouched, plus a
+      distinct `hub.stale` doctor check (`error`, mutually exclusive with
+      `hub.configured` — the ids are what dashboard/TUI health key off).
+      **(b)** the advertised remedy `halyard hub <path>` could not run:
+      `cli_setup.register` added a bare `hub` command and `cli_hub.register`
+      then added a Typer sub-app of the same name, which silently won.
+      `hub.py` and `orchestration.py` already documented `halyard hub set
+      <path>`, a subcommand that was never implemented — so the code now
+      matches its own docstrings: `hub set` / `hub show` added, the
+      shadowed command deleted rather than reordered (reordering would fix
+      the instance and leave the trap armed). Deliberately not auto-healing
+      a stale pointer: a hub holds billing-relevant ledgers and a wrong
+      guess silently writes into the wrong project. Spec in
+      `openspec/changes/v5.29-hub-pointer-staleness/`.
+      **Status: done; 1781 tests passing** (+11).
 
 ## Deferred or gated
 

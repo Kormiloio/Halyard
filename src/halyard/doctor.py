@@ -131,7 +131,7 @@ def _project_checks(project_dir: Path | None, hub_dir: Path | None) -> list[Doct
                 label="Project",
                 status="error",
                 detail="no Halyard project found",
-                fix="halyard init or halyard hub <path>",
+                fix="halyard init or halyard hub set <path>",
             )
         ]
 
@@ -179,6 +179,31 @@ def _project_checks(project_dir: Path | None, hub_dir: Path | None) -> list[Doct
 def _hub_checks(project_dir: Path | None, hub_dir: Path | None) -> list[DoctorCheck]:
     pointer = Path.home() / ".halyard" / "hub"
     if hub_dir is None:
+        # A pointer that survives but no longer resolves is a different
+        # failure from never having configured one, and find_hub() cannot
+        # tell them apart (both are None). Untangled here because the
+        # stale case silently diverts every ambient session to
+        # unattributed.log while reporting itself as "no hub configured".
+        from halyard.hub import configured_hub_path
+
+        stale = configured_hub_path()
+        if stale is not None:
+            return [
+                DoctorCheck(
+                    id="hub.stale",
+                    label="Hub",
+                    status="error",
+                    detail=(
+                        f"configured hub {stale} no longer exists — ambient "
+                        "sessions are diverting to ~/.halyard/unattributed.log "
+                        "(recoverable, nothing is lost)"
+                    ),
+                    fix=(
+                        "halyard hub set <path>  (then: halyard assign-unattributed "
+                        "--project <client:project>)"
+                    ),
+                )
+            ]
         status: CheckStatus = "warning" if project_dir is not None else "error"
         return [
             DoctorCheck(
@@ -186,7 +211,7 @@ def _hub_checks(project_dir: Path | None, hub_dir: Path | None) -> list[DoctorCh
                 label="Hub",
                 status=status,
                 detail="no hub configured",
-                fix="halyard init --hub or halyard hub <path>",
+                fix="halyard init --hub or halyard hub set <path>",
             )
         ]
 

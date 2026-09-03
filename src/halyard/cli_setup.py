@@ -41,38 +41,11 @@ def register(app: typer.Typer) -> None:
             _auto_install_detected_hooks()
             _auto_install_detected_mcp()
 
-    @app.command()
-    def hub(
-        set_path: str | None = typer.Argument(
-            None, metavar="PATH", help="Set hub to this directory (must contain halyard.toml)."
-        ),
-    ) -> None:
-        """Show or set the global hub directory for cross-project session capture."""
-        from halyard.hub import get_hub_status, set_hub
-
-        if set_path is not None:
-            target = Path(set_path).resolve()
-            try:
-                set_hub(target)
-            except ValueError as e:
-                console.print(f"[bold red]Error:[/] {e} — run [bold]halyard init[/] there first.")
-                raise typer.Exit(code=1) from None
-
-            console.print(f"[bold green]Hub set[/] → [bold]{target}[/]")
-            return
-
-        status = get_hub_status()
-        if status.path is None:
-            console.print(
-                "[yellow]No hub configured.[/]\n"
-                "Sessions outside any halyard.toml directory are currently dropped.\n\n"
-                "To fix: [bold]halyard init --hub[/] in a central directory, or\n"
-                "        [bold]halyard hub <path>[/] to point at an existing project."
-            )
-        else:
-            console.print(
-                f"[bold cyan]Hub[/] → [bold]{status.path}[/]  ({status.session_count} sessions)"
-            )
+    # NOTE: the hub directory setter lives in cli_hub as `halyard hub set`.
+    # A bare `hub` command was registered here until v5.29, but cli.py adds
+    # the cli_hub sub-app under the same name afterwards, so it was silently
+    # shadowed and unreachable — while doctor still advertised it as the fix
+    # for "no hub configured". Do not re-add a `hub` command here.
 
     @app.command(name="doctor")
     def doctor_cmd(

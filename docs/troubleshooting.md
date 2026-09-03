@@ -29,7 +29,7 @@ If you want Halyard to capture sessions from many repos into one place, configur
 a hub:
 
 ```bash
-halyard hub /path/to/halyard-project
+halyard hub set /path/to/halyard-project
 ```
 
 ## Hooks Missing
@@ -118,7 +118,7 @@ If the extension is running but no sessions appear in `ai-sessions.log`:
 2. Run `halyard doctor` to confirm a project or hub is configured. The extension
    records to whatever project or hub `halyard` resolves from the workspace root.
 3. Check that the workspace folder is inside (or is) a Halyard project directory.
-   If not, configure a hub: `halyard hub /path/to/halyard-project`.
+   If not, configure a hub: `halyard hub set /path/to/halyard-project`.
 
 ### Status Bar Not Showing
 
