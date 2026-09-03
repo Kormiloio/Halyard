@@ -11,7 +11,9 @@
       decrementing the day field.
 - [x] `microsecond=0` added to the truncation, matching the
       `strftime('%Y-%m-%dT%H:%M:%S')` serialisation.
-- [x] Suite green on a 1st–3rd calendar date (verified 2026-09-02).
+- [x] Failure window confirmed as the 1st and 2nd only (`now.day < 3`),
+      by forcing the date rather than waiting for it — the live window
+      closed at 2026-09-03 mid-review.
 
 ## Tests — axis 2, real `$HOME` (`tests/test_v252_tool_detection.py`)
 

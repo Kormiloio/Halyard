@@ -10,7 +10,7 @@ directory**.
 
 Both were latent. Neither is a production defect.
 
-### 1. Day-field underflow — breaks CI on the 1st–3rd of every month
+### 1. Day-field underflow — breaks CI on the 1st and 2nd of every month
 
 `tests/test_usage_dashboard_controls.py::_seed_sessions` built its
 back-dated fixture rows by decrementing the day *field*:
@@ -26,14 +26,31 @@ computes `day=0` or lower and raises:
 ValueError: day is out of range for month
 ```
 
-This is not theoretical — it is failing **right now**, on
-2026-09-02. It takes down `lint-and-test` on all three Python versions on
-every open PR, including PR #13 (v5.24 Antigravity) and PR #15 (v5.27
+This is not theoretical. It took down `lint-and-test` on every open PR on
+2026-09-02 — including PR #13 (v5.24 Antigravity) and PR #15 (v5.27
 catch-up deadlock), whose own branches are level with `main` and otherwise
-sound. `main`'s last CI run was 2026-07-09 and was green; it has not been
-re-run since, so `main` is latently red as well. The window closes on its
-own on the 4th, which is exactly why this survived: for 28 days a month the
-suite is green.
+sound. `main`'s last CI run was 2026-07-09 and was green; it had not been
+re-run since, so `main` was latently red as well.
+
+Two things about that window are worth recording, because both misled the
+first diagnosis of this bug:
+
+- **It is the 1st and 2nd, not the 1st–3rd.** `day_offset` reaches 2, so
+  the call raises when `now.day - 2 < 1`, i.e. `now.day < 3`. On the 3rd it
+  computes day 1 and succeeds.
+- **It closed mid-investigation.** UTC rolled to 2026-09-03 while this
+  change was in review, and the failure stopped reproducing on its own.
+  A branch *without* this fix now passes `lint-and-test`, which makes the
+  green tick meaningless as evidence either way until the next 1st.
+
+That self-healing is exactly why the bug survived: for roughly 29 days a
+month the suite is green, and the two days it is not are the two days
+nobody re-runs July's CI.
+
+It also did **not** account for the whole red matrix. `lint-and-test (3.11)`
+was independently red on `pip-audit` (setuptools 79.0.1, PYSEC-2026-3447) —
+a separate failure this change does not address, fixed in a companion CI
+commit.
 
 Sibling `.replace(day=1, …)` calls in `tests/test_report.py` and
 `src/halyard/dashboard.py` are safe — day 1 always exists — so this is the

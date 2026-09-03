@@ -4,7 +4,7 @@
 
 `timedelta` is the fix, not a guard on `now.day`. Clamping (`max(1, now.day
 - offset)`) would keep the call from raising but would silently collapse
-three distinct fixture days into one on the 1st–3rd, so the suite would
+three distinct fixture days into one on the 1st and 2nd, so the suite would
 "pass" while testing something other than what it claims. Subtracting a
 `timedelta` rolls into the previous month correctly and keeps three
 distinct days in every case.
@@ -73,10 +73,23 @@ suppressing Copilot does not empty it.
 
 Each axis needs a different check, and neither is the obvious one.
 
-**Day underflow** cannot be verified by running the suite on the 4th–31st —
-it is green either way. It reproduces only on the 1st–3rd, which is where
-the calendar happens to be today (2026-09-02); the same run on the 4th
-proves nothing.
+**Day underflow** reproduces only on the 1st and 2nd (`day_offset` reaches
+2, so it raises when `now.day < 3`). On the 3rd–31st the suite is green with
+or without the fix, so a green run outside that window is not evidence.
+
+This bit during review: the original failure was observed on 2026-09-02,
+UTC rolled to the 3rd before CI finished, and a branch *without* the fix
+then passed `lint-and-test` cleanly. Do not read that as verification.
+The honest local check is to force the date rather than wait for it:
+
+```python
+from datetime import datetime
+for day in (1, 2, 3):
+    now = datetime(2026, 9, day, 12, 0, 0)
+    [now.replace(hour=9).replace(day=now.day - o) for o in range(3)]  # pre-fix form
+```
+
+Days 1 and 2 raise `ValueError`, day 3 does not.
 
 **Home leakage** cannot be verified by running the file alone — it passed
 before the fix. It needs the full suite on a machine with real Copilot
