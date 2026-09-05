@@ -32,6 +32,7 @@ from halyard.ai_log import (
 )
 from halyard.collectors import (
     _MAX_SESSION_SECONDS,
+    foreign_harness,
     session_has_evidence,
     session_is_implausible,
     session_is_synthetic_telemetry,
@@ -422,6 +423,16 @@ def handle_stop_hook() -> int:
 
     # Cursor fires Claude Code's Stop hook internally — cursor.py handles those sessions
     if payload.get("cursor_version"):
+        _clear_session_start()
+        return 0
+
+    # v5.25: Grok CLI runs hooks straight out of ~/.claude/settings.json
+    # ([compat.claude] hooks, on by default), so this command fires for Grok
+    # sessions too. Recording them as tool=claude-code would mis-attribute
+    # real work. Note the guard must come before any use of `sessionId`
+    # below — that camelCase fallback is precisely what would otherwise
+    # pick up a Grok payload.
+    if foreign_harness(payload) is not None:
         _clear_session_start()
         return 0
 

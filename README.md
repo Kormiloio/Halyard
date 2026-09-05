@@ -434,6 +434,35 @@ tokens" above. If the number is climbing, check that your active AI tool's
 hook is sending token data (`halyard doctor` confirms hook health) and
 that recent sessions on the API plan aren't being dropped.
 
+### Grok CLI sessions show up as Claude Code or Cursor
+
+Grok CLI discovers hooks from `~/.claude/settings.json` and
+`~/.cursor/hooks.json` as well as its own `~/.grok/hooks/`, for
+compatibility. Both `[compat.claude] hooks` and `[compat.cursor] hooks`
+default to `true` — and those are exactly the files Halyard installs
+into. Left alone, a Grok session fires Halyard's Claude/Cursor hooks and
+its work is attributed to the wrong tool.
+
+`halyard doctor` warns when this applies to your machine. The remedy is
+to turn off *only* hook scanning, in `~/.grok/config.toml`:
+
+```toml
+[compat.claude]
+hooks = false
+
+[compat.cursor]
+hooks = false
+```
+
+The sibling cells (`skills`, `rules`, `agents`, `mcps`) stay on, so Grok
+still reads your `~/.claude/CLAUDE.md` and any shared MCP config. Confirm
+with `grok inspect` — the Harness Compatibility section should report
+`hooks OFF (config)`, and Halyard's entries should appear as `[disabled]`.
+
+Halyard also refuses, as a second line of defence, to write a row when a
+hook command receives a payload from a different harness — so a stray
+invocation produces no data rather than wrong data.
+
 ---
 
 ## How it's being built

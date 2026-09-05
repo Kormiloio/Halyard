@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 from collections import Counter
@@ -60,6 +61,9 @@ def build_doctor_report(
         if copilot_otel is not None:
             checks.append(copilot_otel)
     checks.extend(_unwired_tool_checks(tool, current))
+    grok_compat = _grok_compat_check()
+    if grok_compat is not None:
+        checks.append(grok_compat)
     checks.extend(_collector_drift_checks(project_dir, hub_dir))
     checks.extend(_capture_coverage_checks(project_dir, hub_dir, now=now))
     checks.extend(_attribution_quality_checks(project_dir, hub_dir))
@@ -407,6 +411,73 @@ def _windsurf_hook_check(*, required: bool) -> DoctorCheck:
         status="error" if required else "warning",
         detail="hooks missing",
         fix="halyard install-hook-windsurf",
+    )
+
+
+def _grok_compat_check() -> DoctorCheck | None:
+    """Warn when Grok CLI would run Halyard's Claude/Cursor hooks (v5.25).
+
+    Grok merges hook definitions out of ``~/.claude/settings.json`` and
+    ``~/.cursor/hooks.json``; ``[compat.claude] hooks`` and
+    ``[compat.cursor] hooks`` both default to ``true``. Those are exactly
+    the files Halyard installs into, so without the opt-out a Grok session
+    fires Halyard's hooks and its work is recorded as ``tool=claude-code``
+    or ``tool=cursor``.
+
+    Returns None when Grok is absent or the hazard does not apply — this
+    is a nudge, never an error, so the doctor exit code is unaffected.
+    """
+    import tomllib
+
+    # NB: Path("") is PosixPath("."), which is truthy — an `or` fallback here
+    # silently resolves GROK_HOME to the cwd when the var is unset or empty.
+    env_home = os.environ.get("GROK_HOME") or ""
+    grok_home = Path(env_home) if env_home.strip() else Path.home() / ".grok"
+    if not grok_home.exists():
+        return None
+
+    claude_cmds = _commands_from_claude_settings([Path.home() / ".claude" / "settings.json"])
+    cursor_cmds = _commands_from_cursor_settings(Path.home() / ".cursor" / "hooks.json")
+
+    borrowed: list[str] = []
+    if _has_command(claude_cmds, "cc-hook"):
+        borrowed.append("claude")
+    if _has_command(cursor_cmds, "cursor-hook"):
+        borrowed.append("cursor")
+    if not borrowed:
+        return None
+
+    config = grok_home / "config.toml"
+    data: dict[str, object] = {}
+    if config.exists():
+        try:
+            data = tomllib.loads(config.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+
+    def _hooks_enabled(vendor: str) -> bool:
+        section = data.get("compat", {})
+        if isinstance(section, dict):
+            vendor_cfg = section.get(vendor)
+            if isinstance(vendor_cfg, dict) and vendor_cfg.get("hooks") is False:
+                return False
+        return True  # every compat cell defaults to true
+
+    exposed = [v for v in borrowed if _hooks_enabled(v)]
+    if not exposed:
+        return None
+
+    names = " and ".join(exposed)
+    snippet = ", then ".join(f'"[compat.{v}]" hooks = false' for v in exposed)
+    return DoctorCheck(
+        id="grok.compat",
+        label="Grok (hook borrowing)",
+        status="warning",
+        detail=(
+            f"Grok CLI runs Halyard's {names} hook(s) and records its sessions under "
+            f"the wrong tool — compat hook-scanning is at its default of true"
+        ),
+        fix=f"in {_shorten(str(config))} set {snippet}",
     )
 
 

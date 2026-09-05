@@ -8,6 +8,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 console = Console()
 
@@ -75,7 +76,7 @@ def register(app: typer.Typer) -> None:
         if json_:
             sys.stdout.write(render_json(report))
         else:
-            console.print(render_text(report))
+            console.print(escape(render_text(report)))
 
         if has_errors(report):
             raise typer.Exit(code=1)
@@ -181,7 +182,7 @@ def register(app: typer.Typer) -> None:
 
         report = build_doctor_report()
         console.print("")
-        console.print(render_text(report))
+        console.print(escape(render_text(report)))
         console.print("")
         console.print(f"[bold green]{next_step_text()}[/]")
         if install_errors:
