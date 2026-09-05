@@ -287,6 +287,7 @@ def register(app: typer.Typer) -> None:
         run on a schedule to keep importer-based tools current.
         """
         from halyard.ai_log import find_project_dir
+        from halyard.collectors.antigravity import import_antigravity_sessions
         from halyard.collectors.claude_code import import_claude_sessions
         from halyard.collectors.codex_app import import_codex_sessions
         from halyard.collectors.copilot import import_copilot_sessions
@@ -298,12 +299,15 @@ def register(app: typer.Typer) -> None:
         )
         claude = import_claude_sessions(project_dir=project_dir, dry_run=dry_run, all_projects=True)
         gemini_n = run_gemini_import(dry_run=dry_run, all_projects=True, quiet=True)
+        antigravity = import_antigravity_sessions(
+            project_dir=project_dir, dry_run=dry_run, all_projects=True
+        )
 
         label = "(dry run) " if dry_run else ""
         console.print(
             f"[bold green]{label}import-all:[/] "
             f"Codex {len(codex)}, Copilot {len(copilot)}, Gemini {gemini_n}, "
-            f"Claude {len(claude)} session(s)."
+            f"Claude {len(claude)}, Antigravity {len(antigravity)} session(s)."
         )
 
     @app.command(name="install-import-timer")
@@ -336,6 +340,56 @@ def register(app: typer.Typer) -> None:
 
         uninstall_import_timer()
         console.print("[bold green]Removed[/] the scheduled-import LaunchAgent.")
+
+    @app.command(name="import-antigravity")
+    def import_antigravity(
+        dry_run: bool = typer.Option(
+            False, "--dry-run", help="Show what would be imported without writing anything."
+        ),
+        all_projects: bool = typer.Option(
+            False,
+            "--all",
+            help="Import sessions for all Halyard projects, not just the current one.",
+        ),
+    ) -> None:
+        """Import Antigravity conversation history into ai-sessions.log.
+
+        Antigravity reports no tokens, model, or cost, so these sessions
+        record time only and are excluded from spend totals.
+        """
+        from halyard.ai_log import find_project_dir
+        from halyard.collectors.antigravity import import_antigravity_sessions
+
+        project_dir = find_project_dir()
+        if project_dir is None and not all_projects:
+            console.print(
+                "[bold red]Error:[/] No Halyard project found. "
+                "Run [bold]halyard init[/] first or use [bold]--all[/]."
+            )
+            raise typer.Exit(code=1)
+
+        sessions = import_antigravity_sessions(
+            project_dir=project_dir,
+            dry_run=dry_run,
+            all_projects=all_projects,
+        )
+
+        if not sessions:
+            console.print("[yellow]No new Antigravity sessions to import.[/]")
+            return
+
+        label = "[dim](dry run)[/dim] " if dry_run else ""
+        console.print(f"{label}[bold green]Imported[/] {len(sessions)} Antigravity session(s).")
+        for s in sessions:
+            proj = s.project or "(unattributed)"
+            mins = max(0, int((s.end - s.start).total_seconds() // 60))
+            # No out= here: Antigravity reports no tokens, and printing 0
+            # would read as "no work done" rather than "not measured".
+            console.print(
+                f"  {s.start:%Y-%m-%d %H:%M} → {s.end:%H:%M}  "
+                f"[cyan]{mins}m[/]  tools={s.tool_calls or 0}  "
+                f"[dim]{proj} · time-only, not spend-tracked[/dim]"
+            )
 
     @app.command(name="import-copilot")
     def import_copilot(

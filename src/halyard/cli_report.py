@@ -300,9 +300,20 @@ def register(app: typer.Typer) -> None:
             console.print("\n[bold]By tool[/]")
             for tbucket in ai_report.by_tool_usage:
                 tok_label = f"{tbucket.tokens:,} tokens  " if tbucket.tokens else ""
+                if tbucket.spend_tracked:
+                    cost_label = f"[green]${tbucket.cost_usd:.2f}[/]"
+                else:
+                    # "$0.00" would read as free work; this tool reports no
+                    # spend data at all (see ToolUsageBucket.spend_tracked).
+                    cost_label = "[dim]n/a[/]"
                 console.print(
-                    f"  {escape(tbucket.tool):<32} [green]${tbucket.cost_usd:.2f}[/]"
+                    f"  {escape(tbucket.tool):<32} {cost_label}"
                     f"  {tbucket.sessions} sessions  {tok_label}"
+                )
+            if any(not b.spend_tracked for b in ai_report.by_tool_usage):
+                console.print(
+                    "  [dim]n/a — tool reports no tokens or cost; "
+                    "time is captured, spend is not tracked.[/dim]"
                 )
 
         if ai_report.sessions:

@@ -119,6 +119,15 @@ _WS_HOOKS: dict[str, str] = {
     "post_cascade_response": "halyard windsurf-session-stop",
 }
 
+# Antigravity hook config injected by `halyard install-hook-antigravity`.
+# Antigravity nests events under a named hook key, so Halyard owns exactly
+# the "halyard" key and never touches a user's other named hooks. Only
+# non-tool events are used (flat handler lists, no matcher).
+_AG_HOOK_NAME = "halyard"
+_AG_HOOKS: dict[str, str] = {
+    "Stop": "halyard ag-hook",
+}
+
 _VSCODE_TASK_LABEL = "Halyard: Record VS Code AI session"
 _VSCODE_TASK_INPUTS: tuple[dict[str, str], ...] = (
     {
@@ -569,6 +578,40 @@ def _do_install_hook_windsurf() -> None:
     console.print(f"[bold green]Windsurf hooks installed[/] in [bold]{settings_path}[/]")
 
 
+def _do_install_hook_antigravity() -> None:
+    """Install into Antigravity's global customization root.
+
+    ``~/.gemini/config/`` is the machine-local customization root; ``.agents/``
+    is the per-project one. Global keeps parity with the other collectors.
+    Note this is a *sibling* of the Gemini CLI tree — it must never be
+    confused with ``~/.gemini/settings.json``, which is Gemini CLI's.
+    """
+    settings_path = Path.home() / ".gemini" / "config" / "hooks.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: dict[str, Any] = _load_existing_settings(settings_path)
+    exe = _halyard_exe()
+
+    handlers: dict[str, Any] = {}
+    for event, template in _AG_HOOKS.items():
+        command = _hook_command(exe, template.removeprefix("halyard "))
+        handlers[event] = [{"type": "command", "command": command}]
+
+    # Own only our named key; any other named hook is left untouched.
+    existing[_AG_HOOK_NAME] = handlers
+
+    new_text = json.dumps(existing, indent=2) + "\n"
+    if _settings_unchanged(settings_path, new_text):
+        console.print(f"[yellow]Antigravity hooks already present[/] in [bold]{settings_path}[/]")
+        return
+    _write_settings(settings_path, new_text)
+    console.print(f"[bold green]Antigravity hooks installed[/] in [bold]{settings_path}[/]")
+    console.print(
+        "[dim]Antigravity reports no tokens or cost — these sessions record "
+        "time only and are excluded from spend totals.[/dim]"
+    )
+
+
 # --- MCP server auto-registration (v2.51) ---------------------------------
 
 _MCP_SERVER_NAME = "halyard"
@@ -794,6 +837,18 @@ def register(app: typer.Typer) -> None:
         from halyard.collectors.windsurf import read_payload, record_turn
 
         raise typer.Exit(code=_run_hook(lambda: record_turn(read_payload(), is_start=False)))
+
+    @app.command(name="ag-hook", hidden=True)
+    def ag_hook() -> None:
+        """Record a finished Antigravity turn (called by the Stop hook)."""
+        from halyard.collectors.antigravity import handle_stop_hook, read_payload
+
+        raise typer.Exit(code=_run_hook(lambda: handle_stop_hook(read_payload())))
+
+    @app.command(name="install-hook-antigravity")
+    def install_hook_antigravity() -> None:
+        """Install Antigravity hooks to auto-capture AI sessions."""
+        _run_installer(_do_install_hook_antigravity)
 
     @app.command(name="install-hook-claude")
     def install_hook_claude(

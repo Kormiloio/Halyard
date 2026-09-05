@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -129,3 +131,45 @@ def _no_real_hub(monkeypatch: pytest.MonkeyPatch) -> None:
         return real_request(*args, **kwargs)
 
     monkeypatch.setattr(hub_client, "_request", _guarded_request)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_ledger_writes(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No test may append a session to a ledger outside the temp tree.
+
+    Patching ``Path.home()`` is *not* sufficient. A collector resolves its
+    target ledger from ``Path.cwd()`` when no workspace is known, and
+    ``find_project_dir`` walks *up* the tree — so a test that forgets to
+    chdir will climb out of the repo, find a real Halyard project on the
+    developer's machine, and append synthetic rows to a real
+    ``ai-sessions.log``. v5.24's Antigravity importer tests did exactly
+    that: 80 fabricated rows in a live ledger before anyone noticed.
+
+    ``append_session`` is imported by-name into every collector module, so
+    rebinding it on ``halyard.ai_log`` alone would miss them. Rebind every
+    already-imported reference.
+    """
+    import halyard.ai_log as ai_log
+
+    real_append = ai_log.append_session
+    basetemp = tmp_path_factory.getbasetemp().resolve()
+    systemp = Path(tempfile.gettempdir()).resolve()
+
+    def guarded(project_dir: Path, *args: object, **kwargs: object) -> object:
+        resolved = Path(project_dir).resolve()
+        if not (resolved.is_relative_to(basetemp) or resolved.is_relative_to(systemp)):
+            raise AssertionError(
+                "test tried to append a session to a ledger outside the temp "
+                f"tree: {resolved}. Add monkeypatch.chdir(tmp_path) to the "
+                "test's isolation fixture — patching Path.home() is not enough."
+            )
+        return real_append(project_dir, *args, **kwargs)
+
+    monkeypatch.setattr(ai_log, "append_session", guarded)
+    for name, module in list(sys.modules.items()):
+        if not name.startswith("halyard.") or module is None:
+            continue
+        if getattr(module, "append_session", None) is real_append:
+            monkeypatch.setattr(module, "append_session", guarded)
