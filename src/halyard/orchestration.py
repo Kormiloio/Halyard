@@ -100,7 +100,46 @@ def start_timer(project_dir: Path, slug: str, *, direct: bool = False) -> Active
         hub_timer = _try_start_timer_via_hub(project_dir, slug)
         if hub_timer is not None:
             return hub_timer
+        # The hub returned an unknown outcome, not a refusal (a refusal is a
+        # 409, handled above). It commits before it responds, so "no answer"
+        # may mean the timer is already running because of *this* call.
+        adopted = _adopt_timer_committed_by_hub(slug)
+        if adopted is not None:
+            return adopted
     return _start_timer_local(project_dir, slug)
+
+
+def _adopt_timer_committed_by_hub(slug: str) -> ActiveTimer | None:
+    """Recover a hub-started timer whose response was lost in transit.
+
+    ``hub_server._handle_timer_action`` writes the clock-in entry and
+    ``~/.halyard/active`` *before* it sends its response, so a dropped
+    connection (``ConnectionAbortedError`` out of ``_respond_json``) leaves a
+    committed timer behind while ``hub_client._request`` returns ``None`` —
+    the same ``None`` it returns when the hub was never reachable at all.
+    Falling straight through to ``_start_timer_local`` then finds the state
+    the hub just wrote and raises ``TimerAlreadyRunning``, telling the user
+    their successful start failed and advising them to stop the work they
+    just began.
+
+    Ask the hub what it actually did, on a fresh connection. Adopt only when
+    the hub is reachable *and* names our slug *and* the on-disk record
+    agrees; if the hub does not answer we return None and the caller falls
+    through unchanged, so a stale active file from a crashed run still
+    raises TimerAlreadyRunning rather than being silently adopted.
+    """
+    from halyard.hub_client import read_state
+
+    state = read_state()
+    if not state or state.get("project") != slug:
+        return None
+
+    # Report the timer's real age, not a reset clock — a wrong start time is
+    # harder to notice than a wrong error message, and it feeds billing.
+    active = _reports_mod.read_active_timer(prefer_hub=False)
+    if active is None or active.slug != slug:
+        return None
+    return active
 
 
 def _start_timer_local(project_dir: Path, slug: str) -> ActiveTimer:

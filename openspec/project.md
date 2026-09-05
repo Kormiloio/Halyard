@@ -1650,6 +1650,38 @@ layers must read from this local source of truth; they do not replace it.
       local dev vulnerable while CI stays green — closing that means
       `uv sync --locked` in CI.
 
+    - **v5.31 — A lost hub response reported a successful start as a
+      failure:** surfaced as the Windows CI flake on #9 that "passed on
+      re-run". Not a flake — a real race that Windows merely makes likely
+      enough to catch. `hub_server._handle_timer_action` writes the
+      clock-in entry and `~/.halyard/active` *before* it sends its
+      response, so a dropped connection (`ConnectionAbortedError` out of
+      `_respond_json`, seen in the same CI run) leaves a committed timer
+      behind while `hub_client._request` returns `None` — the same `None`
+      it returns when the hub was never reachable. `start_timer` then fell
+      through to `_start_timer_local`, found the file the hub had just
+      written, and raised `TimerAlreadyRunning`: the user runs
+      `halyard start acme:auth`, the timer *does* start, and they are told
+      to stop it. Following that advice stops the work they meant to
+      begin. Third instance of the session's recurring shape — two
+      distinct states collapsed into one indistinguishable value (v5.29's
+      `find_hub()`, v5.30's `cli_mcp` "not installed"). Fixed by asking
+      the hub what it actually did, on a fresh connection: adopt the
+      committed timer only when the hub is reachable *and* names our slug
+      *and* the on-disk record agrees. An unreachable hub vouches for
+      nothing, so a stale active file from a crashed run still raises
+      rather than being silently adopted — deliberately preferring the
+      loud wrong error to a silent wrong join. The adopted timer carries
+      its real `started`/`elapsed_minutes` from disk, since a wrong start
+      time is harder to notice than a wrong error message and it feeds
+      billing. Tests drive both halves deterministically (no threads, no
+      sockets torn mid-write) and were confirmed to fail on unfixed code
+      with the exact production error. Spec in
+      `openspec/changes/v5.31-hub-start-lost-response/`.
+      **Status: done; 1839 tests passing** (+7). Deferred: `stop_timer`
+      has the mirror-image race (hub clears state, response lost, local
+      fallback reports `was_running=False`).
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
