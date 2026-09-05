@@ -33,9 +33,18 @@ jobs:
         # pyproject would be wrong — it is a runner artifact, not a
         # project dependency. Only this job needs it; test-windows does
         # not audit.
+        #
+        # `[all]` is installed alongside `[dev]` so the audit step sees
+        # the optional dependency surface. Until v5.30 this was `[dev]`
+        # only, so pip-audit never saw the `mcp` extra or anything under
+        # it — mcp, starlette, cryptography, pyjwt, python-multipart,
+        # msgpack — i.e. exactly the packages behind the Hub's
+        # network-facing code. 27 advisories sat open there while CI
+        # reported the dependency audit green. The clean no-extras
+        # install path stays covered by install-test.yml.
         run: |
           python -m pip install --upgrade pip setuptools
-          pip install -e ".[dev]"
+          pip install -e ".[dev,all]"
 
       - name: Lint with ruff
         run: ruff check .

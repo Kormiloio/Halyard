@@ -1572,6 +1572,37 @@ layers must read from this local source of truth; they do not replace it.
       guess silently writes into the wrong project. Spec in
       `openspec/changes/v5.29-hub-pointer-staleness/`.
       **Status: done; 1781 tests passing** (+11).
+    - **v5.30 — CI audited only half the dependency surface:** the audit
+      step reported green while **27 advisories** sat open against the
+      Hub's network-facing stack. `lint-and-test` installed
+      `-e ".[dev]"`, and `pip-audit --skip-editable` inspects the
+      installed environment — so the `mcp` extra and everything under it
+      (mcp, starlette, cryptography, pyjwt, python-multipart, msgpack,
+      pydantic-settings) was never installed and never audited. Dependabot
+      could see them; the gate meant to catch them could not. Fixed by
+      installing `[dev,all]` — kept inside the matrix, because resolution
+      is version-dependent (v5.29's setuptools case was a single red 3.11
+      leg), with the bare-install path still covered by
+      `install-test.yml`. Adding the extra exposed a second defect:
+      `mcp>=1.2` admitted **mcp 2.x**, which renamed FastMCP → MCPServer,
+      so `mcp_server.py:205`'s `mcp.server.fastmcp` import dies — a fresh
+      3.11 install resolved 2.1.1 and shipped a server that could not
+      start, invisible to CI because no test calls `build_server()`.
+      Pinned `mcp>=1.28.1,<2` (lower bound clears the three mcp
+      advisories; upper bound is load-bearing, not hygiene). Compounding
+      it, `cli_mcp` reported that `ModuleNotFoundError` as "the MCP SDK is
+      not installed", advising a reinstall that resolves 2.x again and
+      reproduces the identical message — same shape as v5.29's
+      `find_hub()` collapsing two states into one. Now discriminates on
+      `exc.name`: a *submodule* miss means present-but-wrong-major.
+      `uv lock --upgrade` clears all 27 for local dev. Verified against
+      real environments rather than by inspection — a CI-shaped 3.11 venv
+      audits clean, and `halyard mcp` answers a live `initialize`. Spec in
+      `openspec/changes/v5.30-audit-full-dependency-surface/`.
+      **Status: done; 1774 tests passing** (+5). Deferred: CI re-resolves
+      from PyPI and ignores `uv.lock` entirely, so a stale lock leaves
+      local dev vulnerable while CI stays green — closing that means
+      `uv sync --locked` in CI.
 
 ## Deferred or gated
 
