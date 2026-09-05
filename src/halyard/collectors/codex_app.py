@@ -128,25 +128,70 @@ def import_codex_sessions(
 # ---------------------------------------------------------------------------
 
 
-_MAX_ROLLOUT_BYTES = 25 * 1024 * 1024  # 25 MB — bounded untrusted read
+# .jsonl rollouts are streamed line by line, so memory is bounded by the
+# longest line, not the file. Anything past _MAX_ROLLOUT_LINE_BYTES is treated
+# as corrupt/hostile and skipped.
+_MAX_ROLLOUT_LINE_BYTES = 16 * 1024 * 1024  # 16 MiB per line
+# Total budget for a single parse. Generous so the importer can fully read a
+# long session: real Codex rollouts reach hundreds of MB of inline tool output
+# (813 MB observed). This mirrors gemini_history._DEFAULT_ROLLOUT_BYTES, which
+# was widened for the same reason.
+_MAX_ROLLOUT_BYTES = 1024 * 1024 * 1024  # 1 GiB
 
 
 def _iter_jsonl_lines(path: Path) -> Iterator[str]:
     """Yield lines from a rollout file without loading it all into memory.
 
-    Bounded untrusted read (matches the other collectors): reject
-    symlinks, cap size at 25 MB. An unreadable/oversized/symlinked file
-    yields nothing; the caller then skips the session.
+    Bounded untrusted read: reject symlinks, skip any single line over
+    ``_MAX_ROLLOUT_LINE_BYTES``, and abandon the file once cumulative bytes
+    pass ``_MAX_ROLLOUT_BYTES``.
+
+    v5.32: the bound used to be a 25 MB *whole-file* cap, which silently
+    yielded nothing for anything larger. Because the read is a streaming
+    generator, that cap never bounded memory — only how large a session was
+    allowed to be before it became permanently uncapturable. Long agentic
+    Codex sessions blow past 25 MB routinely (one observed rollout was
+    813 MB of inline tool output), so the cap silently dropped exactly the
+    sessions that matter most for token accounting, and no amount of
+    re-running the importer could recover them. Memory is bounded by the
+    longest line, so the per-line cap is the bound that was actually
+    wanted — the same shape ``gemini_history`` already uses, which was
+    widened for the same reason after an observed 825 MB rollout.
     """
     try:
         if os.path.islink(path):
             return
-        if path.stat().st_size > _MAX_ROLLOUT_BYTES:
-            return
-        with path.open(encoding="utf-8") as fh:
-            yield from fh
+        seen = 0
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for raw in fh:
+                seen += len(raw.encode("utf-8", errors="ignore"))
+                if seen > _MAX_ROLLOUT_BYTES:
+                    _note_truncated(path, seen)
+                    return
+                if len(raw) > _MAX_ROLLOUT_LINE_BYTES:
+                    continue  # pathological/corrupt line — skip, keep going
+                yield raw
     except OSError:
         return
+
+
+def _note_truncated(path: Path, seen: int) -> None:
+    """Record that a rollout was abandoned part-way through.
+
+    v5.32: the previous whole-file cap dropped oversized rollouts in
+    silence — no log line, no doctor signal — so a user whose largest
+    session stopped being captured had no way to find out, and `halyard
+    doctor` went on advising `halyard import-codex`, a command that could
+    not fix it. Losing data quietly is worse than losing it loudly.
+    """
+    from halyard.ai_log import _log_error
+
+    _log_error(
+        f"codex importer: rollout {path.name} exceeded the "
+        f"{_MAX_ROLLOUT_BYTES} byte budget after {seen} bytes — "
+        "session captured only up to that point",
+        RuntimeError("rollout budget exceeded"),
+    )
 
 
 def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
