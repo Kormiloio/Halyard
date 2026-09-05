@@ -14,7 +14,7 @@ import sys
 import tempfile
 from contextlib import suppress
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +31,7 @@ from halyard.ai_log import (
     write_unattributed_session,
 )
 from halyard.collectors import (
+    _MAX_SESSION_SECONDS,
     session_has_evidence,
     session_is_implausible,
     session_is_synthetic_telemetry,
@@ -55,6 +56,11 @@ from halyard.model_breakdown import primary_model as _primary_model
 from halyard.pricing import calculate_cost, model_is_known
 
 _CC_SESSION_FILE = Path.home() / ".halyard" / "cc-session"
+
+# v5.27: furthest back a single catch-up row may anchor its start. Derived
+# from the plausibility limit so the two can never drift apart — a catch-up
+# row that exceeds it would be rejected, taking the watermark with it.
+_CATCHUP_MAX_REACH = timedelta(seconds=_MAX_SESSION_SECONDS)
 
 
 def _coerce_int(value: object, default: int = 0) -> int:
@@ -436,11 +442,20 @@ def handle_stop_hook() -> int:
     # recovery. Anchor the read to the latest end already recorded for this
     # session instead — one Stop after a gap then back-fills everything since
     # the last row.
+    #
+    # v5.27: the anchor MUST be clamped. Unbounded, a gap longer than
+    # _MAX_SESSION_SECONDS makes every subsequent row fail
+    # session_is_implausible, so no row is written, so the watermark never
+    # advances, so the next row fails identically — capture for this
+    # session id dies permanently and silently (observed: 14 days lost).
+    # A guard that rejects a row must never also prevent the *next* row
+    # from being valid.
     payload_session_id = payload.get("session_id") or payload.get("sessionId")
     if payload_session_id and project_dir is not None:
         watermark = _last_recorded_end(project_dir, str(payload_session_id))
         if watermark is not None:
-            start = watermark
+            floor = now - _CATCHUP_MAX_REACH
+            start = max(watermark, floor)
 
     # Try usage from payload first (older Claude Code format)
     usage = payload.get("usage") or payload.get("message", {}).get("usage", {}) or {}
