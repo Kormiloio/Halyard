@@ -6,6 +6,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-09-05
+
+Three fixes to time and token accuracy, all of which were silently
+under-reporting. Every one was found by acting on Halyard's own output and
+watching it disagree with itself.
+
+### Fixed
+
+- **Large Codex sessions were silently uncapturable (v5.32):** the rollout
+  reader capped at 25 MB of *whole file* and yielded nothing above it, so
+  the session was skipped with no log line, no warning and no doctor
+  signal. Because the reader streams line by line, that cap never bounded
+  memory — it only set the size at which a session vanished, and it failed
+  exactly where it costs most: short sessions imported fine while long
+  agentic runs disappeared. `halyard doctor` would report capture lagging
+  and advise `halyard import-codex`, a command that could not fix it. On
+  the machine that found this, one session was recorded as 103.8M tokens
+  when its rollout held **371.1M** — a 3.6x understatement, and the
+  recorded Codex total rose from 148.2M to **419.8M** once fixed. Now
+  bounded per line (16 MiB) with a 1 GiB parse budget, and truncation is
+  logged rather than silent.
+
+- **The auto-timer counted prompt cadence, not work (v5.26):** the idle
+  policy closes a window retroactively at the last activity, so one prompt
+  kicking off a two-hour agent turn was closed out from under itself at
+  ~30 minutes. The Stop hook's refresh could not rescue it — it returns
+  early when no window is open, which is precisely the state the stale
+  close leaves behind. Observed: **34 minutes counted for a day whose own
+  session log proves 2h20m**. Sessions are now the evidence of record — on
+  stop, the timeclock is made to cover the span the session proves, writing
+  only uncovered gaps (append-only, never past the session's end, never
+  double-billing). Also wired into cursor, gemini and windsurf, which
+  previously never touched the auto-timer at all.
+
+### Added
+
+- **`halyard timeclock repair --from-sessions` (v5.33):** reconciles the
+  timeclock against the session ledger to recover time lost before v5.26.
+  Union semantics, dry-run by default, timestamped backup before any write.
+  Sessions longer than the collectors' own 12 h plausibility cap are
+  skipped and reported rather than claimed — a long-lived imported session
+  is not evidence of continuous work, and claiming one would turn an
+  under-count into a much worse over-count. Recovered **72.2 h** (8.4 h →
+  80.6 h) on the machine that motivated it.
+
 ## [0.2.2] — 2026-09-05
 
 > **Coverage note.** This file is complete through v3.15 and then thins out
