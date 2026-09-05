@@ -55,6 +55,32 @@ def find_hub() -> Path | None:
     return path if path.is_dir() else None
 
 
+def configured_hub_path() -> Path | None:
+    """Return the hub path as configured, whether or not it exists.
+
+    :func:`find_hub` deliberately collapses "never configured" and
+    "configured but the directory is gone" into ``None`` — its ~40
+    call sites only ever ask "is there a hub I can write to right
+    now?", and both answers are the same for them. That is the wrong
+    contract for the doctor, which has to explain *why* capture is
+    failing: a pointer at a relocated directory silently diverts every
+    ambient session to ``~/.halyard/unattributed.log`` while reporting
+    itself as "no hub configured".
+
+    Returns None only when no pointer exists (or it cannot be read).
+    """
+    from halyard.state_integrity import IntegrityError, read_global_trusted_state
+
+    try:
+        content = read_global_trusted_state(_hub_pointer())
+    except (IntegrityError, OSError):
+        return None
+    if content is None:
+        return None
+    stripped = content.strip()
+    return Path(stripped) if stripped else None
+
+
 def set_hub(path: Path) -> None:
     """Designate path as the hub directory."""
     from halyard.state_integrity import current_mode, write_trusted_state
