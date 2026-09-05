@@ -134,3 +134,54 @@ before shipping; the check is worthless if it cries wolf.
 - Every test that touches a ledger or timeclock must `chdir` into
   `tmp_path` (see the v5.24 conftest guard — collectors resolve targets
   from cwd, so patching `Path.home()` alone is not enough).
+
+
+---
+
+## Implementation notes (amending this design)
+
+### The `hub_server` mirror turned out to be unnecessary
+
+This design required every change to land in `auto_timer.py` **and**
+`hub_server.py`, on the reasoning that the Hub applies the idle policy
+independently and wins on any machine running The Bridge.
+
+That holds for anything routed through the presence state machine. It does
+not hold for the fix as built. `auto_timer_cover_session` reads the
+timeclock with `parse_timeclock` and appends with `locked_file` — it never
+calls `_try_hub_presence` or `_read_state`. Coverage is asserted against the
+timeclock **file**, so it is indifferent to whether the Hub already closed
+the window mid-turn; the gap is simply still a gap, and gets filled.
+
+Sidestepping the two-writer problem rather than duplicating logic into it is
+the better outcome: the original framing would have left two copies of the
+same interval arithmetic to drift apart.
+
+`test_coverage_is_independent_of_presence_state` pins this by making
+`_try_hub_presence` raise if called, because a future refactor that routed
+coverage through presence would silently reintroduce the bug on exactly the
+machines that had it.
+
+### Scope actually shipped
+
+Only the **core fix** — the part that stops the ongoing under-count:
+
+- `auto_timer_cover_session` + `_uncovered_spans` (union semantics,
+  append-only, session-bounded, idempotent)
+- `safe_cover_session`, wired into all four stop hooks (`claude_code`,
+  `cursor`, `gemini_cli`, `windsurf`) — previously only `claude_code`
+  touched the auto-timer at all
+
+Deferred to a follow-up, and **not** attempted here:
+
+- `halyard timeclock repair --from-sessions` (retroactive recovery of days
+  already lost). Real user value — this is what recovers the observed
+  2026-08-11 day — but it is a new user-facing CLI mode with a
+  backup/dry-run/diff contract of its own.
+- `_human_time_coverage_check()` in doctor. The design itself flags the
+  threshold as needing tuning against real data before shipping, and a
+  check that cries wolf is worse than no check.
+- README wording on what auto-detected human time counts.
+
+Splitting here keeps the reviewable unit small and gets the bleeding
+stopped; the deferred parts are recorded in `tasks.md` rather than dropped.

@@ -1715,6 +1715,39 @@ layers must read from this local source of truth; they do not replace it.
       and `antigravity.py` (50 MB), none of which warn on skip either; and a
       doctor check for truncated rollouts.
 
+    - **v5.26 — Auto-timer under-counted billable human time:** the clock
+      measured *prompt cadence*, not work. The idle policy closes a window
+      retroactively at `last_activity`, so one prompt kicking off a
+      two-hour agent turn was closed out from under itself at ~30 minutes.
+      `auto_timer_update_activity` could not rescue it — it returns early
+      when no window is open, which is precisely the state the stale close
+      leaves behind; it can refresh, never reopen or backfill. Observed
+      2026-08-11: **34 minutes counted for a day whose own session log
+      proves 2h20m**, a ~4x under-count in the feature whose entire purpose
+      is billing accuracy — silent, shipped, and erring in the direction
+      that costs money. Fixed by treating the session row as the evidence
+      of record: `auto_timer_cover_session` asserts that the timeclock
+      covers the session's own `[start, end]`, appending only the
+      *uncovered* gaps. Union not sum (overlaps cannot double-bill),
+      append-only (history is never rewritten on a hook path),
+      session-bounded (coverage stops where the evidence stops), and
+      idempotent. Wired into all four stop hooks — before this only
+      `claude_code` touched the auto-timer at all. `INACTIVITY_MINUTES`
+      stays 30: raising it would bill genuine idle, the opposite and worse
+      failure. **Design deviation:** the spec required mirroring the fix in
+      `hub_server.py`, since the Hub applies the idle policy independently
+      and wins on machines running The Bridge. Unnecessary as built —
+      coverage is asserted against the timeclock *file*, never the presence
+      state machine, so the Hub's early close cannot defeat it. Pinned by a
+      test that makes `_try_hub_presence` fatal, because a refactor routing
+      coverage through presence would reintroduce the bug on exactly the
+      machines that had it. Spec in
+      `openspec/changes/v5.26-auto-timer-undercount/`.
+      **Status: core fix done; 1865 tests passing** (+20). Deferred:
+      `timeclock repair --from-sessions` (recovers days already lost,
+      including the observed one), the doctor coverage check (threshold
+      needs tuning against real data first), and README wording.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

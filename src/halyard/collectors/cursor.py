@@ -232,6 +232,10 @@ def handle_stop_hook() -> int:
         # Persistence succeeded; only NOW retire the session-start file.
         _clear_session_start()
         maybe_emit_milestones(project_dir)
+        # v5.26: assert human-time coverage for the span this session proves.
+        from halyard.auto_timer import safe_cover_session
+
+        safe_cover_session(project_dir, session)
     else:
         path = write_unattributed_session(session)
         _clear_session_start()

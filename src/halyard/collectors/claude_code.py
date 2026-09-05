@@ -639,6 +639,13 @@ def handle_stop_hook() -> int:
     except Exception as exc:  # auto-timer must never crash a hook
         _log_error("auto-timer update failed in handle_stop_hook", exc)
 
+    # v5.26: the refresh above no-ops once the idle policy has closed the
+    # window mid-turn — the exact case that lost 2h of a 2h20m day. Assert
+    # coverage for the span the session itself proves.
+    from halyard.auto_timer import safe_cover_session
+
+    safe_cover_session(project_dir, session)
+
     maybe_show_dashboard_hint()
     return 0
 
