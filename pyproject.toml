@@ -1,6 +1,6 @@
 [project]
 name = "halyard"
-version = "0.2.2"
+version = "0.2.3"
 description = "Your AI work leaves a trail. Halyard makes that trail legible, auditable, and client-safe."
 readme = "README.md"
 license = { text = "MIT" }
