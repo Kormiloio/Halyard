@@ -135,9 +135,13 @@ through `v2.59-…` plus roadmap items in `openspec/project.md`.
 1. **v2.18** — Cache and audit hardening: project registry, schema migrations,
    content-addressed session IDs, invoice front-matter rate fields, test
    backfill for v2.11–v2.15.
-2. **OSS launch** — HN / Reddit / Lobsters. Gate: `pipx install halyard &&
-   halyard init` works end-to-end in a clean venv. Goal: real users, not
-   stars.
+2. **OSS launch** — **shipped**: repo public, `halyard` live on PyPI at
+   0.2.1 via trusted publishing, HN and Reddit posts out. The gate
+   (`pipx install halyard && halyard init` end-to-end in a clean venv) is
+   met. Lobsters is **not** pending — its rules discourage submitting your
+   own project, so treat the "HN / Reddit / Lobsters" phrasing used
+   elsewhere in these docs as aspirational rather than a checklist.
+   Goal remains real users, not stars.
 3. **v2.24** — Outcome metadata uplift — **shipped**: branch field, commit
    count, code delta for all collectors, PR linkage via `halyard outcome sync`.
 4. **v2.28** — Auto human timer — **shipped**: presence-window model writes

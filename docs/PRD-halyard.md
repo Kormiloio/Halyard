@@ -8,8 +8,11 @@
 
 ## Status — May 9, 2026
 
-Halyard has reached a working alpha with a full security hardening track complete
-and is preparing for an OSS community launch (HN / Reddit / Lobsters).
+Halyard has reached a working alpha with a full security hardening track
+complete, and the OSS community launch has shipped: the repo is public,
+`halyard` is on PyPI at 0.2.1 via trusted publishing, and the HN and Reddit
+posts are out. Lobsters was dropped — its rules discourage submitting your
+own project — so it is a non-goal, not an outstanding item.
 
 **What is shipped:**
 - **Time tracking:** `halyard start/stop` and `halyard invoice` are functional.
@@ -467,10 +470,12 @@ adding POSIX/macOS classifiers and a platform note to the README install section
 These are the open questions as of June 2026 — not committed roadmap, but the
 decisions that shape the current work.
 
-**OSS community launch.** The gate is `pipx install halyard && halyard init`
-working end-to-end with zero friction in a clean venv. Once that passes smoke
-test, the HN / Reddit / Lobsters post goes out. The goal is not stars — it is
-comments from people who installed it and it worked.
+**OSS community launch — shipped.** The gate was `pipx install halyard &&
+halyard init` working end-to-end with zero friction in a clean venv; that is
+met, and the HN and Reddit posts are out. Lobsters is a non-goal (its rules
+discourage submitting your own project), so the recurring "HN / Reddit /
+Lobsters" phrasing in these docs should be read as aspirational. The goal was
+never stars — it is comments from people who installed it and it worked.
 
 **Outcome-aware metadata (v2.24) — shipped.** Branch is now a first-class
 `AiSession` field, commit count and code delta are captured by all four
