@@ -6,6 +6,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-09-05
+
+> **Coverage note.** This file is complete through v3.15 and then thins out
+> badly: the v4.x and v5.x tracks (roughly 28 changesets) landed without
+> changelog entries. What follows adds the user-visible changes from the
+> v5.24–v5.31 track; the entries below the `0.2.2` heading from earlier
+> tracks are the v3.x work that was already recorded. For the complete
+> record of everything between 0.2.1 and 0.2.2, see `openspec/changes/`.
+> Reconciling this file properly is tracked as follow-up work.
+
+### Fixed
+
+- **`halyard mcp` failed on a fresh install (v5.30):** the `mcp` extra was
+  declared `mcp>=1.2`, which resolves to mcp 2.x, where FastMCP was renamed
+  to MCPServer. `mcp.server.fastmcp` does not exist there, so the server
+  died on import — and the error was reported as *"the MCP SDK is not
+  installed"*, sending you to reinstall an extra you already had. The
+  reinstall resolved 2.x again and reproduced the same message. Now pinned
+  `mcp>=1.28.1,<2`, and the two failures ("absent" vs "wrong major") report
+  differently.
+- **A stale hub pointer reported itself as "no hub configured" (v5.29):**
+  `~/.halyard/hub` holds an absolute path. If that directory moved, the
+  pointer silently stopped resolving and every ambient session diverted to
+  `~/.halyard/unattributed.log` (recoverable, but absent from reports)
+  while `halyard doctor` blamed a missing configuration. Doctor now
+  distinguishes the two and names the path that vanished.
+- **`halyard hub <path>` did not exist (v5.29):** doctor advertised it as
+  the fix for an unconfigured hub, but a same-named command group shadowed
+  it, so the advice could not be run. Implemented as `halyard hub set` /
+  `halyard hub show`, matching what the source already documented.
+- **A lost hub response reported a successful timer start as a failure
+  (v5.31):** the Hub commits the clock-in entry and `~/.halyard/active`
+  before sending its response, so a dropped connection left a running timer
+  while the client saw only a failure. `halyard start` then reported
+  *"Timer already running. Stop it first."* for the timer it had just
+  created — advice that stops the work you meant to begin. The client now
+  reconciles with the Hub before falling back.
+- **Grok CLI sessions logged as Claude/Cursor (v5.25):** foreign-harness
+  detection now keeps Grok CLI activity out of the Claude and Cursor
+  collectors.
+- **Catch-up capture could deadlock (v5.27):** the catch-up anchor is now
+  clamped so a stalled import cannot wedge capture.
+- **Dependency audit covered only half the tree (v5.30):** CI installed
+  `.[dev]`, so the CVE audit never saw the `mcp` extra or anything beneath
+  it — mcp, starlette, cryptography, pyjwt, python-multipart, msgpack.
+  27 advisories were open there while CI reported the audit green. CI now
+  installs and audits the optional surface too.
+
+### Added
+
+- **Antigravity collector (v5.24):** captures Google's agentic IDE from its
+  JSONL transcript, quarantined from spend.
+
 ### Fixed
 
 - **Capture monitoring blind spot for Cursor and Windsurf (v3.15):** the
