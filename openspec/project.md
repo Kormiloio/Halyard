@@ -1682,6 +1682,39 @@ layers must read from this local source of truth; they do not replace it.
       has the mirror-image race (hub clears state, response lost, local
       fallback reports `was_running=False`).
 
+    - **v5.32 — A 25 MB cap silently made large Codex sessions
+      uncapturable:** found by following `halyard doctor`'s own advice and
+      watching it fail. The drift canary reported codex capture ~3 days
+      behind and prescribed `halyard import-codex`; the importer answered
+      "No new Codex sessions to import." The canary was right and the
+      importer was wrong. `_iter_jsonl_lines` capped reads at a **25 MB
+      whole-file** limit, yielded nothing above it, and the caller skipped
+      the session — no log line, no warning, no doctor signal. The two live
+      rollouts on this machine were 813 MB and 59 MB, so both were
+      *permanently* uncapturable and re-running the importer could never
+      help. The cap never did what it appears to: `_iter_jsonl_lines` is a
+      streaming generator, so peak memory is the longest *line* — a
+      whole-file limit bounded nothing except the size at which a session
+      fell off a cliff. It also failed precisely where it costs most: short
+      sessions import fine, long agentic runs (which dominate token totals)
+      vanish. One session was recorded as 103,842,457 tokens when its
+      rollout actually held **371,138,080** — a 3.6× understatement from a
+      19.7 MB snapshot of a now-852 MB file, and that understated figure had
+      already been used to reason about spend. `gemini_history` had hit the
+      same wall and was already fixed for it ("one observed rollout was
+      825 MB of inline tool output"); Codex never got the same treatment.
+      Adopted that shape: 16 MiB per-line bound, 1 GiB parse budget, and
+      truncation now reported through `_log_error` — losing data quietly is
+      worse than losing it loudly, and the silence is what let this run for
+      weeks. Verified end to end on the real file: 0 lines yielded → 13,338;
+      import went from refusing to importing 2 sessions; recorded Codex
+      total 148,225,877 → **419,845,235**; drift canary silent. Spec in
+      `openspec/changes/v5.32-codex-oversized-rollout/`.
+      **Status: done; 1845 tests passing** (+6). Deferred: the identical
+      whole-file cap in `claude_code.py` (25 MB), `gemini_otel.py` (25 MB)
+      and `antigravity.py` (50 MB), none of which warn on skip either; and a
+      doctor check for truncated rollouts.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
