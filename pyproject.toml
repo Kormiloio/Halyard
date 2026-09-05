@@ -44,8 +44,13 @@ dev = [
     "freezegun>=1.5",  # v5.14: pin wall clock in May-2026-anchored tests
 ]
 openai = ["openai>=1.0"]
-mcp = ["mcp>=1.2"]
-all = ["openai>=1.0", "mcp>=1.2"]
+# Lower bound clears PYSEC-2026-3481/3482/3483. Upper bound is load-bearing:
+# mcp 2.x renamed FastMCP -> MCPServer, so `mcp.server.fastmcp` (imported in
+# mcp_server.py) does not exist there and `halyard mcp` dies on import. The
+# old `>=1.2` let a fresh install resolve 2.x and ship a broken server that
+# no test covers — see openspec/changes/v5.30-audit-full-dependency-surface/.
+mcp = ["mcp>=1.28.1,<2"]
+all = ["openai>=1.0", "mcp>=1.28.1,<2"]
 
 [project.scripts]
 halyard = "halyard.cli:main"
