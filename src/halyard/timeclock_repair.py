@@ -232,3 +232,106 @@ def counted_minutes(lines: list[str]) -> float:
             total += max(0.0, (ts - open_ts).total_seconds() / 60)
             open_ts = None
     return total
+
+
+# ---------------------------------------------------------------------------
+# v5.33 — reconcile against the session ledger
+# ---------------------------------------------------------------------------
+
+
+def _windows_from_lines(lines: list[str]) -> list[tuple[datetime, datetime]]:
+    """Existing [start, end) coverage. Open entries are ignored.
+
+    An open entry has no end yet, so it cannot prove coverage of any
+    particular span — treating it as covering "until now" would let a
+    forgotten clock-in suppress every recovery after it.
+    """
+    out: list[tuple[datetime, datetime]] = []
+    open_ts: datetime | None = None
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped or stripped.startswith(";"):
+            continue
+        parts = stripped.split()
+        if len(parts) < 3:
+            continue
+        ts = _parse_ts(parts[1], parts[2])
+        if ts is None:
+            continue
+        if parts[0] == "i" and len(parts) >= 4:
+            open_ts = ts
+        elif parts[0] == "o" and open_ts is not None:
+            if ts > open_ts:
+                out.append((open_ts, ts))
+            open_ts = None
+    return out
+
+
+def reconcile_from_sessions(
+    lines: list[str],
+    sessions: list[tuple[datetime, datetime, str]],
+) -> tuple[list[str], float, float]:
+    """Append timeclock coverage for session spans that have none.
+
+    v5.33, recovering days lost to the v5.26 defect: before that fix the
+    idle policy closed a window mid-turn and nothing could reopen it, so
+    hours of work that Halyard *had already recorded as sessions* were
+    absent from the timeclock. The ledger is the evidence; this reconciles
+    the timeclock against it after the fact.
+
+    Returns ``(new_lines, recovered_minutes, skipped_minutes)``.
+
+    Union semantics throughout. Coverage already written — including
+    coverage proposed for an *earlier* session in this same run — suppresses
+    a later proposal, so overlapping sessions cannot double-bill. Nothing is
+    ever proposed outside a session's own ``[start, end]``: the session
+    bounds the claim. Append-only; existing lines are returned untouched.
+
+    **Sessions longer than ``_MAX_SESSION_SECONDS`` are skipped entirely.**
+    A session's span is evidence of human presence only while the session is
+    plausibly one sitting of work. The collectors already encode that
+    judgement — they cap a live session at 12 h — so a row exceeding it is,
+    by the codebase's own standard, not one continuous session. In practice
+    these are long-lived *imported* rollouts: on the machine that motivated
+    this, two Codex sessions (653 h and 149 h, one spanning 27 days and
+    still open) were 89% of all session time. Claiming their spans would
+    have proposed 647 h of "human time" — an invoice-destroying number from
+    a process that was mostly idle.
+
+    They are skipped rather than clamped: clamping to the first N hours
+    would assume the work happened at the start, which is a guess. Skipping
+    says only what is true — this row is not evidence of continuous
+    presence — and the skipped total is returned so the caller can say so.
+    """
+    from halyard.auto_timer import _uncovered_spans
+    from halyard.collectors import _MAX_SESSION_SECONDS
+
+    covered = _windows_from_lines(lines)
+    additions: list[tuple[datetime, datetime, str]] = []
+    recovered = 0.0
+    skipped = 0.0
+
+    for start, end, project in sorted(sessions):
+        if end <= start:
+            continue
+        span = (end - start).total_seconds()
+        if span > _MAX_SESSION_SECONDS:
+            skipped += span / 60
+            continue
+        for gap_start, gap_end in _uncovered_spans(start, end, covered):
+            additions.append((gap_start, gap_end, project))
+            # Fold into `covered` immediately so the next session — which may
+            # overlap this one — sees it and cannot re-propose the same span.
+            covered.append((gap_start, gap_end))
+            recovered += (gap_end - gap_start).total_seconds() / 60
+
+    if not additions:
+        return list(lines), 0.0, skipped
+
+    out = list(lines)
+    if out and out[-1].strip():
+        pass  # lines are joined with "\n" by the caller; no blank needed
+    for gap_start, gap_end, project in additions:
+        out.append(f"i {gap_start.strftime(_TS_FMT)} {project}  ;auto ;recovered")
+        out.append(f"o {gap_end.strftime(_TS_FMT)}")
+    return out, recovered, skipped
