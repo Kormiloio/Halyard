@@ -1748,6 +1748,37 @@ layers must read from this local source of truth; they do not replace it.
       including the observed one), the doctor coverage check (threshold
       needs tuning against real data first), and README wording.
 
+    - **v5.33 — Recover the hours the auto-timer already lost:** v5.26
+      stopped the bleeding but did nothing for days already gone, and the
+      loss was large — the maintainer's timeclock counted **8.4 h** across a
+      40-day window whose session ledger records work throughout.
+      `halyard timeclock repair --from-sessions` reconciles the timeclock
+      against the ledger, proposing coverage for any span a session proves
+      and the timeclock lacks. **The finding that shaped it:** the first
+      working implementation proposed **647.2 hours** — ~27 days of
+      continuous time — traced to two long-lived *imported* Codex rollouts
+      (653 h, still open, and 149 h) that were **89% of all session time
+      from 2 of 52 sessions**. v5.26's proposal had anticipated over-claiming
+      and judged the session bound sufficient; that reasoning holds at hour
+      scale and collapses at month scale, since a Codex session left open
+      four weeks is a background process, not four weeks of work. Applied
+      unguarded this would have produced an invoice-destroying number — the
+      opposite of the under-count it exists to fix, and far worse. Bounded
+      by `_MAX_SESSION_SECONDS`, reusing the collectors' own 12 h
+      plausibility cap rather than inventing a threshold, so the reconciler
+      cannot drift from the collectors' definition. Skipped rather than
+      clamped (clamping to the first N hours assumes work happened at the
+      start — a guess dressed as data) and the skipped total is reported, so
+      excluding 89% of the ledger is never silent. Union semantics
+      throughout: coverage proposed for an earlier session suppresses a
+      later one, so overlapping sessions cannot double-bill. Same safety
+      contract as the existing repair, shared through one `_emit` path —
+      dry-run default, timestamped backup, atomic replace. With the bound:
+      71.9 h proposed, 8.4 h → 80.3 h, ≈2.0 h/day. Spec in
+      `openspec/changes/v5.33-repair-from-sessions/`.
+      **Status: done; 1881 tests passing** (+16). Deferred: the doctor
+      coverage check (threshold still needs tuning against real data).
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
