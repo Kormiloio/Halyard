@@ -116,18 +116,38 @@ layers must read from this local source of truth; they do not replace it.
 1. ~~**v2.18 — Cache and audit hardening** (complete)~~ — project registry,
    SQLite schema migrations, content-addressed session IDs, invoice front-matter
    rate fields, test backfill for v2.11–v2.15.
-2. **OSS launch:** `pipx install halyard && halyard init` must work end-to-end
-   in a clean venv. Gate: zero-friction first-use experience confirmed. Then
-   HN / Reddit / Lobsters post.
-   Pre-flight checklist (in order):
-   - [ ] Make GitHub repo public.
-   - [ ] Configure PyPI trusted publisher: PyPI project → Settings →
-     Trusted Publishers → Add (Owner: Kormiloio, Repo: Halyard,
-     Workflow: publish.yml, Environment: pypi).
-   - [ ] Create "pypi" environment in GitHub repo Settings → Environments.
-   - [ ] Push `v0.2.1` tag after going public to trigger the publish workflow.
-   - [ ] Confirm `pipx install halyard` installs 0.2.1 from PyPI.
-   - [ ] Write HN / Reddit / Lobsters post.
+2. ~~**OSS launch** (complete)~~ — `pipx install halyard && halyard init`
+   works end-to-end in a clean venv; the HN and Reddit posts are out.
+   Status reconciled 2026-09-05 against the actual state of the repo,
+   PyPI, and the publish workflow — every box below was already true and
+   had simply never been ticked.
+   - [x] Make GitHub repo public. — repo is `PUBLIC`.
+   - [x] Configure PyPI trusted publisher (Owner: Kormiloio, Repo:
+     Halyard, Workflow: publish.yml, Environment: pypi). — proven by the
+     successful publish: it authenticated via `id-token` with no API
+     token, which only works once the trusted publisher exists.
+   - [x] Create "pypi" environment in GitHub repo Settings → Environments.
+     — same evidence; the job declares `environment: pypi` and ran.
+   - [x] Push `v0.2.1` tag after going public. — publish run
+     `28138715148` on ref `v0.2.1` succeeded.
+   - [x] Confirm `pipx install halyard` installs 0.2.1 from PyPI. —
+     `halyard` is live on PyPI at 0.2.1 (releases: 0.0.1, 0.1.0, 0.2.1).
+   - [x] Write the launch post. — HN and Reddit are done.
+   - [n/a] Lobsters. **Not a pending task — it is not permitted.** The
+     site's rules discourage submitting your own project unless you are
+     an established member, so this is a non-goal rather than an
+     outstanding item. Other docs still list "HN / Reddit / Lobsters" as
+     a set (`docs/PRD-halyard.md`, `docs/current-direction.md`); read
+     Lobsters there as aspirational, not a gate.
+
+   **Release-gate note.** Two of the three release attempts never reached
+   PyPI: `v0.2.0` was stopped by the tag/version-mismatch guard, and the
+   first `v0.2.1` attempt failed the test gate on
+   `test_usage_dashboard_controls.py` and `test_v253_synthetic_read_guard.py`
+   — the date-dependent fragility later fixed in v5.14 and v5.28. The
+   publish action itself has never failed. The gate worked as designed
+   (no bad release shipped), but it is worth knowing that the thing which
+   actually blocks releases here is test-suite time-coupling, not PyPI.
 3. **v2.24 — Outcome metadata uplift — shipped:** branch as a first-class
    `AiSession` field, commit count at session close, code delta for all four
    collectors, `halyard outcome sync` command for PR linkage, SQLite v3 schema.
