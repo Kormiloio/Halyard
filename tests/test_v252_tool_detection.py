@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from halyard import doctor
-from halyard.collectors import codex_app
+from halyard.collectors import codex_app, copilot
 from halyard.doctor import build_doctor_report, render_json
 
 
@@ -18,6 +18,12 @@ def _fake_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # Default: no Codex history, nothing imported.
     monkeypatch.setattr(codex_app, "codex_history_present", lambda: False)
     monkeypatch.setattr(codex_app, "codex_imported_any", lambda: False)
+    # Same for Copilot. Its collector binds ~/Library/.../workspaceStorage
+    # and ~/.halyard/copilot-imported as module-level constants at import
+    # time, so patching Path.home above cannot reach them — without these
+    # stubs the nudge fires off the developer's real VS Code chat history.
+    monkeypatch.setattr(copilot, "copilot_history_present", lambda: False)
+    monkeypatch.setattr(copilot, "copilot_imported_any", lambda: False)
     return tmp_path
 
 

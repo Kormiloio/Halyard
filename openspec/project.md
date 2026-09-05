@@ -1499,6 +1499,51 @@ layers must read from this local source of truth; they do not replace it.
       `openspec/changes/v5.23-ledger-duplicate-doctor/`.
       **Status: done; 1770 tests passing.**
 
+    - **v5.28 — Ambient-state test isolation:** the two axes v5.14 left
+      open, same defect class (tests coupled to ambient machine state),
+      both test-only. **(a) Day-field underflow:**
+      `test_usage_dashboard_controls.py::_seed_sessions` back-dated
+      fixtures with `.replace(day=now.day - offset)`, which computes
+      day 0 on the 1st or 2nd of any month and raises `ValueError: day is
+      out of range for month`. Window is `now.day < 3` — `day_offset`
+      reaches 2 — so roughly 29 days a month the suite is green, which is
+      why it survived. Not theoretical: it took down `lint-and-test` on
+      every open PR (#13, #15) on 2026-09-02, and `main`'s last run was
+      2026-07-09, so `main` was latently red too. It did *not* account
+      for the whole red matrix — `lint-and-test (3.11)` was
+      independently red on `pip-audit` (setuptools PYSEC-2026-3447),
+      fixed separately. The window then closed at 2026-09-03 mid-review,
+      so a branch without the fix passed CI; verification has to force
+      the date, not wait for it. Fixed with `timedelta(days=offset)` —
+      clamping to day 1 would have collapsed three fixture days into one
+      and passed while testing something else. **(b) Real `$HOME` leakage:**
+      `test_v252_tool_detection.py::test_absent_tool_no_nudge` asserted
+      no `unwired.*` check fires with an empty `PATH`, but got
+      `unwired.copilot` off the *developer's real* VS Code chat history —
+      `collectors/copilot.py` binds `_VSCODE_STORAGE_DIR` and
+      `_IMPORTED_STATE_FILE` as module-level `Path.home()` constants at
+      import time, so the fixture's `Path.home` patch cannot reach them.
+      Green on CI (no VS Code) and green running the file alone — that
+      isolation pass was an accident of import order, since
+      `_unwired_tool_checks` imports the collector lazily and, run alone,
+      binds the constants while `Path.home` is still patched. Fixed by
+      stubbing `copilot_history_present` / `copilot_imported_any` in the
+      autouse `_fake_home` fixture, mirroring the Codex stubs already
+      there; the lazy in-function import means module-attribute patching
+      always wins regardless of import order. Production is correct in
+      both cases — `doctor` *should* notice real un-imported Copilot
+      history. Spec in
+      `openspec/changes/v5.28-ambient-state-test-isolation/`.
+      **Status: done; 1770 tests passing** (no new tests — the count was
+      already 1770, with one failing on any machine holding Copilot
+      history and the whole dashboard module erroring on the 1st and 2nd of
+      any month).
+      Deferred: ~20 further module-level `Path.home()` constants across
+      `src/halyard/` are latently exposed the same way; a suite-wide
+      `conftest.py` guard is the durable fix. Also deferred: the
+      `vscode-extension` job is red on 2 high-severity `postcss`
+      advisories — same colour, unrelated cause.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
