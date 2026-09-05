@@ -163,6 +163,10 @@ def _finalize_one(path: Path, state: dict[str, Any], project_dir: Path | None) -
         append_session(target_dir, session)
         maybe_emit_milestones(target_dir)
         maybe_show_dashboard_hint()
+        # v5.26: assert human-time coverage for the span this session proves.
+        from halyard.auto_timer import safe_cover_session
+
+        safe_cover_session(target_dir, session)
     else:
         write_unattributed_session(session)
 

@@ -180,6 +180,91 @@ def auto_timer_activity(project: str, timeclock: Path, now: datetime | None = No
         _write_state(state)
 
 
+def auto_timer_cover_session(
+    project: str,
+    timeclock: Path,
+    start: datetime,
+    end: datetime,
+) -> float:
+    """Ensure the timeclock covers ``[start, end]``. Returns minutes added.
+
+    v5.26. The auto-timer measured *prompt cadence*, not work: the idle
+    policy closes a window retroactively at ``last_activity``, so a single
+    prompt kicking off a two-hour agent turn was closed out from under
+    itself at ~30 minutes. ``auto_timer_update_activity`` cannot rescue
+    that — it returns early when no window is open, which is exactly the
+    state the stale close leaves behind. It can refresh, never reopen or
+    backfill.
+
+    A captured session row is proof that work happened, with timestamps.
+    The timeclock should not contradict Halyard's own ledger, so on stop we
+    assert coverage for the session's own span.
+
+    Contract:
+
+    - **Append-only.** Missing coverage is appended as fresh ``i``/``o``
+      pairs; existing history is never rewritten. The format requires it,
+      and rewriting user time data on a hook path would be indefensible.
+    - **Union, never sum.** Only the gaps not already covered are written,
+      so replaying a stop is idempotent and overlapping windows cannot
+      double-bill.
+    - **Never past ``end``.** The session bounds the claim; coverage stops
+      where the evidence stops.
+    """
+    from halyard.ai_log import _safe_field, locked_file
+    from halyard.reports import parse_timeclock, read_active_timer
+
+    if end <= start or not timeclock.exists():
+        return 0.0
+    if read_active_timer() is not None:
+        return 0.0  # manual timer wins, same as auto_timer_activity
+
+    project = _safe_field(project)
+
+    # Existing coverage, as [start, end) intervals. An open entry is
+    # measured through `end` rather than now(): we only care whether it
+    # already covers the span being asserted.
+    covered = [(s, e) for s, e, _ in parse_timeclock(timeclock, now=end) if e > s]
+    gaps = _uncovered_spans(start, end, covered)
+    if not gaps:
+        return 0.0
+
+    added = 0.0
+    with locked_file(timeclock, "a") as f:
+        for gap_start, gap_end in gaps:
+            f.write(f"i {gap_start.strftime(_TS_FMT)} {project}  ;auto ;coverage\n")
+            f.write(f"o {gap_end.strftime(_TS_FMT)}\n")
+            added += (gap_end - gap_start).total_seconds() / 60
+    return added
+
+
+def _uncovered_spans(
+    start: datetime,
+    end: datetime,
+    covered: list[tuple[datetime, datetime]],
+) -> list[tuple[datetime, datetime]]:
+    """Return the parts of ``[start, end]`` not already covered.
+
+    Kept separate from the writer so the interval arithmetic — the part
+    that can silently double-bill — is testable on its own.
+    """
+    gaps: list[tuple[datetime, datetime]] = []
+    cursor = start
+    for c_start, c_end in sorted(covered):
+        if c_end <= cursor:
+            continue
+        if c_start >= end:
+            break
+        if c_start > cursor:
+            gaps.append((cursor, min(c_start, end)))
+        cursor = max(cursor, c_end)
+        if cursor >= end:
+            return gaps
+    if cursor < end:
+        gaps.append((cursor, end))
+    return gaps
+
+
 def auto_timer_update_activity(now: datetime | None = None) -> None:
     """Update last_activity without opening a new timer (called on Stop hook)."""
     if _try_hub_presence("update", now=now) is not None:
@@ -215,6 +300,36 @@ def auto_timer_close_now(now: datetime | None = None) -> bool:
             _write_clockout(tc, ts)
     _clear_state()
     return True
+
+
+def safe_cover_session(project_dir: Path | None, session: object) -> None:
+    """Assert session-span coverage from a stop hook, never raising.
+
+    v5.26. Shared by every collector's stop hook so the four of them cannot
+    drift: before this, only Claude Code refreshed the auto-timer at all,
+    and even that no-ops once the idle policy has closed the window
+    mid-turn. A hook must never crash the host tool, so failures are
+    logged rather than raised — the same contract as
+    :func:`safe_auto_timer_close`.
+    """
+    if project_dir is None:
+        return
+    try:
+        start = getattr(session, "start", None)
+        end = getattr(session, "end", None)
+        project = getattr(session, "project", None)
+        if start is None or end is None:
+            return
+        auto_timer_cover_session(
+            project or "unattributed",
+            project_dir / "time.timeclock",
+            start,
+            end,
+        )
+    except Exception as exc:  # must never break a hook
+        from halyard.ai_log import _log_error
+
+        _log_error("auto-timer session coverage failed", exc)
 
 
 def safe_auto_timer_close() -> None:

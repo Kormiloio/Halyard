@@ -335,6 +335,10 @@ def handle_agent_stop() -> int:
     if can_append_project_log and project_dir is not None:
         append_session(project_dir, session)
         maybe_emit_milestones(project_dir)
+        # v5.26: assert human-time coverage for the span this session proves.
+        from halyard.auto_timer import safe_cover_session
+
+        safe_cover_session(project_dir, session)
     else:
         path = write_unattributed_session(session)
         # stderr: hooks communicate back to the tool via stderr, not stdout
