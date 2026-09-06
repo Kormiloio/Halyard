@@ -275,13 +275,61 @@ def register(app: typer.Typer) -> None:
                 f"[dim]{proj}[/dim]"
             )
 
+    @app.command(name="import-junie")
+    def import_junie(
+        dry_run: bool = typer.Option(
+            False, "--dry-run", help="Show what would be imported without writing anything."
+        ),
+        all_projects: bool = typer.Option(
+            False,
+            "--all",
+            help="Import sessions for all Halyard projects, not just the current one.",
+        ),
+    ) -> None:
+        """Import Junie (JetBrains) CLI session history into ai-sessions.log."""
+        from halyard.ai_log import find_project_dir
+        from halyard.collectors.junie import import_junie_sessions
+
+        project_dir = find_project_dir()
+        if project_dir is None and not all_projects:
+            console.print(
+                "[bold red]Error:[/] No Halyard project found. "
+                "Run [bold]halyard init[/] first or use [bold]--all[/]."
+            )
+            raise typer.Exit(code=1)
+
+        sessions = import_junie_sessions(
+            project_dir=project_dir,
+            dry_run=dry_run,
+            all_projects=all_projects,
+        )
+
+        if not sessions:
+            console.print("[yellow]No new Junie sessions to import.[/]")
+            return
+
+        label = "[dim](dry run)[/dim] " if dry_run else ""
+        console.print(f"{label}[bold green]Imported[/] {len(sessions)} Junie session(s).")
+        local_rows = sum(1 for s in sessions if s.billing == "local")
+        for s in sessions:
+            proj = s.project or "unattributed"
+            console.print(
+                f"  {s.start:%Y-%m-%d %H:%M} → {s.end:%m-%d %H:%M}  {s.model}  "
+                f"in={s.input_tokens:,} out={s.output_tokens:,}  ({proj})"
+            )
+        if local_rows:
+            console.print(
+                f"[dim]{local_rows} session(s) ran on a local model — tokens counted, "
+                "spend excluded from money totals.[/dim]"
+            )
+
     @app.command(name="import-all")
     def import_all(
         dry_run: bool = typer.Option(
             False, "--dry-run", help="Show what would be imported without writing anything."
         ),
     ) -> None:
-        """Run every importer (Codex, Copilot, Gemini, Claude) across all projects.
+        """Run every importer (Codex, Copilot, Gemini, Claude, Antigravity, Junie).
 
         Idempotent — already-imported sessions are skipped — so it is safe to
         run on a schedule to keep importer-based tools current.
@@ -291,6 +339,7 @@ def register(app: typer.Typer) -> None:
         from halyard.collectors.claude_code import import_claude_sessions
         from halyard.collectors.codex_app import import_codex_sessions
         from halyard.collectors.copilot import import_copilot_sessions
+        from halyard.collectors.junie import import_junie_sessions
 
         project_dir = find_project_dir()
         codex = import_codex_sessions(project_dir=project_dir, dry_run=dry_run, all_projects=True)
@@ -302,12 +351,14 @@ def register(app: typer.Typer) -> None:
         antigravity = import_antigravity_sessions(
             project_dir=project_dir, dry_run=dry_run, all_projects=True
         )
+        junie = import_junie_sessions(project_dir=project_dir, dry_run=dry_run, all_projects=True)
 
         label = "(dry run) " if dry_run else ""
         console.print(
             f"[bold green]{label}import-all:[/] "
             f"Codex {len(codex)}, Copilot {len(copilot)}, Gemini {gemini_n}, "
-            f"Claude {len(claude)}, Antigravity {len(antigravity)} session(s)."
+            f"Claude {len(claude)}, Antigravity {len(antigravity)}, "
+            f"Junie {len(junie)} session(s)."
         )
 
     @app.command(name="install-import-timer")

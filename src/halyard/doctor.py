@@ -651,6 +651,23 @@ def _unwired_tool_checks(tool: ToolScope, current: Path) -> list[DoctorCheck]:
             )
 
     if tool == "all":
+        from halyard.collectors.junie import junie_history_present, junie_imported_any
+
+        # v5.38: Junie ships as a CLI (~/.local/bin/junie), not only the
+        # JetBrains plugin, so a user can be running it daily with nothing
+        # under Application Support to hint at it — it was invisible until
+        # someone said out loud that they used it.
+        if junie_history_present() and not junie_imported_any():
+            checks.append(
+                DoctorCheck(
+                    id="unwired.junie",
+                    label="Junie (unwired)",
+                    status="warning",
+                    detail="Junie session history on disk but none imported",
+                    fix="halyard import-junie --all",
+                )
+            )
+
         from halyard.collectors.codex_app import codex_history_present, codex_imported_any
 
         if codex_history_present() and not codex_imported_any():

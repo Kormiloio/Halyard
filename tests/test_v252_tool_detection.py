@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from halyard import doctor
-from halyard.collectors import codex_app, copilot
+from halyard.collectors import codex_app, copilot, junie
 from halyard.doctor import build_doctor_report, render_json
 
 
@@ -24,6 +24,11 @@ def _fake_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # stubs the nudge fires off the developer's real VS Code chat history.
     monkeypatch.setattr(copilot, "copilot_history_present", lambda: False)
     monkeypatch.setattr(copilot, "copilot_imported_any", lambda: False)
+    # And Junie (v5.38). Its _INDEX_FILE is another module-level constant
+    # bound to the real home at import, so this fixture's Path.home patch
+    # cannot reach it either — the same reason Copilot needed stubbing.
+    monkeypatch.setattr(junie, "junie_history_present", lambda: False)
+    monkeypatch.setattr(junie, "junie_imported_any", lambda: False)
     return tmp_path
 
 
