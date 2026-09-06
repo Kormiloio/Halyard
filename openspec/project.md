@@ -1837,6 +1837,41 @@ layers must read from this local source of truth; they do not replace it.
       Spec in `openspec/changes/v5.35-doctor-coverage-checks/`.
       **Status: done; 1907 tests passing** (+10).
 
+    - **v5.36 — the collapse discarded attribution, and its remedy did not
+      exist:** 42% of captured tokens (453.6M of 1.07B) reported as
+      belonging to no project. They *were* attributed in the ledger; the
+      read path threw it away. `_canonical_gemini_row` ranks by
+      `(input+output, has_project, window, cache_read)` — tokens outrank
+      attribution, so a later, larger, unattributed row wins and the project
+      is dropped. Measured: job `codex:019fe77b` had **74 of 75 rows
+      carrying `project=git/Nautilus`** and collapsed to none, hiding
+      371.1M tokens across two groups. The ranking answers "which row is
+      most complete", a different question from "what project was this"; a
+      row without a project is missing information, not asserting absence.
+      Note the selection works *against* attribution precisely when it
+      matters: the largest row is usually the newest, and the newest is the
+      one most likely written outside the project after a re-import. Fixed
+      by inheriting the group's project when the winner has none — and only
+      when the group agrees, because two rows naming different projects is a
+      contradiction, not a gap, and guessing would move billable tokens onto
+      a project the evidence does not support. Rejected re-ranking
+      `has_project` above tokens: the attributed row is often the earlier
+      smaller snapshot, so that trades a wrong project for wrong totals.
+      Separately, `halyard adopt` has printed "run `halyard reattribute
+      <old> <new>`" since it shipped — a command referenced exactly once in
+      the codebase, in the message telling users to run it, and never
+      implemented. Third instance of this shape after v5.29's shadowed
+      `hub <path>` and v5.30's MCP advice that reproduced its own error. Now
+      implemented as a read-time alias (v5.8 machinery), dry-run by default
+      since an alias silently moves billable sessions, and `link-repo` — which
+      had the same fix-forward-only gap — now points at it too. Verified:
+      unattributed 453.6M → **82.5M**; `reattribute git/Halyard
+      kormilo:halyard` reports 25 sessions. Spec in
+      `openspec/changes/v5.36-attribution-recovery/`.
+      **Status: done; 1918 tests passing** (+11). Deferred: attributing
+      imported rollouts that carry no project at all (the remaining 82.5M) —
+      inferring from timing or cwd has real false-positive risk.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
