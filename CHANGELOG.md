@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] — 2026-09-05
+
+### Fixed
+
+- **The whole-file size cap that hid large Codex rollouts was in every
+  collector (v5.34):** 0.2.3 fixed it for Codex and recorded the same shape
+  elsewhere as not yet demonstrably losing data. It was. `copilot.py`
+  capped at 50 MB directly above a streaming read, so a **135.9 MB Copilot
+  chat was silently skipped** while `halyard doctor` reported Copilot
+  history present but unimported — with no hint that importing could not
+  fix it. These readers stream line by line, so peak memory is the longest
+  *line*; a whole-file cap bounds nothing about resource use and only sets
+  the size at which a session vanishes, failing precisely where it costs
+  most. Copilot, Claude Code, Antigravity and Codex now share one bounded
+  reader (16 MiB per line, 1 GiB budget, truncation logged rather than
+  silent). Gemini OTel is fixed differently and deliberately: its read was
+  already bounded, so only the redundant *rejection* is removed — it had
+  turned "read the first 25 MB" into "read nothing". On the machine that
+  found this, `halyard import-copilot` went from **2 sessions to 3**.
+
 ## [0.2.3] — 2026-09-05
 
 Three fixes to time and token accuracy, all of which were silently
