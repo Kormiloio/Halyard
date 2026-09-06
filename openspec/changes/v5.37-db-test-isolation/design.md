@@ -40,3 +40,42 @@ That is correct: every real session in it is credits or subscription-billed
 and records zero. The `$0.61` that vanished was invented entirely by tests,
 which is what makes this worth more than tidiness — a spend total read off
 that table was reporting fabricated money.
+
+
+---
+
+## Implementation notes (amending this design)
+
+Two corrections, both found because the guard fired on its own change.
+
+### The isolation had to be session-scoped
+
+The design assumed a function-scoped autouse fixture was enough. It is not.
+`monkeypatch` restores at each test's teardown, and `HubServer` runs in a
+background thread that can outlive it — a write landing in that window hits
+the *real* path after the patch is gone.
+
+That race is order-dependent, which is why a full run looked clean
+(474 → 474 rows) and the next run under a different `pytest-randomly` seed
+leaked `tool-1`, `tool-2` and `t`. Verifying once was not enough to
+establish the fix; two consecutive runs under different seeds were.
+
+Holding the override for the whole session removes the window instead of
+narrowing it.
+
+### The guard compares tool names, not row counts
+
+The design proposed counting rows on the reasoning that "no real tool writes
+the sessions table during a test run — it is populated by an explicit
+`halyard db sync`". That is wrong. The developer's own Claude Code hook
+captures and syncs their work *while the suite runs*: the first guarded run
+failed on 416 → 418 with a legitimate `claude-code` row among the leaked
+fixtures.
+
+A guard that fails on real usage is worse than no guard, because it gets
+disabled rather than fixed. Comparing the set of tool names discriminates
+correctly: real activity adds rows under tools already present, while a test
+introduces a name that was not there.
+
+This is the same reasoning the design already applied to reject watching the
+whole `~/.halyard` directory — it just had not been carried far enough.
