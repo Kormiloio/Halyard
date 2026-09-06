@@ -11,14 +11,13 @@ so repeated runs don't duplicate entries.
 from __future__ import annotations
 
 import json
-import os
 import re
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
-from halyard.collectors import normalise_input
+from halyard.collectors import iter_bounded_lines, normalise_input
 from halyard.git_context import commits_in_window, current_branch, infer_project
 from halyard.hub import find_hub
 
@@ -140,57 +139,19 @@ _MAX_ROLLOUT_BYTES = 1024 * 1024 * 1024  # 1 GiB
 
 
 def _iter_jsonl_lines(path: Path) -> Iterator[str]:
-    """Yield lines from a rollout file without loading it all into memory.
+    """Stream a rollout under bounds that match how it is read.
 
-    Bounded untrusted read: reject symlinks, skip any single line over
-    ``_MAX_ROLLOUT_LINE_BYTES``, and abandon the file once cumulative bytes
-    pass ``_MAX_ROLLOUT_BYTES``.
-
-    v5.32: the bound used to be a 25 MB *whole-file* cap, which silently
-    yielded nothing for anything larger. Because the read is a streaming
-    generator, that cap never bounded memory — only how large a session was
-    allowed to be before it became permanently uncapturable. Long agentic
-    Codex sessions blow past 25 MB routinely (one observed rollout was
-    813 MB of inline tool output), so the cap silently dropped exactly the
-    sessions that matter most for token accounting, and no amount of
-    re-running the importer could recover them. Memory is bounded by the
-    longest line, so the per-line cap is the bound that was actually
-    wanted — the same shape ``gemini_history`` already uses, which was
-    widened for the same reason after an observed 825 MB rollout.
+    v5.32 established these bounds here after an 813 MB rollout was found
+    permanently unreadable behind a 25 MB whole-file cap. v5.34 moved the
+    implementation to ``collectors.iter_bounded_lines`` once the same cap
+    was confirmed in copilot, claude_code and antigravity — one reader, so
+    the four cannot drift apart again.
     """
-    try:
-        if os.path.islink(path):
-            return
-        seen = 0
-        with path.open(encoding="utf-8", errors="replace") as fh:
-            for raw in fh:
-                seen += len(raw.encode("utf-8", errors="ignore"))
-                if seen > _MAX_ROLLOUT_BYTES:
-                    _note_truncated(path, seen)
-                    return
-                if len(raw) > _MAX_ROLLOUT_LINE_BYTES:
-                    continue  # pathological/corrupt line — skip, keep going
-                yield raw
-    except OSError:
-        return
-
-
-def _note_truncated(path: Path, seen: int) -> None:
-    """Record that a rollout was abandoned part-way through.
-
-    v5.32: the previous whole-file cap dropped oversized rollouts in
-    silence — no log line, no doctor signal — so a user whose largest
-    session stopped being captured had no way to find out, and `halyard
-    doctor` went on advising `halyard import-codex`, a command that could
-    not fix it. Losing data quietly is worse than losing it loudly.
-    """
-    from halyard.ai_log import _log_error
-
-    _log_error(
-        f"codex importer: rollout {path.name} exceeded the "
-        f"{_MAX_ROLLOUT_BYTES} byte budget after {seen} bytes — "
-        "session captured only up to that point",
-        RuntimeError("rollout budget exceeded"),
+    yield from iter_bounded_lines(
+        path,
+        max_line_bytes=_MAX_ROLLOUT_LINE_BYTES,
+        max_total_bytes=_MAX_ROLLOUT_BYTES,
+        label="codex rollout",
     )
 
 

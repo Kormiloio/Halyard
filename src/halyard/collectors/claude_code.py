@@ -33,6 +33,7 @@ from halyard.ai_log import (
 from halyard.collectors import (
     _MAX_SESSION_SECONDS,
     foreign_harness,
+    iter_bounded_lines,
     session_has_evidence,
     session_is_implausible,
     session_is_synthetic_telemetry,
@@ -762,8 +763,11 @@ def _safe_transcript_path(raw: str) -> Path | None:
             return None
         if not any(root == path or root in path.parents for root in _transcript_roots()):
             return None
-        if path.stat().st_size > _MAX_TRANSCRIPT_BYTES:
-            return None
+        # v5.34: the whole-file size rejection lived here. The transcript
+        # is streamed line by line below, so it bounded nothing but the
+        # session size — a long agentic transcript past 25 MB was simply
+        # dropped, silently. Bounds now live in iter_bounded_lines, which
+        # caps the longest line and the total parse budget instead.
     except OSError:
         return None
     return path
@@ -868,92 +872,91 @@ def _read_from_transcript(
         first_ts: datetime | None = None
         last_ts: datetime | None = None
 
-        with path.open(encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                raw = line.strip()
-                if not raw:
-                    continue
-                try:
-                    obj = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
+        for line in iter_bounded_lines(path, label="claude-code transcript"):
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                obj = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
 
-                etype = obj.get("type")
-                if etype not in ("assistant", "user"):
-                    continue
+            etype = obj.get("type")
+            if etype not in ("assistant", "user"):
+                continue
 
-                ts = _transcript_ts(obj, since)
-                if since is not None and ts is not None and ts < since:
-                    continue
+            ts = _transcript_ts(obj, since)
+            if since is not None and ts is not None and ts < since:
+                continue
 
-                if stats.session_id is None:
-                    sid = obj.get("sessionId") or obj.get("session_id")
-                    if sid:
-                        stats.session_id = str(sid)
+            if stats.session_id is None:
+                sid = obj.get("sessionId") or obj.get("session_id")
+                if sid:
+                    stats.session_id = str(sid)
 
-                if stats.cwd is None:
-                    raw_cwd = obj.get("cwd")
-                    if isinstance(raw_cwd, str) and raw_cwd:
-                        stats.cwd = raw_cwd
+            if stats.cwd is None:
+                raw_cwd = obj.get("cwd")
+                if isinstance(raw_cwd, str) and raw_cwd:
+                    stats.cwd = raw_cwd
 
-                if ts is not None:
-                    if first_ts is None or ts < first_ts:
-                        first_ts = ts
-                    if last_ts is None or ts > last_ts:
-                        last_ts = ts
+            if ts is not None:
+                if first_ts is None or ts < first_ts:
+                    first_ts = ts
+                if last_ts is None or ts > last_ts:
+                    last_ts = ts
 
-                msg = obj.get("message") or {}
-                content = msg.get("content") if isinstance(msg, dict) else None
+            msg = obj.get("message") or {}
+            content = msg.get("content") if isinstance(msg, dict) else None
 
-                if etype == "assistant":
-                    stats.assistant_count += 1
-                    cur_model: str | None = None
-                    if isinstance(msg, dict) and msg.get("model"):
-                        cur_model = str(msg["model"])
-                        stats.model = cur_model
-                    if obj.get("gitBranch") and stats.branch is None:
-                        stats.branch = str(obj["gitBranch"])
-                    usage = msg.get("usage") or {} if isinstance(msg, dict) else {}
-                    u_in = int(usage.get("input_tokens", 0))
-                    u_out = int(usage.get("output_tokens", 0))
-                    u_cr = int(usage.get("cache_read_input_tokens", 0))
-                    u_cw = int(usage.get("cache_creation_input_tokens", 0))
-                    stats.input_tokens += u_in
-                    stats.output_tokens += u_out
-                    stats.cache_read += u_cr
-                    stats.cache_write += u_cw
-                    if cur_model:
-                        acc = stats.model_usage.setdefault(cur_model, [0, 0, 0, 0])
-                        acc[0] += u_in
-                        acc[1] += u_out
-                        acc[2] += u_cr
-                        acc[3] += u_cw
-                    if isinstance(content, list):
-                        for b in content:
-                            if not (isinstance(b, dict) and b.get("type") == "tool_use"):
-                                continue
-                            tool_calls += 1
-                            # v3.4: an MCP tool is mcp__<server>__<tool>.
-                            # Reduce to the server segment only; the raw
-                            # name/args are never retained.
-                            server = extract_mcp_server(b.get("name"))
-                            if server is not None:
-                                mcp_servers.add(server)
-                else:  # user
-                    blocks = content if isinstance(content, list) else []
-                    results = [
-                        b for b in blocks if isinstance(b, dict) and b.get("type") == "tool_result"
-                    ]
-                    if results:
-                        for b in results:
-                            if bool(b.get("is_error")):
-                                tool_errors += 1
-                                # v3.3: distinguish explicit user rejection from tool failure
-                                content_str = str(b.get("content", "")).lower()
-                                if "user doesn't want to proceed" in content_str:
-                                    rejections += 1
-                    else:
-                        user_count += 1
+            if etype == "assistant":
+                stats.assistant_count += 1
+                cur_model: str | None = None
+                if isinstance(msg, dict) and msg.get("model"):
+                    cur_model = str(msg["model"])
+                    stats.model = cur_model
+                if obj.get("gitBranch") and stats.branch is None:
+                    stats.branch = str(obj["gitBranch"])
+                usage = msg.get("usage") or {} if isinstance(msg, dict) else {}
+                u_in = int(usage.get("input_tokens", 0))
+                u_out = int(usage.get("output_tokens", 0))
+                u_cr = int(usage.get("cache_read_input_tokens", 0))
+                u_cw = int(usage.get("cache_creation_input_tokens", 0))
+                stats.input_tokens += u_in
+                stats.output_tokens += u_out
+                stats.cache_read += u_cr
+                stats.cache_write += u_cw
+                if cur_model:
+                    acc = stats.model_usage.setdefault(cur_model, [0, 0, 0, 0])
+                    acc[0] += u_in
+                    acc[1] += u_out
+                    acc[2] += u_cr
+                    acc[3] += u_cw
+                if isinstance(content, list):
+                    for b in content:
+                        if not (isinstance(b, dict) and b.get("type") == "tool_use"):
+                            continue
+                        tool_calls += 1
+                        # v3.4: an MCP tool is mcp__<server>__<tool>.
+                        # Reduce to the server segment only; the raw
+                        # name/args are never retained.
+                        server = extract_mcp_server(b.get("name"))
+                        if server is not None:
+                            mcp_servers.add(server)
+            else:  # user
+                blocks = content if isinstance(content, list) else []
+                results = [
+                    b for b in blocks if isinstance(b, dict) and b.get("type") == "tool_result"
+                ]
+                if results:
+                    for b in results:
+                        if bool(b.get("is_error")):
+                            tool_errors += 1
+                            # v3.3: distinguish explicit user rejection from tool failure
+                            content_str = str(b.get("content", "")).lower()
+                            if "user doesn't want to proceed" in content_str:
+                                rejections += 1
+                else:
+                    user_count += 1
 
         had_transcript = (
             stats.assistant_count > 0 or user_count > 0 or tool_calls > 0 or tool_errors > 0

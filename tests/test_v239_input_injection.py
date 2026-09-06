@@ -47,7 +47,7 @@ def test_safe_transcript_path_rejects_outside_allowlist() -> None:
     assert _safe_transcript_path("/nonexistent/nope.jsonl") is None
 
 
-def test_safe_transcript_path_rejects_symlink_and_oversize(tmp_path: Path) -> None:
+def test_safe_transcript_path_rejects_symlink(tmp_path: Path) -> None:
     from halyard.collectors import claude_code
 
     real = tmp_path / "real.jsonl"
@@ -56,15 +56,35 @@ def test_safe_transcript_path_rejects_symlink_and_oversize(tmp_path: Path) -> No
     os.symlink(real, link)
     assert claude_code._safe_transcript_path(str(link)) is None
 
+
+def test_oversize_transcripts_are_bounded_not_rejected(tmp_path: Path) -> None:
+    """v5.34 moved the size bound from the path guard into the reader.
+
+    The old guard rejected the whole file, which silently dropped long
+    agentic transcripts — the read streams, so a whole-file cap bounded
+    nothing but the session size. The untrusted-input protection that
+    matters (symlink refusal, root containment) still lives in
+    _safe_transcript_path; the *resource* bound is now per line plus a
+    total budget, which is what actually matches a streaming read.
+    """
+    from halyard.collectors import iter_bounded_lines
+
     big = tmp_path / "big.jsonl"
-    big.write_text("x", encoding="utf-8")
-    # Force the size check without writing 25MB.
-    orig = claude_code._MAX_TRANSCRIPT_BYTES
-    claude_code._MAX_TRANSCRIPT_BYTES = 0
-    try:
-        assert claude_code._safe_transcript_path(str(big)) is None
-    finally:
-        claude_code._MAX_TRANSCRIPT_BYTES = orig
+    big.write_text("a\nb\nc\n", encoding="utf-8")
+
+    # Budget smaller than the file: read what fits, do not return nothing.
+    got = list(iter_bounded_lines(big, max_total_bytes=4))
+    assert 0 < len(got) < 3
+
+    # A pathological line is skipped; the rest of the file still parses.
+    big.write_text("ok\n" + "x" * 100 + "\nalso-ok\n", encoding="utf-8")
+    got = list(iter_bounded_lines(big, max_line_bytes=10))
+    assert [g.strip() for g in got] == ["ok", "also-ok"]
+
+    # Symlinks remain refused at the reader too.
+    link = tmp_path / "link.jsonl"
+    os.symlink(big, link)
+    assert list(iter_bounded_lines(link)) == []
 
 
 def test_safe_transcript_path_accepts_normal_tmp_file(tmp_path: Path) -> None:

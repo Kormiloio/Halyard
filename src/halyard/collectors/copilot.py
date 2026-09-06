@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from urllib.request import url2pathname
 
 from halyard.ai_log import AiSession, append_session, find_project_dir
+from halyard.collectors import iter_bounded_lines
 from halyard.git_context import commits_in_window, current_branch, infer_project
 from halyard.hub import find_hub
 
@@ -218,38 +219,40 @@ def parse_chat_session(path: Path) -> AiSession | None:
     all_response_parts: dict[int, list[dict[str, Any]]] = {}
 
     try:
-        if path.stat().st_size > 50 * 1024 * 1024:  # 50MB safety cap
-            return None
-        with path.open(encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    event = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                kind = event.get("kind")
-                if kind == 0 and isinstance(event.get("v"), dict):
-                    state = event["v"]
-                elif kind in (1, 2) and isinstance(event.get("k"), list):
-                    key_path = event["k"]
-                    val = event.get("v")
-                    _apply_patch(state, key_path, val)
+        # v5.34: was a 50 MB whole-file cap that returned None. The read
+        # below streams, so the cap bounded nothing but the session size —
+        # and it silently dropped the largest chats. One observed machine
+        # had a 135.9 MB chat file skipped in silence while `halyard
+        # doctor` reported Copilot history present but unimported.
+        for raw_line in iter_bounded_lines(path, label="copilot chat"):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            kind = event.get("kind")
+            if kind == 0 and isinstance(event.get("v"), dict):
+                state = event["v"]
+            elif kind in (1, 2) and isinstance(event.get("k"), list):
+                key_path = event["k"]
+                val = event.get("v")
+                _apply_patch(state, key_path, val)
 
-                    # Evidence aggregation: if this is a response patch,
-                    # keep it even if a later patch overwrites it in 'state'.
-                    if (
-                        len(key_path) == 3
-                        and key_path[0] == "requests"
-                        and isinstance(key_path[1], int)
-                        and key_path[2] == "response"
-                        and isinstance(val, list)
-                    ):
-                        parts = all_response_parts.setdefault(key_path[1], [])
-                        for part in val:
-                            if isinstance(part, dict) and part not in parts:
-                                parts.append(part)
+                # Evidence aggregation: if this is a response patch,
+                # keep it even if a later patch overwrites it in 'state'.
+                if (
+                    len(key_path) == 3
+                    and key_path[0] == "requests"
+                    and isinstance(key_path[1], int)
+                    and key_path[2] == "response"
+                    and isinstance(val, list)
+                ):
+                    parts = all_response_parts.setdefault(key_path[1], [])
+                    for part in val:
+                        if isinstance(part, dict) and part not in parts:
+                            parts.append(part)
     except OSError:
         return None
 

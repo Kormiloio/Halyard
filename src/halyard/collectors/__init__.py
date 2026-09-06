@@ -2,9 +2,71 @@
 
 from __future__ import annotations
 
+import os
+from collections.abc import Iterator
 from datetime import datetime
+from pathlib import Path
 
 from halyard.ai_log import AiSession
+
+# v5.34. Transcript readers stream line by line, so peak memory is the
+# longest *line*, not the file. A whole-file size cap therefore bounds
+# nothing about resource use — it only sets the size at which a session
+# silently becomes uncapturable, and it fails exactly where it costs
+# most: short sessions import fine while long agentic runs disappear.
+# v5.32 established these bounds for Codex after an 813 MB rollout was
+# found permanently unreadable; this is the shared implementation so the
+# four collectors cannot drift apart again.
+MAX_TRANSCRIPT_LINE_BYTES = 16 * 1024 * 1024  # 16 MiB per line
+MAX_TRANSCRIPT_BYTES = 1024 * 1024 * 1024  # 1 GiB total parse budget
+
+
+def iter_bounded_lines(
+    path: Path,
+    *,
+    max_line_bytes: int = MAX_TRANSCRIPT_LINE_BYTES,
+    max_total_bytes: int = MAX_TRANSCRIPT_BYTES,
+    label: str = "transcript",
+) -> Iterator[str]:
+    """Stream a transcript under bounds that match how it is actually read.
+
+    Rejects symlinks, skips any single line over ``max_line_bytes`` (one
+    pathological line costs one line, not the whole session), and stops
+    once cumulative bytes pass ``max_total_bytes`` — keeping what was read
+    rather than discarding everything.
+
+    Truncation is reported to the diagnostic log. Losing data quietly is
+    worse than losing it loudly: the silence is what let the Codex case
+    (v5.32) run for weeks, with `halyard doctor` advising an import that
+    could not fix it.
+    """
+    try:
+        if os.path.islink(path):
+            return
+        seen = 0
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for raw in fh:
+                seen += len(raw.encode("utf-8", errors="ignore"))
+                if seen > max_total_bytes:
+                    _note_truncated(path, seen, label)
+                    return
+                if len(raw) > max_line_bytes:
+                    continue
+                yield raw
+    except OSError:
+        return
+
+
+def _note_truncated(path: Path, seen: int, label: str) -> None:
+    """Record that a transcript was abandoned part-way through."""
+    from halyard.ai_log import _log_error
+
+    _log_error(
+        f"{label}: {path.name} exceeded the {MAX_TRANSCRIPT_BYTES} byte "
+        f"budget after {seen} bytes — captured only up to that point",
+        RuntimeError("transcript budget exceeded"),
+    )
+
 
 _UNKNOWN_MODELS = {"", "default"}
 

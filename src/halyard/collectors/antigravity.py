@@ -39,7 +39,7 @@ from halyard.ai_log import (
     read_active_project,
     write_unattributed_session,
 )
-from halyard.collectors import session_has_evidence, session_is_implausible
+from halyard.collectors import iter_bounded_lines, session_has_evidence, session_is_implausible
 from halyard.git_context import commits_in_window, current_branch, infer_project
 from halyard.hub import find_hub
 
@@ -143,12 +143,10 @@ def parse_transcript(path: Path) -> AiSession | None:
     Metadata only: ``created_at``, ``type``, ``source``, ``status``. The
     ``content`` and ``thinking`` fields are never read.
     """
-    try:
-        if path.stat().st_size > _MAX_TRANSCRIPT_BYTES:
-            return None
-    except OSError:
-        return None
-
+    # v5.34: a whole-file size rejection lived here. The transcript is
+    # streamed below, so it bounded nothing but the session size and
+    # dropped the largest ones in silence. Bounds now live in
+    # iter_bounded_lines (longest line + total parse budget).
     first: datetime | None = None
     last: datetime | None = None
     records = 0
@@ -158,42 +156,41 @@ def parse_transcript(path: Path) -> AiSession | None:
     tool_errors = 0
 
     try:
-        with path.open(encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(record, dict):
-                    continue
+        for raw_line in iter_bounded_lines(path, label="antigravity transcript"):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(record, dict):
+                continue
 
-                records += 1
-                stamp = _parse_iso_utc(record.get("created_at", ""))
-                if stamp is not None:
-                    if first is None or stamp < first:
-                        first = stamp
-                    if last is None or stamp > last:
-                        last = stamp
+            records += 1
+            stamp = _parse_iso_utc(record.get("created_at", ""))
+            if stamp is not None:
+                if first is None or stamp < first:
+                    first = stamp
+                if last is None or stamp > last:
+                    last = stamp
 
-                rec_type = record.get("type")
-                if rec_type == _USER_TYPE:
-                    user_count += 1
-                elif rec_type in _TOOL_TYPES:
-                    tool_calls += 1
+            rec_type = record.get("type")
+            if rec_type == _USER_TYPE:
+                user_count += 1
+            elif rec_type in _TOOL_TYPES:
+                tool_calls += 1
 
-                exit_code = record.get("exit_code")
-                if (
-                    rec_type == _ERROR_TYPE
-                    or record.get("error")
-                    or (isinstance(exit_code, int) and exit_code != 0)
-                ):
-                    tool_errors += 1
+            exit_code = record.get("exit_code")
+            if (
+                rec_type == _ERROR_TYPE
+                or record.get("error")
+                or (isinstance(exit_code, int) and exit_code != 0)
+            ):
+                tool_errors += 1
 
-                if record.get("source") == _MODEL_SOURCE:
-                    model_count += 1
+            if record.get("source") == _MODEL_SOURCE:
+                model_count += 1
     except OSError:
         return None
 
