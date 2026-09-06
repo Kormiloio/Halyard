@@ -949,28 +949,42 @@ def _canonical_gemini_row(rows: list[AiSession]) -> AiSession:
         )
 
     winner = max(rows, key=rank)
-    if winner.project:
-        return winner
 
-    inherited = _inherited_project(rows)
-    if inherited is None:
+    # v5.36 for project, v5.40 for source_path: both are *inherited*, not
+    # decided by the ranking. The rank answers "which row is most complete"
+    # in tokens, which says nothing about which row happened to carry a
+    # field. A row missing one is missing information, not asserting
+    # absence, so the group's own answer is used when the winner has none.
+    #
+    # v5.40 was found because the fix for project did not generalise: a
+    # re-imported Codex session recorded its directory on the new row, but
+    # that row had fewer tokens than an older one and lost, so the session
+    # stayed pathless and `halyard link-path` could not reach it.
+    project = winner.project or _agreed(rows, "project")
+    source_path = winner.source_path or _agreed(rows, "source_path")
+    if project == winner.project and source_path == winner.source_path:
         return winner
-    return replace(winner, project=inherited)
+    return replace(winner, project=project, source_path=source_path)
+
+
+def _agreed(rows: list[AiSession], attr: str) -> str | None:
+    """The value the group agrees on for *attr*, or None if it does not.
+
+    Ambiguity is left unresolved on purpose. If two rows in one job group
+    disagree, something stranger than a missing field is happening, and
+    guessing would move tokens — and therefore billable attribution — onto
+    a value the evidence does not support. Reporting the session as
+    unattributed is the honest outcome there.
+    """
+    named = {getattr(s, attr) for s in rows if getattr(s, attr, None)}
+    if len(named) == 1:
+        return str(named.pop())
+    return None
 
 
 def _inherited_project(rows: list[AiSession]) -> str | None:
-    """The project the group agrees on, or None if it does not agree.
-
-    Ambiguity is left unresolved on purpose. If two rows in one job group
-    name different projects something stranger than a missing field is
-    happening, and guessing would move tokens — and therefore billable
-    attribution — onto a project the evidence does not support. Reporting
-    the session as unattributed is the honest outcome there.
-    """
-    named = {s.project for s in rows if s.project}
-    if len(named) == 1:
-        return named.pop()
-    return None
+    """Back-compat alias for :func:`_agreed` on ``project`` (v5.36)."""
+    return _agreed(rows, "project")
 
 
 def resolve_paths(sessions: list[AiSession]) -> list[AiSession]:

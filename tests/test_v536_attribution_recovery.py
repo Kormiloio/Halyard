@@ -185,3 +185,60 @@ def test_the_ledger_is_never_rewritten(tmp_path: Path, monkeypatch: pytest.Monke
     runner.invoke(app, ["reattribute", "git/Halyard", "kormilo:halyard", "--apply"])
 
     assert (proj / "ai-sessions.log").read_text(encoding="utf-8") == before
+
+
+# --- v5.40: the same rule, for the recorded path ----------------------
+
+
+def _row_with_path(*, tokens: int, path: str | None, job: str = "codex:abc") -> AiSession:
+    s = _row(tokens=tokens, project=None, job=job)
+    s.source_path = path
+    return s
+
+
+def test_the_winning_row_inherits_the_group_source_path() -> None:
+    """v5.36's fix did not generalise, and the gap was load-bearing.
+
+    A re-imported Codex session recorded its directory on the *new* row, but
+    that row carried fewer tokens than an older one and lost the ranking —
+    so the session stayed pathless and `halyard link-path` could not reach
+    it. Observed: canonical row 2,019,287 in+out with no path, against
+    107,376 with one.
+    """
+    rows = [
+        _row_with_path(tokens=107_376, path="/Documents/ChatGPT/Mycelium"),
+        _row_with_path(tokens=2_019_287, path=None),  # newest, largest, pathless
+    ]
+
+    out = collapse_gemini_sessions(rows)
+
+    assert len(out) == 1
+    assert out[0].input_tokens == 2_019_287, "still the most complete row"
+    assert out[0].source_path == "/Documents/ChatGPT/Mycelium"
+
+
+def test_a_winner_with_its_own_path_is_untouched() -> None:
+    rows = [
+        _row_with_path(tokens=100, path="/old"),
+        _row_with_path(tokens=999, path="/new"),
+    ]
+    assert collapse_gemini_sessions(rows)[0].source_path == "/new"
+
+
+def test_a_group_disagreeing_on_path_stays_pathless() -> None:
+    """Same rule as project: a contradiction is not a gap."""
+    rows = [
+        _row_with_path(tokens=100, path="/one"),
+        _row_with_path(tokens=200, path="/two"),
+        _row_with_path(tokens=999, path=None),
+    ]
+    assert collapse_gemini_sessions(rows)[0].source_path is None
+
+
+def test_project_and_path_are_inherited_independently() -> None:
+    a = _row(tokens=100, project="acme:web")
+    b = _row_with_path(tokens=200, path="/work")
+    c = _row(tokens=999, project=None)
+    out = collapse_gemini_sessions([a, b, c])[0]
+    assert out.project == "acme:web"
+    assert out.source_path == "/work"

@@ -1972,6 +1972,30 @@ layers must read from this local source of truth; they do not replace it.
       reach a session that has stopped growing. Deferred: automatic path
       inference — every version of it guesses.
 
+    - **v5.40 — the collapse inherited the project but dropped the path:**
+      v5.39's remedy could not reach the session it was written for. After
+      merging it I re-imported Codex and checked the Mycelium session: 29
+      rows in the job group, exactly one carrying a `source_path`, and that
+      row held 107,376 tokens against the canonical row's 2,019,287 — so it
+      lost the ranking and the path went with it. `link-path` matches on a
+      recorded path; the collapse had deleted the recorded path. This is
+      **v5.36's defect recurring for a different field**: v5.36 established
+      that the canonical row should *inherit* a project the group agrees on,
+      because the rank answers "which row is most complete in tokens", which
+      says nothing about which row happened to carry a field — but the
+      implementation bound that rule to the name `project`, so when
+      `source_path` arrived three changes later nothing prompted the same
+      question. Fixed by inheriting both, via a generalised
+      `_agreed(rows, attr)` (`_inherited_project` kept as an alias). The
+      distinction now stated once: a row without a project or a path is
+      *missing information, not asserting absence*, so it is inherited;
+      token counts are a claim about that row, so they are ranked. Any
+      future field gets classified against that line before it is added.
+      Disagreement still resolves to nothing, as for `project`. Spec in
+      `openspec/changes/v5.40-inherit-source-path/`.
+      **Status: done; 1952 tests passing** (+4). Verified on live data: six
+      sessions carry a path where five did, Mycelium among them.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
