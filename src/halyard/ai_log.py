@@ -25,7 +25,7 @@ import warnings
 from collections import defaultdict
 from collections.abc import Callable, Generator
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import Enum, auto
 from pathlib import Path
@@ -915,6 +915,16 @@ def _canonical_gemini_row(rows: list[AiSession]) -> AiSession:
     total). Ties prefer the better-attributed row (one with a ``project``),
     then the wider [start, end] window, then larger cache_read — so the
     attributed hook row is kept over an unattributed importer duplicate.
+
+    v5.36: attribution is *inherited*, not decided by the ranking. Because
+    tokens rank above ``project``, a later unattributed row with a higher
+    total silently discarded a project every earlier row agreed on — one
+    observed group had 74 of 75 rows carrying ``project=git/Nautilus`` and
+    collapsed to no project at all, hiding 419.8M tokens from every
+    per-project report. The ranking answers "which row is most complete",
+    which is a different question from "what project was this". A row
+    without a project is missing information, not asserting absence, so the
+    group's own answer is used when the winner has none.
     """
     if len(rows) == 1:
         return rows[0]
@@ -927,7 +937,29 @@ def _canonical_gemini_row(rows: list[AiSession]) -> AiSession:
             s.cache_read or 0,
         )
 
-    return max(rows, key=rank)
+    winner = max(rows, key=rank)
+    if winner.project:
+        return winner
+
+    inherited = _inherited_project(rows)
+    if inherited is None:
+        return winner
+    return replace(winner, project=inherited)
+
+
+def _inherited_project(rows: list[AiSession]) -> str | None:
+    """The project the group agrees on, or None if it does not agree.
+
+    Ambiguity is left unresolved on purpose. If two rows in one job group
+    name different projects something stranger than a missing field is
+    happening, and guessing would move tokens — and therefore billable
+    attribution — onto a project the evidence does not support. Reporting
+    the session as unattributed is the honest outcome there.
+    """
+    named = {s.project for s in rows if s.project}
+    if len(named) == 1:
+        return named.pop()
+    return None
 
 
 def collapse_gemini_sessions(sessions: list[AiSession]) -> list[AiSession]:

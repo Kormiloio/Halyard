@@ -272,6 +272,56 @@ def register(app: typer.Typer) -> None:
         if remote:
             console.print(f"[dim]repos.toml updated: {remote} → {slug}[/]")
 
+    @app.command(name="reattribute")
+    def reattribute(
+        source: str = typer.Argument(..., help="Existing slug to migrate from (e.g. git/Halyard)."),
+        canonical: str = typer.Argument(..., help="Canonical slug to migrate to."),
+        apply: bool = typer.Option(False, "--apply", help="Write the alias."),
+    ) -> None:
+        """Map an old project slug onto a canonical one.
+
+        v5.36: `halyard adopt` has told users to run this since it shipped,
+        but the command did not exist — the message named a fix that could
+        not be run. One logical project therefore stayed split across the
+        slug forms it accumulated as attribution improved
+        (`git/Halyard` and `kormilo:halyard` were observed side by side,
+        25 and 30 sessions of the same work).
+
+        This records a read-time alias. The ledger is append-only and is
+        never rewritten: `canonical_project` resolves the old slug on every
+        read, so history reports under one identity without rewriting
+        history. Dry-run by default, because an alias silently moves
+        billable sessions between projects.
+        """
+        from halyard.ai_log import find_project_dir, parse_sessions
+        from halyard.attribution import canonical_project, load_project_aliases, set_project_alias
+        from halyard.hub import find_hub
+
+        if source == canonical:
+            console.print("[bold red]Error:[/] source and canonical are the same slug.")
+            raise typer.Exit(code=1)
+
+        target = find_project_dir() or find_hub()
+        affected = 0
+        if target is not None:
+            aliases = load_project_aliases(target)
+            affected = sum(
+                1 for s in parse_sessions(target) if canonical_project(s.project, aliases) == source
+            )
+
+        if not apply:
+            console.print(f"[bold]{source}[/] → [bold]{canonical}[/]")
+            console.print(f"  {affected} session(s) would report under [bold]{canonical}[/].")
+            console.print(
+                "\n[dim]Read-time only — the ledger is not rewritten.[/]\n"
+                "[yellow]Dry run.[/] Re-run with [bold]--apply[/] to record the alias."
+            )
+            return
+
+        set_project_alias(source, canonical)
+        console.print(f"[bold green]Aliased[/] [dim]{source}[/] → [bold]{canonical}[/]")
+        console.print(f"  {affected} session(s) now report under [bold]{canonical}[/].")
+
     @app.command(name="link-repo")
     def link_repo(
         project: str = typer.Argument(
@@ -296,3 +346,10 @@ def register(app: typer.Typer) -> None:
         register_repo(remote, project)
         console.print(f"[bold green]Linked[/] [dim]{remote}[/] → [bold]{project}[/]")
         console.print("Future sessions from this repo will be attributed automatically.")
+        # v5.36: link-repo fixes attribution forward only. Existing rows keep
+        # whatever slug they were written with, so one project stays split
+        # until an alias is recorded. `adopt` says this; link-repo did not.
+        console.print(
+            "[dim]Existing sessions keep their current slug — "
+            f"run [bold]halyard reattribute <old-slug> {project}[/] to migrate them.[/]"
+        )
