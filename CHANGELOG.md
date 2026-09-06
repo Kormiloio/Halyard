@@ -6,6 +6,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8] — 2026-09-06
+
+### Fixed
+
+- **A re-imported session could lose the directory it recorded (v5.40):**
+  0.2.7 added `source_path` so an unattributable session would at least
+  record where it ran, and `halyard link-path` could map it later. That did
+  not reach the sessions it was written for.
+
+  A session re-imported as it grows leaves several ledger rows for one job,
+  and read-time collapse keeps one canonical row chosen by token count. The
+  row that recorded the directory is often not that row — in the case that
+  exposed this, 1 row of 29 carried a path and held 107,376 tokens against
+  the winner's 2,019,287. It lost, and the path was dropped with it, so
+  `link-path` had nothing to match on.
+
+  The canonical row now inherits both the project and the recorded path
+  from its group. The rule this restores: a row without one is **missing
+  information, not asserting absence**, so the group's answer is used —
+  where token counts are a claim about that row, and stay ranked. A group
+  whose rows disagree still resolves to nothing rather than guessing, since
+  guessing moves billable tokens onto evidence that does not support them.
+
+  No action needed. Resolution is read-time, so existing ledgers gain the
+  behaviour on upgrade without being rewritten.
+
 ## [0.2.7] — 2026-09-06
 
 ### Added
