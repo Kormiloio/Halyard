@@ -82,58 +82,85 @@ def _isolate_auto_timer(tmp_path_factory: pytest.TempPathFactory, monkeypatch: p
     return state
 
 
-@pytest.fixture(autouse=True)
-def _isolate_db(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch):
+@pytest.fixture(scope="session", autouse=True)
+def _isolate_db(tmp_path_factory: pytest.TempPathFactory):
     """No test may write the real ~/.halyard/cache.db.
 
     v5.37. ``db._DB_PATH`` is a module-level constant bound to the real
     ``Path.home()`` at import time, and ``get_db`` uses it directly, so a
-    test patching ``Path.home`` alone never reaches it. Only three tests
-    patched ``_DB_PATH`` explicitly; every other test touching the cache
-    wrote into the developer's production database.
+    test patching ``Path.home`` never reaches it. Only three tests patched
+    ``_DB_PATH`` explicitly; every other test touching the cache wrote into
+    the developer's production database — 62 fixture rows carrying $0.61 of
+    fabricated cost were found in a real one, growing with each suite run.
 
-    That was not theoretical — 62 fixture rows (``tool-1``, ``test-tool``,
-    ``shell-tool`` …) carrying $0.61 of fabricated cost were found in a real
-    cache.db, and the count grew with every suite run. Same class as the
-    v5.23 follow-up that added ``_no_real_hub_pointer`` below.
+    **Session-scoped deliberately.** A function-scoped patch is restored at
+    each test's teardown, and `HubServer` runs in a background thread that
+    can outlive it — so a write landing in that window hits the *real* path
+    after the patch is gone. That race is order-dependent, which is why a
+    full run could look clean (474 -> 474 rows) and then leak
+    ``tool-1``/``tool-2`` on the next run under a different
+    ``pytest-randomly`` seed. Holding the override for the whole session
+    removes the window rather than narrowing it.
+
+    Same class as the v5.23 follow-up that added ``_no_real_hub_pointer``
+    below, after v5.21 test rows were found in the real hub ledger.
     """
+    from _pytest.monkeypatch import MonkeyPatch
+
     from halyard import db
 
-    monkeypatch.setattr(db, "_DB_PATH", tmp_path_factory.mktemp("halyard-db") / "cache.db")
+    mp = MonkeyPatch()
+    mp.setattr(db, "_DB_PATH", tmp_path_factory.mktemp("halyard-db") / "cache.db")
+    yield
+    mp.undo()
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _guard_real_cache_db():
-    """Fail the run if anything wrote the developer's real cache.db.
+    """Fail the run if a test introduced a session into the real cache.db.
 
     ``_isolate_db`` above fixes the known leak; this catches the next one.
-    Session-scoped so it costs one query at each end rather than per test,
-    and it counts rows rather than watching the whole ``~/.halyard``
-    directory — a live Claude Code hook writes there during a suite run, so
-    a directory watcher would false-positive on legitimate activity.
+    Roughly twenty module-level ``Path.home()`` constants across
+    ``src/halyard/`` share that shape, and enumerating them one incident at
+    a time is how the cache.db leak survived v5.28.
+
+    It compares the *set of tool names*, not a row count. A row count fails
+    on legitimate activity: a live Claude Code hook captures and syncs the
+    developer's own work while the suite runs, so a counting guard fires on
+    real usage and gets disabled — which is the failure mode of a guard
+    nobody trusts. Real activity adds rows under tools already present; a
+    test introduces a name that was not there (``tool-1``, ``test-tool``,
+    ``shell-tool``).
+
+    Read-only connection so the guard cannot become a writer itself, and any
+    ``sqlite3.Error`` disables the check rather than failing a run for an
+    unrelated reason.
     """
     import sqlite3
     from pathlib import Path
 
     real = Path.home() / ".halyard" / "cache.db"
 
-    def _rows() -> int | None:
+    def _tools() -> set[str] | None:
         if not real.exists():
             return None
         try:
             with sqlite3.connect(f"file:{real}?mode=ro", uri=True) as c:
-                return int(c.execute("select count(*) from sessions").fetchone()[0])
+                return {r[0] for r in c.execute("select distinct tool from sessions")}
         except sqlite3.Error:
             return None
 
-    before = _rows()
+    before = _tools()
     yield
-    after = _rows()
-    if before is not None and after is not None and after != before:
+    after = _tools()
+    if before is None or after is None:
+        return
+    introduced = after - before
+    if introduced:
         raise AssertionError(
-            f"a test wrote the real {real}: {before} -> {after} rows. "
-            "Add the module-level path to an autouse isolation fixture in "
-            "conftest (see _isolate_db)."
+            f"a test wrote the real {real}, introducing tool(s): {sorted(introduced)}. "
+            "Some module-level path still resolves to the real home — add it to an "
+            "autouse isolation fixture in conftest (see _isolate_db)."
         )
 
 

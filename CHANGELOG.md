@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6] — 2026-09-06
+
+**No user-facing change.** This release contains only test-suite isolation;
+Halyard behaves identically to 0.2.5. It is tagged to keep the release
+history aligned with `main`, not because an upgrade is needed.
+
+### Fixed
+
+- **The test suite wrote the developer's own `~/.halyard/cache.db`
+  (v5.37):** `db._DB_PATH` binds the real home directory when the module is
+  imported, so a test patching `Path.home` never reached it. Only three
+  tests patched it explicitly; every other test touching the cache wrote
+  the real database. On one machine 62 of 474 rows were test fixtures
+  carrying $0.61 of fabricated cost — and since every real session there is
+  credits- or subscription-billed at zero cost, that fake $0.61 was the
+  *only* money in the table. Contributors' local databases are no longer
+  written by the suite, and a session-scoped guard now fails the run if it
+  happens again.
+
 ## [0.2.5] — 2026-09-05
 
 ### Fixed
