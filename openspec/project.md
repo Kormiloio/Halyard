@@ -1810,6 +1810,33 @@ layers must read from this local source of truth; they do not replace it.
       doctor check for truncated/skipped transcripts, covering all
       collectors uniformly.
 
+    - **v5.35 — doctor checks for the two silent losses:** both defects this
+      track uncovered were silent and neither had a check; each was found
+      only because a human noticed Halyard's own signals disagreeing. Both
+      were deferred from their own changesets for the same stated reason —
+      the threshold had to be tuned against real data first, because a check
+      that cries wolf is worse than no check. **The tuning decided the
+      design.** Measured against the maintainer's machine *after* its
+      timeclock was corrected: counted 84.3 h against 907.6 h of AI session
+      time = 9.3% coverage, which fires — on a healthy machine. One 653-hour
+      imported Codex rollout dominates the total. Excluding sessions past
+      `_MAX_SESSION_SECONDS` (reusing v5.33's bound, and its justification
+      that a long-lived import is not evidence of continuous work) gives
+      105.5 h and 79.9%, correctly silent. Sharing the constant also stops
+      doctor warning about a gap `repair --from-sessions` would decline to
+      fill. Threshold validated in both directions against the two real
+      states of the same machine — pre-recovery 8.4 h fires at 8%,
+      post-recovery is silent at 80% — so 50% sits mid-way across an
+      order-of-magnitude gap rather than being delicately placed. A 1-hour
+      AI floor stops a new install warning on day one.
+      `capture.truncated` reads truncation events back from the diagnostic
+      log rather than re-stat'ing every transcript: the log records what
+      happened, a sweep would predict what might, and after v5.34 raised the
+      budget to 1 GiB it would almost always predict nothing. Both
+      `warning`, never `error` — neither condition makes a report wrong.
+      Spec in `openspec/changes/v5.35-doctor-coverage-checks/`.
+      **Status: done; 1907 tests passing** (+10).
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

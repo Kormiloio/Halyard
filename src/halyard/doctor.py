@@ -69,6 +69,8 @@ def build_doctor_report(
     checks.extend(_attribution_quality_checks(project_dir, hub_dir))
     checks.extend(_collector_state_checks(project_dir, hub_dir))
     checks.extend(_ledger_duplicate_checks(project_dir, hub_dir))
+    checks.extend(_human_time_coverage_checks(project_dir, hub_dir))
+    checks.extend(_truncated_transcript_checks())
     if first_capture:
         checks.append(_first_capture_check(project_dir, hub_dir, now=now or datetime.now()))
 
@@ -1502,3 +1504,110 @@ def _group_unattributed_by_remote(log_path: Path) -> dict[str, int]:
     except OSError:
         pass
     return groups
+
+
+# v5.26/v5.35. Counted human time materially below AI session time is the
+# signature of the auto-timer under-count: the idle policy closed a window
+# mid-turn and nothing could reopen it. Fixed going forward in v5.26, but a
+# machine that ran older versions still carries the gap in its timeclock.
+_COVERAGE_MIN_AI_HOURS = 1.0
+_COVERAGE_WARN_RATIO = 0.5
+
+
+def _human_time_coverage_checks(
+    project_dir: Path | None, hub_dir: Path | None
+) -> list[DoctorCheck]:
+    """Warn when the timeclock contradicts the session ledger.
+
+    The denominator deliberately excludes sessions longer than
+    ``_MAX_SESSION_SECONDS`` — the same bound v5.33's reconciliation uses.
+    Without it this check is worthless: a single long-lived imported rollout
+    (653 h was observed) swamps the total, and a machine whose timeclock is
+    *correct* reads 9% coverage and fires. With the bound the same machine
+    reads 80%. A check that cries wolf is worse than no check, which is why
+    the v5.26 design made tuning against real data a precondition for
+    shipping this.
+    """
+    from halyard.collectors import _MAX_SESSION_SECONDS
+    from halyard.timeclock_repair import counted_minutes
+
+    target = project_dir or hub_dir
+    if target is None:
+        return []
+    timeclock = target / "time.timeclock"
+    if not timeclock.exists():
+        return []
+
+    sessions = [s for s in _sessions_for(project_dir, hub_dir) if s.end and s.end > s.start]
+    ai_hours = (
+        sum(
+            (s.end - s.start).total_seconds()
+            for s in sessions
+            if (s.end - s.start).total_seconds() <= _MAX_SESSION_SECONDS
+        )
+        / 3600
+    )
+    if ai_hours < _COVERAGE_MIN_AI_HOURS:
+        return []  # too little evidence to judge; a short day must not trip it
+
+    try:
+        human_hours = counted_minutes(timeclock.read_text(encoding="utf-8").splitlines()) / 60
+    except OSError:
+        return []
+
+    ratio = human_hours / ai_hours
+    if ratio >= _COVERAGE_WARN_RATIO:
+        return []
+
+    return [
+        DoctorCheck(
+            id="timeclock.coverage",
+            label="Human time",
+            status="warning",
+            detail=(
+                f"{human_hours:.1f} h counted against {ai_hours:.1f} h of AI session time "
+                f"({ratio * 100:.0f}%) — the signature of the pre-v5.26 auto-timer under-count"
+            ),
+            fix="halyard timeclock repair --from-sessions  (dry-run first)",
+        )
+    ]
+
+
+def _truncated_transcript_checks() -> list[DoctorCheck]:
+    """Surface transcripts the collectors could only read part of.
+
+    v5.32/v5.34 made truncation loud in the diagnostic log rather than
+    silent, but a log nobody reads is barely louder. Reading it back here is
+    deliberately cheap and approximate: the log is the only record, and the
+    alternative — re-stat'ing every transcript on every doctor run — costs
+    more than the signal is worth.
+    """
+    from halyard.ai_log import _HALYARD_DIAG_LOG
+
+    try:
+        if not _HALYARD_DIAG_LOG.exists():
+            return []
+        lines = _HALYARD_DIAG_LOG.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+
+    hits = [ln for ln in lines if "exceeded the" in ln and "budget" in ln]
+    if not hits:
+        return []
+
+    names = sorted({ln.split(": ")[-1].split(" exceeded")[0] for ln in hits})[:3]
+    return [
+        DoctorCheck(
+            id="capture.truncated",
+            label="Truncated transcripts",
+            status="warning",
+            detail=(
+                f"{len(hits)} truncation event(s) in the diagnostic log "
+                f"({', '.join(names)}) — those sessions were captured only in part"
+            ),
+            fix=(
+                "inspect ~/.halyard/diagnostic.log — a transcript past the parse "
+                "budget is read only up to that point"
+            ),
+        )
+    ]
