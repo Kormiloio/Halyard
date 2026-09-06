@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Doctor checks for two silent losses (v5.35):** warns when counted human
+  time falls materially below the work the session ledger records — the
+  signature of the pre-v5.26 auto-timer under-count — and surfaces
+  transcripts the collectors could only read part of. Both advisory; neither
+  affects the exit code.
+
 ## [0.2.4] — 2026-09-05
 
 ### Fixed
@@ -73,15 +81,111 @@ watching it disagree with itself.
 
 ## [0.2.2] — 2026-09-05
 
-> **Coverage note.** This file is complete through v3.15 and then thins out
-> badly: the v4.x and v5.x tracks (roughly 28 changesets) landed without
-> changelog entries. What follows adds the user-visible changes from the
-> v5.24–v5.31 track; the entries below the `0.2.2` heading from earlier
-> tracks are the v3.x work that was already recorded. For the complete
-> record of everything between 0.2.1 and 0.2.2, see `openspec/changes/`.
-> Reconciling this file properly is tracked as follow-up work.
+This release spans the v4.x and v5.x tracks — the Hub, the real-time
+dashboard, a pre-release security and correctness audit, and the collector
+hardening that followed. Reconstructed from `openspec/changes/`, which
+remains the authoritative record of design rationale for each version.
+
+### Added
+
+- **The Halyard Hub (v4.0):** a local background daemon that owns telemetry
+  ingestion, log appends, and cache synchronisation. Terminal hooks no
+  longer block on file locking, which removes the silent latency they added
+  to every turn. Capture stays local-only and the `ai-sessions.log` format
+  is unchanged.
+- **Public log spec and polyglot ingestion (v4.1):** `/v1/ingest` accepts
+  validated JSON from any language, `halyard spec` prints the
+  `ai-sessions.log` format as a public specification, and a reference shell
+  emitter shows how to send telemetry with `curl`.
+- **Hub-managed active state (v4.2):** the active project and timer live in
+  the Hub rather than being re-read from disk by every hook, with
+  `GET /v1/state` and `POST /v1/state/timer` as the interface. One source of
+  truth instead of fragmented state that could desync.
+- **Real-time dashboard (v4.3):** the Bridge subscribes to a Server-Sent
+  Events stream and updates components as sessions are ingested, replacing
+  a 10-second meta-refresh.
+- **Duplicate-effort detection (v5.0):** surfaces when AI turns overlap on
+  the same git remote and branch — redundant spend and likely merge
+  conflicts, previously invisible.
+- **Dashboard work (v5.1, v5.4, v5.6, v5.7, v5.13, v5.15):** panels grouped
+  into a single Outcomes/Wake/Capture row; the page shell moved to Jinja2
+  templates with external CSS and native partial refresh; a tabbed overview
+  with richer charts and per-panel on/off; month navigation on the Wake
+  panel; and a visual pass throughout.
+- **Duplicate-ledger canary in doctor (v5.23):** warns when a ledger holds
+  byte-identical repeated rows or a single job accumulating stalled ones —
+  the signature of an importer re-appending. Added after a ledger was found
+  holding ~447 duplicate rows from one session re-imported 143 times.
+
+
+- **Antigravity collector (v5.24):** captures Google's agentic IDE from its
+  JSONL transcript, quarantined from spend.
+
+
+- **`halyard doctor` capture-coverage canary (v3.10):** flags a live-capture
+  tool (Claude Code, Gemini) whose on-disk session files are newer than its
+  last captured ledger row — i.e. the tool ran but capture didn't record it.
+  This is the check that was missing when Gemini broke: "hooks installed" was
+  green and the drift canary couldn't see a tool producing zero rows. Warning
+  only; baseline-gated; 2-day grace.
+- **`halyard import-all` + scheduled importer (v3.11):** one idempotent command
+  runs the Codex, Copilot, and Gemini importers. `halyard install-import-timer`
+  / `uninstall-import-timer` schedule it via a macOS LaunchAgent (default
+  30 min) so import-based tools stay current. Opt-in — never auto-activated.
+- **Coverage canary now probes importer tools (v3.13):** `halyard doctor`'s
+  capture-coverage check was extended from the live-capture tools to
+  `github-copilot` and `codex`, so a silent importer break (on-disk sessions
+  newer than the last import) is flagged instead of going unnoticed.
+- **VS Code Copilot OpenTelemetry capture (v3.12):** a durable, standards-based
+  capture path for Copilot that does not read VS Code's internal storage (the
+  thing that keeps drifting). `halyard install-vscode-otel` points VS Code's
+  Copilot OTLP exporter at a local receiver Halyard runs on `127.0.0.1:4318`
+  (inside the `halyard service` process, started only when you opt in);
+  `uninstall-vscode-otel` reverses it. GenAI-semconv spans are mapped to
+  `AiSession` rows — model, tokens, tool calls/errors, api/tool time — and
+  aggregated per session. Privacy is enforced by a metadata allowlist: prompt,
+  response, tool names, and file paths are never read, proven by a fuzz test.
+  The v3.7 file importer stays as a fallback and is dedup-coordinated so the two
+  paths never double-count a session (OTel wins). `halyard doctor` nudges when
+  Copilot is on disk but OTel isn't wired up. (Phase-0 live verification is
+  deferred — the build environment had no Copilot Chat install — so the mapper
+  is built defensively against the documented spec; see the v3.12 design notes.)
 
 ### Fixed
+
+- **Security and untrusted input (v5.16, v5.19):** a pre-release audit found
+  every untrusted-input parser admitted values that could crash aggregation,
+  corrupt billing, or enable arbitrary file writes, and that the localhost
+  HTTP surface did not enforce its own trust boundary. Both tracks are
+  closed — input validation throughout, and CSRF plus token and
+  peer-credential auth on the local endpoints.
+- **Billing and aggregation correctness (v5.17):** several defects that
+  silently produced wrong numbers in the money paths — the worst failure
+  mode for a tool whose purpose is accurate spend reporting.
+- **Data loss and worker robustness (v5.18):** cases where Halyard silently
+  dropped data, crashed a long-lived worker, or returned a 500 for a whole
+  page on reachable input.
+- **The auto-timer dropped clock-outs (v5.10):** one machine's timeclock
+  held 400 clock-ins against 39 clock-outs — 361 dropped opens, silently
+  under-billing. Presence is now persisted and `halyard timeclock repair`
+  reconstructs clean windows.
+- **Importers froze sessions mid-write (v5.2, v5.21, v5.22):** the Codex and
+  Copilot importers marked a session imported the first time they saw it and
+  never revisited it, so any session still being written was captured as a
+  partial snapshot forever. All now re-import as the file grows. v5.21 also
+  added `halyard import-claude` for bulk Claude Code transcript backfill and
+  incremental-patch aggregation for Copilot.
+- **Project slugs fragmented across the log (v5.8):** one logical project
+  accumulated several slug forms as attribution improved
+  (`git/Halyard`, `kormilo/halyard`, `kormilo:halyard`). They now canonicalise
+  at read time, so history reports under one identity.
+- **Windows portability (v5.12):** encoding and path defects surfaced by the
+  first real Windows CI run.
+- **Concurrency and Hub resilience (v5.3, v5.5, v5.9):** hardening from an
+  architecture review — concurrency and observability fixes, a bounded OTel
+  accumulator so a busy Hub cannot grow without limit, and a correctness
+  pass over the findings that held up.
+
 
 - **`halyard mcp` failed on a fresh install (v5.30):** the `mcp` extra was
   declared `mcp>=1.2`, which resolves to mcp 2.x, where FastMCP was renamed
@@ -119,12 +223,6 @@ watching it disagree with itself.
   27 advisories were open there while CI reported the audit green. CI now
   installs and audits the optional surface too.
 
-### Added
-
-- **Antigravity collector (v5.24):** captures Google's agentic IDE from its
-  JSONL transcript, quarantined from spend.
-
-### Fixed
 
 - **Capture monitoring blind spot for Cursor and Windsurf (v3.15):** the
   `halyard doctor` capture-coverage canary — which warns when a tool runs but
@@ -189,36 +287,13 @@ watching it disagree with itself.
   was skipped — a live Copilot review captured nothing. The parser now
   reconstructs the final state from the patches (metadata only; no content).
 
-### Added
+### Note on this release
 
-- **`halyard doctor` capture-coverage canary (v3.10):** flags a live-capture
-  tool (Claude Code, Gemini) whose on-disk session files are newer than its
-  last captured ledger row — i.e. the tool ran but capture didn't record it.
-  This is the check that was missing when Gemini broke: "hooks installed" was
-  green and the drift canary couldn't see a tool producing zero rows. Warning
-  only; baseline-gated; 2-day grace.
-- **`halyard import-all` + scheduled importer (v3.11):** one idempotent command
-  runs the Codex, Copilot, and Gemini importers. `halyard install-import-timer`
-  / `uninstall-import-timer` schedule it via a macOS LaunchAgent (default
-  30 min) so import-based tools stay current. Opt-in — never auto-activated.
-- **Coverage canary now probes importer tools (v3.13):** `halyard doctor`'s
-  capture-coverage check was extended from the live-capture tools to
-  `github-copilot` and `codex`, so a silent importer break (on-disk sessions
-  newer than the last import) is flagged instead of going unnoticed.
-- **VS Code Copilot OpenTelemetry capture (v3.12):** a durable, standards-based
-  capture path for Copilot that does not read VS Code's internal storage (the
-  thing that keeps drifting). `halyard install-vscode-otel` points VS Code's
-  Copilot OTLP exporter at a local receiver Halyard runs on `127.0.0.1:4318`
-  (inside the `halyard service` process, started only when you opt in);
-  `uninstall-vscode-otel` reverses it. GenAI-semconv spans are mapped to
-  `AiSession` rows — model, tokens, tool calls/errors, api/tool time — and
-  aggregated per session. Privacy is enforced by a metadata allowlist: prompt,
-  response, tool names, and file paths are never read, proven by a fuzz test.
-  The v3.7 file importer stays as a fallback and is dedup-coordinated so the two
-  paths never double-count a session (OTel wins). `halyard doctor` nudges when
-  Copilot is on disk but OTel isn't wired up. (Phase-0 live verification is
-  deferred — the build environment had no Copilot Chat install — so the mapper
-  is built defensively against the documented spec; see the v3.12 design notes.)
+Everything above shipped between 0.2.1 and 0.2.2 but went unrecorded at the
+time; these entries were reconstructed afterwards from the changesets. Purely
+internal work — CI hardening (v5.20), test-suite isolation (v5.11, v5.14,
+v5.28) — is deliberately omitted, since it changes nothing a user of Halyard
+would observe.
 
 ## [0.2.1] — 2026-05-22
 
