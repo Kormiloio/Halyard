@@ -1902,6 +1902,40 @@ layers must read from this local source of truth; they do not replace it.
       constants resolve lazily — the durable fix, but a production change
       for a test-scoped defect.
 
+    - **v5.38 — Junie was captured by nothing at all:** the user mentioned
+      in passing that they used Junie. Halyard had no collector, no doctor
+      check, and no mention of it anywhere — 4 sessions and **23,148,120
+      tokens** sat on disk unrecorded. It went unnoticed because Junie is
+      not only the JetBrains plugin: it ships as a standalone CLI at
+      `~/.local/bin/junie` with state under `~/.junie`, so nothing appears
+      beneath `Application Support/JetBrains` and the first search for it
+      looked conclusively negative. That is the uncomfortable part — every
+      other capture gap in this track was found by noticing a number looked
+      wrong, and this one had no number to look wrong, because the tool
+      produced no rows. Its data is unusually good:
+      `sessions/index.jsonl` carries `createdAt`/`updatedAt` and
+      **`projectDir`** (better attribution than Codex, which records only a
+      working directory), and `events.jsonl` carries per-event
+      `modelUsage`. Built as an importer with the Codex v5.2 size-keyed
+      growth re-import. **Two judgement calls.** Local models
+      (`Qwen3.6-27B-MLX-4bit`, all observed usage, genuinely $0.00) record
+      `billing="local"` so tokens count toward usage while spend stays out
+      of money totals — keyed on model-name markers rather than
+      `cost == 0.0`, so a hosted model reporting zero (free tier, billing
+      outage) is not silently dropped from spend. And
+      `session_is_implausible` is deliberately **not** applied: the first
+      version used it and dropped 2 of 4 real sessions including the 75 h
+      one the user had asked about by name. That cap guards *duration*,
+      which v5.33 and v5.35 already bound at the right layer by limiting
+      what a long session may claim rather than discarding it. Also fixed
+      `test_v252_tool_detection`, where the new check fired off the real
+      `~/.junie` — `_INDEX_FILE` is another module-level `Path.home()`
+      constant, the identical failure v5.28 fixed for Copilot. Spec in
+      `openspec/changes/v5.38-junie-collector/`.
+      **Status: done; 1931 tests passing** (+13). Deferred: attribution for
+      sessions whose recorded path is a parent directory or has since moved
+      — all four Junie sessions and the Codex Mycelium session share it.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
