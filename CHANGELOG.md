@@ -6,13 +6,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] — 2026-09-05
+
+### Fixed
+
+- **Attribution was discarded when duplicate rows were collapsed (v5.36):**
+  a session written more than once (a growing import, or a hook and an
+  importer both recording it) collapses to one canonical row, chosen by
+  token completeness. Attribution ranked *below* tokens, so a later, larger,
+  unattributed row won and the project every earlier row agreed on was
+  dropped. One observed session group had **74 of 75 rows carrying a
+  project** and reported as unattributed; across one ledger this hid
+  **371.1M tokens** from every per-project report, invoice, and dashboard
+  panel. The winning row now inherits the group's project — but only when
+  the group agrees, since two rows naming different projects is a
+  contradiction rather than a gap, and guessing would move billable tokens
+  onto a project the evidence does not support.
+
 ### Added
+
+- **`halyard reattribute <old-slug> <new-slug>`:** maps an old project slug
+  onto a canonical one, so a project that accumulated several slug forms as
+  attribution improved reports under a single identity. Records a read-time
+  alias — the append-only ledger is never rewritten, and the alias is
+  reversible. Dry-run by default, reporting how many sessions would move,
+  because an alias silently shifts billable sessions between projects.
+
+  `halyard adopt` has advised running this command since it shipped, but it
+  did not exist; the message named a fix that could not be run. `link-repo`
+  had the same forward-only gap and now points at it too.
 
 - **Doctor checks for two silent losses (v5.35):** warns when counted human
   time falls materially below the work the session ledger records — the
   signature of the pre-v5.26 auto-timer under-count — and surfaces
   transcripts the collectors could only read part of. Both advisory; neither
   affects the exit code.
+
+### Changed
+
+- **Changelog reconciled.** This file was complete through v3.15 and then
+  stopped; roughly 28 changesets across the v4.x and v5.x tracks had shipped
+  without entries. The 0.2.2 section now records them, and the note
+  apologising for the gap is gone. Purely internal work (CI and test-suite
+  hardening) is deliberately omitted and said to be.
 
 ## [0.2.4] — 2026-09-05
 
