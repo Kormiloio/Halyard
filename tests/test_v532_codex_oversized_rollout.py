@@ -58,9 +58,13 @@ def test_the_total_budget_truncates_and_says_so(
 
     The silence is what let the original defect run unnoticed.
     """
+    # v5.34: the implementation moved to collectors.iter_bounded_lines, so
+    # the budget and the truncation notice are patched there.
     monkeypatch.setattr(codex_app, "_MAX_ROLLOUT_BYTES", 5_000)
     noted: list[str] = []
-    monkeypatch.setattr(codex_app, "_note_truncated", lambda p, seen: noted.append(p.name))
+    monkeypatch.setattr(
+        "halyard.collectors._note_truncated", lambda p, seen, label: noted.append(p.name)
+    )
 
     path = tmp_path / "rollout.jsonl"
     line = _rollout_line("z" * 500)
@@ -80,7 +84,9 @@ def test_truncation_reaches_the_diagnostic_log(
     logged: list[str] = []
     monkeypatch.setattr("halyard.ai_log._log_error", lambda msg, exc: logged.append(msg))
 
-    codex_app._note_truncated(tmp_path / "big.jsonl", 12_345)
+    from halyard.collectors import _note_truncated
+
+    _note_truncated(tmp_path / "big.jsonl", 12_345, "codex rollout")
 
     assert logged and "big.jsonl" in logged[0]
     assert "12345" in logged[0]

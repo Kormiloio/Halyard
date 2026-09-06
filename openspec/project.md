@@ -1779,6 +1779,37 @@ layers must read from this local source of truth; they do not replace it.
       **Status: done; 1881 tests passing** (+16). Deferred: the doctor
       coverage check (threshold still needs tuning against real data).
 
+    - **v5.34 — the whole-file cap was in every collector, not just Codex:**
+      v5.32 fixed a 25 MB cap that made large Codex rollouts permanently
+      uncapturable and recorded the same shape elsewhere as out of scope
+      ("only Codex is demonstrably losing data here"). That stopped being
+      true: `copilot.py:221` capped at 50 MB directly above a streaming
+      read, and a **135.9 MB Copilot chat was being silently skipped** while
+      `halyard doctor` reported Copilot history present but unimported —
+      with no hint that importing could not fix it. Every one of these
+      readers streams line by line, so peak memory is the longest *line*;
+      a whole-file cap bounds nothing about resource use and only sets the
+      size at which a session vanishes, failing precisely where it costs
+      most. Fixed with one shared `collectors.iter_bounded_lines` (symlink
+      refusal, 16 MiB per line, 1 GiB budget, truncation logged) used by
+      copilot, claude_code, antigravity and codex_app — v5.32's local
+      implementation becomes a delegation, so four copies cannot drift
+      again as they already had (25/25/50/50 MB, no shared rationale).
+      **`gemini_otel` is deliberately fixed differently:** its guard looked
+      identical but sat above `fh.read(_MAX_OTEL_BYTES)`, an already-bounded
+      read — memory was never at risk, so only the redundant *rejection* is
+      removed, which had turned "read the first 25 MB" into "read nothing".
+      Treating all four as the same bug would have been the easy mistake.
+      Regression is pinned by source inspection (no collector may contain
+      `st_size >`), deliberately: the failure mode is a silent early return,
+      so a re-added cap looks correct in every behavioural test — which is
+      exactly how four copies survived review. Verified:
+      `import-copilot --dry-run` 2 sessions → **3**; the 135.9 MB chat 0
+      lines → 47. Spec in `openspec/changes/v5.34-collector-caps/`.
+      **Status: done; 1897 tests passing** (+16). Deferred: a first-class
+      doctor check for truncated/skipped transcripts, covering all
+      collectors uniformly.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

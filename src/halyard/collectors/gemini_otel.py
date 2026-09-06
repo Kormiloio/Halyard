@@ -35,8 +35,12 @@ def _safe_path(raw: str | os.PathLike[str]) -> Path | None:
         path = Path(raw).expanduser().resolve()
         if not path.is_file():
             return None
-        if path.stat().st_size > _MAX_OTEL_BYTES:
-            return None
+        # v5.34: a size rejection lived here. Unlike the other collectors
+        # this one's bound is real — the caller does fh.read(_MAX_OTEL_BYTES),
+        # so memory is already capped. Rejecting the file as well turned
+        # "read the first 25 MB" into "read nothing", which is strictly
+        # worse: a large OTel log yielded no timing data at all rather than
+        # partial. The bounded read below is the whole protection needed.
     except OSError:
         return None
     return path
@@ -174,6 +178,8 @@ def read_otel_durations(
     try:
         with path.open("r", encoding="utf-8", errors="replace") as fh:
             text = fh.read(_MAX_OTEL_BYTES)
+            if fh.read(1):
+                _note_otel_truncated(path)
     except OSError:
         return (None, None)
 
@@ -199,3 +205,18 @@ def read_otel_durations(
     api_seconds = round(api_ms / 1000) if api_seen else None
     tool_seconds = round(tool_ms / 1000) if tool_seen else None
     return (api_seconds, tool_seconds)
+
+
+def _note_otel_truncated(path: Path) -> None:
+    """Say so when the OTel log is read only up to the budget.
+
+    v5.34: partial is better than nothing, but silently partial is how the
+    Codex case (v5.32) went unnoticed for weeks.
+    """
+    from halyard.ai_log import _log_error
+
+    _log_error(
+        f"gemini otel: {path.name} exceeds the {_MAX_OTEL_BYTES} byte read "
+        "budget — timing data read only up to that point",
+        RuntimeError("otel read budget exceeded"),
+    )
