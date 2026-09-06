@@ -83,6 +83,61 @@ def _isolate_auto_timer(tmp_path_factory: pytest.TempPathFactory, monkeypatch: p
 
 
 @pytest.fixture(autouse=True)
+def _isolate_db(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch):
+    """No test may write the real ~/.halyard/cache.db.
+
+    v5.37. ``db._DB_PATH`` is a module-level constant bound to the real
+    ``Path.home()`` at import time, and ``get_db`` uses it directly, so a
+    test patching ``Path.home`` alone never reaches it. Only three tests
+    patched ``_DB_PATH`` explicitly; every other test touching the cache
+    wrote into the developer's production database.
+
+    That was not theoretical — 62 fixture rows (``tool-1``, ``test-tool``,
+    ``shell-tool`` …) carrying $0.61 of fabricated cost were found in a real
+    cache.db, and the count grew with every suite run. Same class as the
+    v5.23 follow-up that added ``_no_real_hub_pointer`` below.
+    """
+    from halyard import db
+
+    monkeypatch.setattr(db, "_DB_PATH", tmp_path_factory.mktemp("halyard-db") / "cache.db")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _guard_real_cache_db():
+    """Fail the run if anything wrote the developer's real cache.db.
+
+    ``_isolate_db`` above fixes the known leak; this catches the next one.
+    Session-scoped so it costs one query at each end rather than per test,
+    and it counts rows rather than watching the whole ``~/.halyard``
+    directory — a live Claude Code hook writes there during a suite run, so
+    a directory watcher would false-positive on legitimate activity.
+    """
+    import sqlite3
+    from pathlib import Path
+
+    real = Path.home() / ".halyard" / "cache.db"
+
+    def _rows() -> int | None:
+        if not real.exists():
+            return None
+        try:
+            with sqlite3.connect(f"file:{real}?mode=ro", uri=True) as c:
+                return int(c.execute("select count(*) from sessions").fetchone()[0])
+        except sqlite3.Error:
+            return None
+
+    before = _rows()
+    yield
+    after = _rows()
+    if before is not None and after is not None and after != before:
+        raise AssertionError(
+            f"a test wrote the real {real}: {before} -> {after} rows. "
+            "Add the module-level path to an autouse isolation fixture in "
+            "conftest (see _isolate_db)."
+        )
+
+
+@pytest.fixture(autouse=True)
 def _no_real_hub_pointer(
     tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
