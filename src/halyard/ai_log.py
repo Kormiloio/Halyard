@@ -177,6 +177,7 @@ _FIELDS = (
     FieldSpec("job_id", "job_id", FieldKind.SAFE_FIELD),
     FieldSpec("source", "source", FieldKind.SAFE_FIELD),
     FieldSpec("attr_method", "attr_method", FieldKind.SAFE_FIELD),
+    FieldSpec("source_path", "source_path", FieldKind.FREE_TEXT),
     FieldSpec("tags", "tags", FieldKind.TAGS),
     FieldSpec("note", "note", FieldKind.FREE_TEXT),
     FieldSpec("session_id", "session_id", FieldKind.SAFE_FIELD),
@@ -457,6 +458,13 @@ class AiSession:
     # "git" (git-remote inference), "backfill" (assign-unattributed / backfill-window),
     # "manual" (explicit CLI flag).  None means unknown / pre-D-1 log line.
     attr_method: str | None = None
+    # v5.39: the directory an *imported* session was recorded in. Importers
+    # read it (Codex `cwd`, Junie `projectDir`), pass it to infer_project,
+    # and previously discarded it — so a session whose path had moved or
+    # pointed at a repo's parent became permanently unattributable, with
+    # nothing downstream able to recover what it had been. Keeping it lets
+    # `halyard link-path` resolve history at read time.
+    source_path: str | None = None
     # Rich session telemetry (v2.6 — optional, all surfaces backward-compatible)
     session_id: str | None = None
     tool_calls: int | None = None
@@ -787,7 +795,10 @@ def parse_sessions(project_dir: Path, *, now: datetime | None = None) -> list[Ai
     # hook writes the whole-session cumulative total every turn and the
     # importer writes one more whole-session row). Read-time only — the raw
     # lines stay in the file.
-    return collapse_gemini_sessions(surfaced)
+    # v5.39: resolve mapped paths *before* the collapse, so every row in a
+    # job group carries the project and v5.36's inheritance has nothing left
+    # to disagree about.
+    return collapse_gemini_sessions(resolve_paths(surfaced))
 
 
 _GEMINI_JOB_PREFIX = "gemini:"
@@ -960,6 +971,33 @@ def _inherited_project(rows: list[AiSession]) -> str | None:
     if len(named) == 1:
         return named.pop()
     return None
+
+
+def resolve_paths(sessions: list[AiSession]) -> list[AiSession]:
+    """Attribute rows that carry a ``source_path`` the user has mapped.
+
+    v5.39, read-time and non-destructive — the same shape as v5.36's slug
+    alias. The ledger is append-only, so a session imported before its path
+    was declared must be resolvable on read or it stays wrong forever.
+
+    Only fills a *missing* project: a row that already names one is left
+    alone, since the importer had better evidence at the time than a
+    directory does now.
+    """
+    from halyard.git_context import load_paths_config
+
+    if not any(s.source_path and not s.project for s in sessions):
+        return sessions  # cheap exit — no unattributed row carries a path
+
+    mapping = load_paths_config()
+    if not mapping:
+        return sessions
+
+    out: list[AiSession] = []
+    for s in sessions:
+        slug = mapping.get(s.source_path) if s.source_path and not s.project else None
+        out.append(replace(s, project=slug, attr_method="path-map") if slug else s)
+    return out
 
 
 def collapse_gemini_sessions(sessions: list[AiSession]) -> list[AiSession]:

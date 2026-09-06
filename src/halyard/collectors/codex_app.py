@@ -90,6 +90,12 @@ def import_codex_sessions(
         # Enrich project attribution and branch via git when not already set
         if cwd is not None:
             cwd_path = Path(cwd)
+            # v5.39: keep the recorded directory even when it yields no
+            # project. An observed rollout pointed at a path that had since
+            # moved, so infer_project found nothing and the directory — the
+            # only remaining clue — was discarded, leaving 371M tokens
+            # permanently unattributable.
+            session.source_path = cwd
             if session.project is None:
                 session.project = infer_project(cwd_path)
             session.branch = current_branch(cwd_path)
@@ -155,11 +161,27 @@ def _iter_jsonl_lines(path: Path) -> Iterator[str]:
     )
 
 
+def _tally_cwd(counts: dict[str, int], value: object) -> None:
+    """Count one recorded working directory.
+
+    Insertion order is preserved by dict, so ``max`` breaks ties toward the
+    first-seen path — the one the session started in.
+    """
+    if isinstance(value, str) and value:
+        counts[value] = counts.get(value, 0) + 1
+
+
 def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
     """Parse one rollout JSONL file. Returns (AiSession, cwd) or None to skip."""
     session_start: datetime | None = None
     session_end: datetime | None = None
-    cwd: str | None = None
+    # v5.39: a long rollout records `cwd` many times and they need not agree —
+    # one observed session held 347 records for one path and 83 for another
+    # after the directory was synced elsewhere mid-session. Last-wins picked
+    # the minority path and mis-attributed the session, so count them and
+    # take the most frequent: it reflects where the work actually happened
+    # and is robust to a transient directory change.
+    cwd_counts: dict[str, int] = {}
     model: str = "codex"
     last_token_usage: dict | None = None  # type: ignore[type-arg]
     user_message_count = 0
@@ -190,14 +212,14 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
         payload = event.get("payload", {})
 
         if event_type == "session_meta":
-            cwd = payload.get("cwd") or cwd
+            _tally_cwd(cwd_counts, payload.get("cwd"))
             # Use start timestamp from meta when available (more accurate)
             meta_start = _parse_iso(payload.get("timestamp", ""))
             if meta_start is not None:
                 session_start = meta_start
 
         elif event_type == "turn_context":
-            cwd = payload.get("cwd") or cwd
+            _tally_cwd(cwd_counts, payload.get("cwd"))
             m = payload.get("model")
             if m:
                 model = str(m)
@@ -291,6 +313,9 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
         telemetry_source="codex-jsonl",
         telemetry_trust="observed",
     )
+    # Most-frequent wins; ties break toward the first seen, which is the
+    # directory the session started in.
+    cwd = max(cwd_counts, key=lambda c: cwd_counts[c]) if cwd_counts else None
     return session, cwd
 
 

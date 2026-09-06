@@ -322,6 +322,49 @@ def register(app: typer.Typer) -> None:
         console.print(f"[bold green]Aliased[/] [dim]{source}[/] → [bold]{canonical}[/]")
         console.print(f"  {affected} session(s) now report under [bold]{canonical}[/].")
 
+    @app.command(name="link-path")
+    def link_path(
+        path: str = typer.Argument(..., help="Recorded directory to map (as the tool saw it)."),
+        project: str = typer.Argument(..., help="Project slug (client:project)."),
+        apply: bool = typer.Option(False, "--apply", help="Write the mapping."),
+    ) -> None:
+        """Map a recorded session directory to a project.
+
+        v5.39. `link-repo` matches on git *remotes*, which imported sessions
+        do not carry — they record the directory they ran in. That directory
+        may since have moved, or may be a repository's parent, and either way
+        yields no remote, so the session is unattributable no matter how many
+        remotes are mapped.
+
+        Resolution is read-time: the ledger is append-only and is never
+        rewritten, so mapping a path attributes existing history as well as
+        future imports. Dry-run by default, since attribution moves billable
+        sessions between projects.
+        """
+        from halyard.ai_log import find_project_dir, parse_sessions
+        from halyard.git_context import register_path
+        from halyard.hub import find_hub
+
+        target = find_project_dir() or find_hub()
+        affected = 0
+        if target is not None:
+            affected = sum(
+                1 for s in parse_sessions(target) if s.source_path == path and not s.project
+            )
+
+        if not apply:
+            console.print(f"[bold]{path}[/] → [bold]{project}[/]")
+            console.print(f"  {affected} unattributed session(s) would resolve to {project}.")
+            console.print(
+                "\n[dim]Read-time only — the ledger is not rewritten.[/]\n"
+                "[yellow]Dry run.[/] Re-run with [bold]--apply[/] to write the mapping."
+            )
+            return
+
+        register_path(path, project)
+        console.print(f"[bold green]Mapped[/] [dim]{path}[/] → [bold]{project}[/]")
+        console.print(f"  {affected} session(s) now resolve to {project}.")
+
     @app.command(name="link-repo")
     def link_repo(
         project: str = typer.Argument(
