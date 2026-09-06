@@ -6,6 +6,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7] — 2026-09-06
+
+### Added
+
+- **Junie (JetBrains) capture (v5.38):** Junie was recorded by nothing at
+  all. It ships as a standalone CLI at `~/.local/bin/junie`, not only the
+  IDE plugin, so nothing appears under `Application Support/JetBrains` and
+  a search for it looks conclusively negative. On the machine that prompted
+  this it had run 4 sessions and 23.1M tokens entirely unrecorded, and only
+  surfaced because the user mentioned using it. `halyard import-junie`
+  imports from `~/.junie/sessions`, folded into `import-all`, with a doctor
+  nudge when history exists but nothing has been imported.
+
+  Sessions on a **local model** (on-device inference, genuinely $0.00) are
+  recorded with tokens counted but spend excluded from money totals — so
+  local work neither inflates the billable series nor disappears from usage.
+
+- **`halyard link-path <path> <slug>` (v5.39):** maps a recorded session
+  directory to a project. `link-repo` matches on git *remotes*, which
+  imported sessions do not carry — they record the directory they ran in,
+  and that may since have moved or may be a repository's parent. Either way
+  no remote exists and the session was unattributable. Resolution is
+  read-time, so a mapping attributes existing history without the
+  append-only ledger being rewritten. Dry-run by default.
+
+### Fixed
+
+- **Imported sessions discarded the directory they recorded (v5.39):** the
+  importers read it, used it for attribution, and dropped it — so a session
+  whose path had moved could never be recovered, no matter what was mapped
+  later. The directory is now kept on the row. A session imported before
+  this release gains the field on its next re-import.
+
+- **A long Codex rollout could be attributed to the wrong directory
+  (v5.39):** `cwd` is recorded many times across a rollout and the values
+  need not agree — one observed session held 347 records for one path and
+  83 for another after the directory was briefly synced elsewhere. The
+  importer took the last, which is the minority path. It now takes the most
+  frequent, breaking ties toward the directory the session started in.
+
 ## [0.2.6] — 2026-09-06
 
 **No user-facing change.** This release contains only test-suite isolation;
