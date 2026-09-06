@@ -115,6 +115,23 @@ def _isolate_db(tmp_path_factory: pytest.TempPathFactory):
     mp.undo()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_path_map(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch):
+    """No test may read or write the real ~/.halyard/paths.toml.
+
+    v5.39 added another module-level ``Path.home()`` constant
+    (``git_context._PATHS_CONFIG``), and ``resolve_paths`` is now on the
+    universal read path — so without this, every test that parses a ledger
+    consults the developer's own path map, and a test that writes one leaks
+    into it. Exactly the class v5.37's guard was built to make loud.
+    """
+    from halyard import git_context
+
+    monkeypatch.setattr(
+        git_context, "_PATHS_CONFIG", tmp_path_factory.mktemp("halyard-paths") / "paths.toml"
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _guard_real_cache_db():
     """Fail the run if a test introduced a session into the real cache.db.

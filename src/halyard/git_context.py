@@ -22,6 +22,13 @@ from datetime import datetime
 from pathlib import Path
 
 _REPOS_CONFIG = Path.home() / ".halyard" / "repos.toml"
+# v5.39: recorded-path → slug. repos.toml matches on git *remotes*, which
+# imported sessions do not carry — they record a directory. That directory
+# may since have moved (an observed Codex session pointed at a path that no
+# longer exists) or may be a repo's *parent* (Junie records the workspace
+# root, which held four sibling repos). Neither yields a remote, so the git
+# chain returns nothing and the session is unattributable forever.
+_PATHS_CONFIG = Path.home() / ".halyard" / "paths.toml"
 
 # v5.16/B09: a git object ref interpolated into a diff argv must be a bare
 # hex SHA (4-40 chars). Anything else (e.g. "--output=/path", "-O<file>",
@@ -213,6 +220,37 @@ def current_branch(cwd: Path) -> str | None:
         return None
 
 
+def load_paths_config() -> dict[str, str]:
+    """Read the recorded-path → slug map."""
+    return _read_toml_map(_PATHS_CONFIG, "paths")
+
+
+def register_path(path: str, project_slug: str) -> None:
+    """Add or update one recorded-path → project-slug mapping."""
+    import tomli_w
+
+    existing = load_paths_config()
+    existing[str(path)] = project_slug
+    _PATHS_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    _PATHS_CONFIG.write_bytes(tomli_w.dumps({"paths": dict(sorted(existing.items()))}).encode())
+
+
+def project_for_path(path: str | None) -> str | None:
+    """Resolve a recorded path to a slug via the explicit map.
+
+    Exact match only. A prefix rule is tempting — it would let one entry
+    cover a whole tree — but the paths that need mapping are precisely the
+    ambiguous ones: an observed Junie workspace root contained four sibling
+    repositories, so a prefix match would attribute all of their work to
+    whichever slug was declared first. Guessing here moves billable tokens
+    onto a project the evidence does not support, which is the failure v5.36
+    was written to stop.
+    """
+    if not path:
+        return None
+    return load_paths_config().get(str(path))
+
+
 def register_repo(remote_pattern: str, project_slug: str) -> None:
     """Add or update a remote-pattern → project-slug mapping."""
     existing = _load_repos_config()
@@ -248,22 +286,32 @@ def _git_remote_url(cwd: Path) -> str | None:
         return None
 
 
-def _load_repos_config() -> dict[str, str]:
-    if not _REPOS_CONFIG.exists():
+def _read_toml_map(path: Path, section: str) -> dict[str, str]:
+    """Read a ``[section]`` string→string table, degrading to {} on damage.
+
+    Shared by the remote map and the path map (v5.39) so the two cannot
+    drift in how they handle a corrupt file: a malformed config disables
+    that attribution rung with a warning rather than aborting capture.
+    """
+    if not path.exists():
         return {}
     try:
-        data = tomllib.loads(_REPOS_CONFIG.read_text(encoding="utf-8"))
-        repos = data.get("repos", {})
-        return {k: v for k, v in repos.items() if isinstance(k, str) and isinstance(v, str)}
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        table = data.get(section, {})
+        return {k: v for k, v in table.items() if isinstance(k, str) and isinstance(v, str)}
     except tomllib.TOMLDecodeError as e:
         print(
-            f"[halyard] Warning: {_REPOS_CONFIG} is not valid TOML — "
-            f"git attribution disabled. Run 'halyard doctor' to verify. ({e})",
+            f"[halyard] Warning: {path} is not valid TOML — "
+            f"attribution from it disabled. Run 'halyard doctor' to verify. ({e})",
             file=sys.stderr,
         )
         return {}
     except OSError:
         return {}
+
+
+def _load_repos_config() -> dict[str, str]:
+    return _read_toml_map(_REPOS_CONFIG, "repos")
 
 
 def _write_repos_config(mapping: dict[str, str]) -> None:

@@ -1936,6 +1936,42 @@ layers must read from this local source of truth; they do not replace it.
       sessions whose recorded path is a parent directory or has since moved
       — all four Junie sessions and the Codex Mycelium session share it.
 
+    - **v5.39 — imported sessions recorded a directory, then threw it
+      away:** three capture gaps turned out to be one defect. `repos.toml`
+      maps git *remotes*; imported sessions carry none — they record the
+      **directory** the tool ran in. The importers read it, passed it to
+      `infer_project`, and discarded it, so when it yielded no remote the
+      only remaining clue was gone. Two ways it yields nothing, both
+      observed: the Codex "Mycelium" session recorded
+      `~/Documents/ChatGPT/Mycelium`, a directory that has since moved; all
+      four Junie sessions recorded a repository's *parent*. The user asked
+      why Mycelium was absent from the dashboard — it was captured, 58.7 MB
+      of rollout, reported as belonging to no project, with nothing in the
+      ledger saying where it ran. Fixed by keeping `source_path` on the row
+      (percent-encoded, populated even — especially — when attribution
+      fails), adding `~/.halyard/paths.toml` and `halyard link-path`, and
+      resolving at **read time** inside `parse_sessions` *before* the v5.36
+      collapse, so every row in a job group carries the project and the
+      inheritance rule has nothing to arbitrate. Exact match only: the
+      Junie workspace root held four sibling repos, so a prefix rule would
+      attribute all of their work to whichever slug was declared first —
+      the failure v5.36 exists to prevent. **Also fixed a cwd bug this
+      exposed:** a long rollout records `cwd` many times and they need not
+      agree — the Nautilus session held 347 records for one path and 83 for
+      another after a transient sync — and the importer took the *last*,
+      i.e. the minority path, which was then reported to the user as fact
+      before they corrected it. Selection is now by frequency, ties
+      breaking toward the first seen. `_isolate_path_map` added to conftest:
+      `_PATHS_CONFIG` is another module-level `Path.home()` constant and
+      `resolve_paths` is on the universal read path, so one test failed
+      order-dependently until it was isolated — the class v5.37's guard
+      exists to surface. Spec in
+      `openspec/changes/v5.39-path-attribution/`.
+      **Status: done; 1948 tests passing** (+17). Known limitation: rows
+      imported before this carry no `source_path`, so a mapping cannot
+      reach a session that has stopped growing. Deferred: automatic path
+      inference — every version of it guesses.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

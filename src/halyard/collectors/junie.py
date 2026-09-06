@@ -214,6 +214,9 @@ def _build_session(entry: dict[str, Any]) -> AiSession | None:
         project=project,
         job_id=f"junie:{session_id}",
         billing="local" if local else "api",
+        # v5.39: keep the recorded directory even when it yields no project,
+        # so `halyard link-path` can resolve it later.
+        source_path=project_dir if isinstance(project_dir, str) else None,
     )
 
 
