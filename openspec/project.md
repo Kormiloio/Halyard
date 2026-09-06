@@ -1872,6 +1872,36 @@ layers must read from this local source of truth; they do not replace it.
       imported rollouts that carry no project at all (the remaining 82.5M) —
       inferring from timing or cwd has real false-positive risk.
 
+    - **v5.37 — the test suite wrote the developer's production database:**
+      the last deferred item from v5.28, and it was growing rather than
+      sitting still. `db._DB_PATH` binds the real `Path.home()` at import
+      time and `get_db` uses it directly, so a test patching `Path.home`
+      never reaches it; only three tests patched `_DB_PATH` explicitly and
+      every other test touching the cache wrote the real one. Measured:
+      **62 of 474 rows** were fixtures (`tool-1`, `test-tool`,
+      `shell-tool`…) carrying **$0.61 of fabricated cost** — 38 earlier the
+      same day, growing with each suite run. The cost is the sharp end:
+      every *real* session in that cache records `cost_usd = 0.00` (credits
+      and subscription), so the only money in the table was invented by
+      tests and any spend total read from it was fiction. Same class as the
+      v5.23 follow-up that added `_no_real_hub_pointer` after v5.21 test
+      rows were found in the real hub ledger. Fixed with an `_isolate_db`
+      autouse fixture — `db` was simply missing from the four that already
+      isolate the registry, logs, auto-timer and hub pointer — plus
+      `_guard_real_cache_db`, a session-scoped check that fails the run if
+      the real cache's row count changes. The guard is the part that
+      matters: ~20 module-level `Path.home()` constants share this shape,
+      and enumerating them one incident at a time is how this survived. It
+      counts rows rather than watching `~/.halyard`, because a live Claude
+      Code hook writes there during a run and a directory watcher would
+      false-positive into being disabled. Verified 474 → 474 rows across a
+      full suite run; the 62 fixture rows then deleted after a backup,
+      leaving 412 real rows and $0.00. Spec in
+      `openspec/changes/v5.37-db-test-isolation/`.
+      **Status: done; 1918 tests passing.** Deferred: making the ~20
+      constants resolve lazily — the durable fix, but a production change
+      for a test-scoped defect.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
