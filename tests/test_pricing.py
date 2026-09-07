@@ -41,9 +41,12 @@ def test_sonnet_output_cost() -> None:
 
 
 def test_haiku_mixed_cost() -> None:
-    # 1M input @ $0.80 + 1M output @ $4.00 = $4.80
+    # v5.41: was asserted at $0.80/$4.00, which is Haiku *3.5*'s rate. The
+    # table had carried the previous generation's price for this key, so the
+    # test was locking in a 20% understatement. Haiku 4.5 is $1/$5.
+    # 1M input @ $1.00 + 1M output @ $5.00 = $6.00
     cost = calculate_cost("claude-haiku-4-5", input_tokens=1_000_000, output_tokens=1_000_000)
-    assert cost == pytest.approx(4.80, abs=1e-4)
+    assert cost == pytest.approx(6.00, abs=1e-4)
 
 
 def test_cache_read_tokens_at_ten_percent_of_input_rate() -> None:

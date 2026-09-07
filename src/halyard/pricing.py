@@ -35,17 +35,27 @@ def _warn(message: str) -> None:
 
 # (input_per_mtok, output_per_mtok)
 PRICING: dict[str, tuple[float, float]] = {
-    # Anthropic
-    "claude-opus-4-7": (15.00, 75.00),
+    # Anthropic — platform.claude.com/docs/en/about-claude/pricing (2026-09-06)
+    "claude-opus-5": (5.00, 25.00),
+    "claude-sonnet-5": (2.00, 10.00),
+    # v5.41: 4-7 carried Opus 4.1's $15/$75 and haiku-4-5 carried Haiku
+    # 3.5's $0.80/$4.00. A wrong rate is worse than a missing one — it
+    # looks authoritative — so both are corrected against the vendor table.
+    "claude-opus-4-7": (5.00, 25.00),
     "claude-sonnet-4-6": (3.00, 15.00),
-    "claude-haiku-4-5-20251001": (0.80, 4.00),
-    "claude-haiku-4-5": (0.80, 4.00),
-    # OpenAI
+    "claude-haiku-4-5-20251001": (1.00, 5.00),
+    "claude-haiku-4-5": (1.00, 5.00),
+    # OpenAI — developers.openai.com/api/docs/pricing (2026-09-06)
+    "gpt-5.6-sol": (4.00, 20.00),
+    "gpt-5.6-terra": (2.00, 12.00),
     "gpt-4o": (2.50, 10.00),
     "gpt-4o-mini": (0.15, 0.60),
     "o3": (10.00, 40.00),
     "o4-mini": (1.10, 4.40),
-    # Google Gemini
+    # Google Gemini — ai.google.dev/gemini-api/docs/pricing (2026-09-06).
+    # The published 3.6 rate doubles 2027-01-01; `update-pricing` is the
+    # mechanism for that, not a hardcoded future date.
+    "gemini-3.6-flash": (0.75, 3.75),
     "gemini-2.5-pro": (1.25, 10.00),
     "gemini-2.5-flash": (0.15, 0.60),
     "gemini-3-pro": (1.25, 5.00),
@@ -210,7 +220,11 @@ def _parse_local_multipliers(
 def _coerce_multiplier(val: object, default: float, model: str) -> float:
     if val is None:
         return default
-    if not isinstance(val, (int, float)) or not (0 < float(val) <= _MAX_MULTIPLIER):
+    # v5.41: zero is admissible. OpenAI charges nothing for cache *writes*
+    # — only a discounted read — and the old `0 <` bound made "free"
+    # inexpressible, silently falling back to 1.25 and inventing a charge.
+    # Negative is still rejected; it is not a price.
+    if not isinstance(val, (int, float)) or not (0 <= float(val) <= _MAX_MULTIPLIER):
         _warn(
             f"{_LOCAL_PRICING_FILE} model {model!r} has invalid "
             f"multiplier {val!r} — using default {default}."
@@ -393,3 +407,29 @@ def calculate_cost(
 
 def model_is_known(model: str) -> bool:
     return model in load_pricing_table()
+
+
+def cost_is_known(model: str | None, billing: str | None = None) -> bool:
+    """True when a zero cost for this session is a fact, not a gap.
+
+    Derived rather than stored: pricing coverage is a property of the
+    *table*, which changes. A session recorded today against an unpriced
+    model should become priced the moment a rate is added — the same
+    read-time reasoning as v5.36/v5.39/v5.40 attribution. Writing a
+    ``cost_known`` field would freeze a fact about the table into a row
+    about a session.
+
+    A local model is known-free: it ran on the user's own hardware, so
+    ``0.0`` is a measurement rather than a missing lookup. The model name
+    is checked as well as the stored ``billing``, because billing is
+    written into the row at capture time — rows recorded before v5.41
+    taught the collectors to classify local models still say ``"api"``,
+    and re-importing them is not always possible.
+    """
+    if billing == "local":
+        return True
+    from halyard.collectors import model_is_local
+
+    if model_is_local(model):
+        return True
+    return bool(model) and model_is_known(model or "")

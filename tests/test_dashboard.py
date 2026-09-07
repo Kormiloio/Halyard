@@ -246,6 +246,16 @@ def test_costs_panel_credits_sessions_show_allocated(tmp_path: Path) -> None:
 
 
 def test_costs_panel_zero_cost_no_credits_shows_missing(tmp_path: Path) -> None:
+    """v5.41 retargeted this to an *unpriced* model.
+
+    The case was written with `gpt-4o`, which is in the pricing table. Since
+    v5.41 reprices a zero-cost row on a known model at read time, such a row
+    no longer has missing cost data — it has computed cost data, which is the
+    point of that change. "Missing" now means precisely what it says: tokens
+    were captured and no published rate exists to value them. That is the
+    condition this test still needs to cover, so the model changes rather
+    than the assertion.
+    """
     _init_project(tmp_path)
     append_session(
         tmp_path,
@@ -253,7 +263,7 @@ def test_costs_panel_zero_cost_no_credits_shows_missing(tmp_path: Path) -> None:
             start=datetime(2026, 5, 7, 10, 0),
             end=datetime(2026, 5, 7, 10, 30),
             tool="cursor",
-            model="gpt-4o",
+            model="gpt-oss-120b-medium",
             input_tokens=1000,
             output_tokens=500,
             cost_usd=0.0,

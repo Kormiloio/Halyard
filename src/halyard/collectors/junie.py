@@ -38,7 +38,14 @@ from pathlib import Path
 from typing import Any
 
 from halyard.ai_log import AiSession, append_session, find_project_dir
-from halyard.collectors import iter_bounded_lines, session_has_evidence
+from halyard.collectors import (
+    _LOCAL_MODEL_MARKERS as _SHARED_LOCAL_MARKERS,
+)
+from halyard.collectors import (
+    iter_bounded_lines,
+    model_is_local,
+    session_has_evidence,
+)
 from halyard.git_context import infer_project
 from halyard.hub import find_hub
 
@@ -48,7 +55,10 @@ _INDEX_FILE = _SESSIONS_DIR / "index.jsonl"
 _IMPORTED_STATE_FILE = Path.home() / ".halyard" / "junie-imported"
 
 _TOOL = "junie"
-_LOCAL_MODEL_MARKERS = ("-mlx", "mlx-", "-gguf", "local/")
+# v5.41: the markers moved to `collectors/__init__` so every collector
+# classifies local models alike. Re-exported for the v5.38 tests and any
+# caller that imported them from here.
+_LOCAL_MODEL_MARKERS = _SHARED_LOCAL_MARKERS
 
 
 def junie_history_present() -> bool:
@@ -70,9 +80,11 @@ def _is_local_model(model: str) -> bool:
     local inference. The marker check exists so a *hosted* model that
     happens to report 0.0 — a free tier, a billing outage — is not silently
     reclassified as local and dropped from spend.
+
+    v5.41: delegates to the shared classifier; kept as a named function so
+    the v5.38 tests and this module's call sites read unchanged.
     """
-    lower = model.lower()
-    return any(marker in lower for marker in _LOCAL_MODEL_MARKERS)
+    return model_is_local(model)
 
 
 def _epoch_ms(value: Any) -> datetime | None:
