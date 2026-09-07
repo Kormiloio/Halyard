@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Did it ship?" could never answer yes (v5.42).** The Leverage panel
+  reported `0%` on machines that had merged PRs that same day. Two
+  defects:
+
+  - `halyard outcome sync` ran `gh pr list --head <branch>` with no
+    `--state`, and `gh` defaults to **open** — so a *merged* PR, the one
+    outcome the panel exists to report, was invisible. Every session
+    resolved to "no PR" and that was written as a fact.
+  - The headline divided merged sessions by *every* session in the window,
+    including ones never resolved. An unsynced window computed `0 / n` and
+    rendered a grey `0%` — and the colour band came from that same number,
+    so "nobody looked" was styled exactly like "nothing shipped".
+
+  The share is now taken over resolved sessions only, and a window with
+  nothing resolved shows `—` and says so rather than a percentage.
+
+  **Re-run `halyard outcome sync --force` after upgrading.** Sessions
+  resolved by the old open-only query are cached as "no PR" and `--force`
+  is needed to correct them. On the machine that prompted this, that moved
+  92 sessions from 0 merged to 53 merged — the panel went from `0%` to
+  `57%`.
+
 ## [0.2.9] — 2026-09-06
 
 ### Fixed
