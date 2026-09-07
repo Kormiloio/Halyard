@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] — 2026-09-06
+
 ### Fixed
 
 - **Every cost was `$0.00` (v5.41).** Not "you spent nothing" — nothing was
