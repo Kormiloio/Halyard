@@ -78,6 +78,13 @@ def fetch_prs_for_branch(
         "list",
         "--head",
         branch,
+        # v5.42: `gh pr list` defaults to --state open, so a *merged* PR —
+        # the one thing this panel exists to report — was invisible, and
+        # every session resolved to "no PR". All four states are needed:
+        # the caller classifies merged/open/closed from `state`/`mergedAt`,
+        # so narrowing to merged would fix the headline and empty the rest.
+        "--state",
+        "all",
         "--json",
         "number,state,mergedAt,url,createdAt,baseRefName",
         "--limit",
@@ -499,7 +506,12 @@ def resolve_sessions(
             by_branch.setdefault(s.branch or "", []).append(s)
 
         for branch, branch_sessions in by_branch.items():
-            cache_key = f"{remote or ''}:{branch}"
+            # v5.42: ":v2" invalidates entries holding the open-only results
+            # from before --state all. Without it the 1h TTL would make the
+            # fix appear not to work on any machine that had just synced —
+            # the worst failure for a change whose point is that a wrong
+            # answer looked like a real one.
+            cache_key = f"{remote or ''}:{branch}:v2"
             prs = _cache_get(conn, cache_key)
             if prs is None:
                 # v5.1x/B11: fetch returns None on failure (vs [] for a genuine

@@ -99,7 +99,10 @@ def test_leverage_pane_shows_shipped_pct_and_buckets() -> None:
     pane = LeveragePane()
     pane.render_sessions(sessions, _NOW)
     text = pane.last_rendered_text
-    assert "Shipped 50%" in text
+    # v5.42: 2 merged of the 3 *resolved* sessions = 66%. This asserted 50%
+    # (2 of 4) — counting the unsynced session against the share, which is
+    # the defect: an unresolved outcome was scored as a failure to ship.
+    assert "Shipped 66%" in text
     assert "Merged     2" in text
     assert "Unsynced   1" in text
 
@@ -117,14 +120,19 @@ def test_leverage_parity_pane_matches_web_panel() -> None:
     ]
     summary = summarize(sessions, _NOW)
 
+    # v5.42: both surfaces report the share over *resolved* sessions, so
+    # the parity assertion follows `summary.resolved` rather than `total`.
     web = _leverage_panel(sessions, _NOW)
     assert f"{summary.pct}%" in web
-    assert f"<strong>{summary.merged}</strong> of <strong>{summary.total}</strong>" in web
+    assert f"<strong>{summary.merged}</strong> of <strong>{summary.resolved}</strong>" in web
 
     pane = LeveragePane()
     pane.render_sessions(sessions, _NOW)
     assert f"Shipped {summary.pct}%" in pane.last_rendered_text
-    assert f"({summary.merged} of {summary.total} in merged PRs)" in pane.last_rendered_text
+    assert (
+        f"({summary.merged} of {summary.resolved} resolved in merged PRs)"
+        in pane.last_rendered_text
+    )
 
 
 def test_panes_render_clean_empty_state() -> None:

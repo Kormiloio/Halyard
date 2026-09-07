@@ -48,12 +48,34 @@ class LeverageSummary:
     median_time_to_merge_s: int | None = None
     median_review_comments: int | None = None
 
+    @property
+    def resolved(self) -> int:
+        """Sessions whose PR outcome is actually known (v5.42)."""
+        return self.total - self.unsynced
+
+    @property
+    def measured(self) -> bool:
+        """False when nothing has been resolved, so ``pct`` means nothing.
+
+        Derived rather than stored: a stored copy could disagree with the
+        counts it comes from. Surfaces must not render a percentage — or a
+        colour band — when this is False, because "nobody looked" styled as
+        a low score is indistinguishable from "nothing shipped".
+        """
+        return self.resolved > 0
+
 
 def summarize(sessions: list[AiSession], now: datetime) -> LeverageSummary:
     """Engineering-outcome rollup over the trailing 30 days.
 
-    ``pct`` is merged / total as an int; ``unsynced`` counts sessions
-    whose ``pr_state`` has not been resolved yet (falsy state).
+    ``pct`` is merged / **resolved** as an int; ``unsynced`` counts
+    sessions whose ``pr_state`` has not been resolved yet (falsy state).
+
+    v5.42: the denominator was ``total``, which includes the unresolved
+    rows, so a window where nothing had been synced computed ``0 / n`` and
+    reported a confident 0% — "nobody looked" rendered exactly like
+    "nothing shipped". The row counts below still use ``total``, since how
+    much of the window is unresolved is itself worth showing.
     """
     cutoff = now - timedelta(days=LEVERAGE_WINDOW_DAYS)
     recent = [s for s in sessions if s.start >= cutoff]
@@ -63,7 +85,8 @@ def summarize(sessions: list[AiSession], now: datetime) -> LeverageSummary:
     closed = sum(1 for s in recent if s.pr_state == "closed")
     none = sum(1 for s in recent if s.pr_state == "none")
     unsynced = sum(1 for s in recent if not s.pr_state)
-    pct = int((merged / total) * 100) if total else 0
+    resolved = total - unsynced
+    pct = int((merged / resolved) * 100) if resolved else 0
     ttm = [s.time_to_merge_s for s in recent if s.time_to_merge_s is not None]
     rc = [s.review_comments for s in recent if s.review_comments is not None]
     return LeverageSummary(

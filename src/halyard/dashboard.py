@@ -1848,10 +1848,17 @@ def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
     unsynced = summary.unsynced
 
     leverage_pct = summary.pct
+    # v5.42: an unmeasured panel takes no colour band. The bands are
+    # low/mid/high, and styling "nobody has resolved these yet" as `low`
+    # is what made "not checked" read as "failed".
     fill_class = (
-        "leverage-high"
-        if leverage_pct >= 50
-        else ("leverage-mid" if leverage_pct >= 20 else "leverage-low")
+        (
+            "leverage-high"
+            if leverage_pct >= 50
+            else ("leverage-mid" if leverage_pct >= 20 else "leverage-low")
+        )
+        if summary.measured
+        else "leverage-unmeasured"
     )
 
     rows = [
@@ -1908,13 +1915,27 @@ def _leverage_panel(sessions: list[AiSession], now: datetime) -> str:
     if mcp is not None:
         mcp_html = f"<p class='leverage-mcp'>{_e(leverage.render_mcp_phrase(mcp))}</p>"
 
+    # v5.42: an unresolved window shows an em dash and says so, rather than
+    # a percentage. "Nobody looked" and "nothing shipped" must not render
+    # as the same grey 0%.
+    if summary.measured:
+        headline = f"{leverage_pct}%"
+        caption = (
+            f"<strong>{merged}</strong> of <strong>{summary.resolved}</strong> "
+            "resolved sessions landed in merged PRs"
+        )
+    else:
+        headline = "—"
+        caption = (
+            f"No outcome resolved yet for any of <strong>{total}</strong> "
+            "sessions — this is not a score of zero"
+        )
+
     return (
         "<div class='leverage-grid'>"
-        f"<div class='leverage-headline'>"
-        f"<div class='leverage-pct {fill_class}'>{leverage_pct}%</div>"
-        f"<div class='leverage-caption'>"
-        f"<strong>{merged}</strong> of <strong>{total}</strong> sessions landed in merged PRs"
-        "</div>"
+        "<div class='leverage-headline'>"
+        f"<div class='leverage-pct {fill_class}'>{headline}</div>"
+        f"<div class='leverage-caption'>{caption}</div>"
         f"{friction}"
         f"{struggle_html}"
         f"{mcp_html}"

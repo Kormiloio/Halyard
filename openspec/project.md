@@ -2037,6 +2037,38 @@ layers must read from this local source of truth; they do not replace it.
       limitation: Codex is subscription-billed, so its figure is what the
       tokens would cost at API list rate — consumption, not the invoice.
 
+    - **v5.42 — "Did it ship?" could not answer yes:** on a machine that
+      had merged four PRs that afternoon the Leverage panel read `0%`,
+      `0 of 140 sessions landed in merged PRs`, `Not synced 140 (100%)`.
+      Two defects, the second hiding the first. (1) `fetch_prs_for_branch`
+      ran `gh pr list --head <branch>` with no `--state`, and gh defaults
+      to **open** — so a merged PR, the one outcome the panel exists to
+      report, was invisible to the resolver. Demonstrated against this
+      repo's own branch: bare returns `[]`, `--state all` returns PR #38
+      MERGED. `outcome sync` therefore resolved every session to "no PR"
+      and wrote that as fact; a dry run gave 92 of 92 → none. The feature
+      asked a question it had made unanswerable. (2) `pct = merged / total`
+      counted unresolved sessions in the denominator, so an unsynced window
+      computed `0 / 140` and the colour band was picked from that same
+      number — an unmeasured panel styled `leverage-low`, i.e. as a bad
+      result. The same collapse as v5.29/v5.30/v5.31/v5.35/v5.41: a missing
+      measurement rendering as a confident zero. The panel's own struggle
+      line already disclosed "rest: not captured" and its comment said
+      rejections are "never a bare 0" — the rule was known and applied to
+      the secondary line, not the headline. Fixed with `--state all`, a
+      versioned cache key (the 1-hour TTL would otherwise have made the fix
+      appear not to work), `resolved`/`measured` on the summary, and an
+      unmeasured render showing `—` with no colour band. The v2.70 TUI
+      parity test caught that `LeveragePane` needed the same treatment,
+      which is precisely what it exists for. Spec in
+      `openspec/changes/v5.42-did-it-ship/`.
+      **Status: done; 1990 tests passing** (+8). Verified on live data:
+      re-sync moved 92 sessions from 0 merged to **53 merged**, and the
+      panel reads **57% (53 of 92 resolved)**. Known limitation: a session
+      whose branch was deleted and whose PR was squashed under a different
+      head name stays unresolvable — nothing in the ledger records the PR
+      number — so "no PR" remains slightly over-reported.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

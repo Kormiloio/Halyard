@@ -190,6 +190,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .leverage-pct.leverage-high { color: #5cd28b; }
 .leverage-pct.leverage-mid { color: #f3bf5b; }
 .leverage-pct.leverage-low { color: var(--muted); }
+/* v5.42: nothing resolved yet — deliberately not one of the score bands,
+   so an unmeasured panel cannot be read as a low score. */
+.leverage-pct.leverage-unmeasured { color: var(--muted); opacity: .55; }
 .leverage-caption { font-size: 13px; color: var(--muted); }
 .leverage-caption strong { color: var(--fg); }
 .leverage-friction { font-size: 12px; color: var(--muted); margin: 2px 0 0; }

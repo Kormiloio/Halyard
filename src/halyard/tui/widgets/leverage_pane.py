@@ -35,10 +35,18 @@ class LeveragePane(Static):
             self.update(self.last_rendered_text)
             return
 
+        # v5.42: parity with the web panel — the share is over *resolved*
+        # sessions, and a window where nothing has been resolved says so
+        # instead of printing a 0% that reads as "nothing shipped".
+        headline = (
+            f"Shipped {s.pct}%  ({s.merged} of {s.resolved} resolved in merged PRs)"
+            if s.measured
+            else f"Shipped —  (no outcome resolved yet for {s.total} sessions)"
+        )
         lines = [
             "⚑ Leverage (30d)",
             "",
-            f"Shipped {s.pct}%  ({s.merged} of {s.total} in merged PRs)",
+            headline,
         ]
         # v3.1: friction line, parity with web; only when data exists.
         friction = []
