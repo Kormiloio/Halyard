@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.11] — 2026-09-06
+
 ### Fixed
 
 - **Projects and models from last month were invisible (v5.43).** The
