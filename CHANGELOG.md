@@ -6,6 +6,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Every cost was `$0.00` (v5.41).** Not "you spent nothing" — nothing was
+  ever priced. Two independent causes, both turning *unpriced* into *free*:
+
+  - The bundled rate table was a 2026-05 snapshot and contained none of the
+    models actually in use, and `calculate_cost` returns `0.00` for an
+    unknown model. Two entries that *were* present carried the previous
+    generation's rates — `claude-opus-4-7` at $15/$75 and
+    `claude-haiku-4-5` at $0.80/$4.00 — so where the table did answer, it
+    could be wrong by 3x.
+  - Most collectors hardcoded `cost_usd=0.0` regardless, including Codex,
+    which is the majority of most users' token volume.
+
+  Current rates are now sourced from each vendor's own pricing page, the
+  two incorrect entries are corrected, and costs resolve at **read time**.
+  That last part matters: sessions already recorded gain their cost on
+  upgrade, and a future rate correction reaches history rather than being
+  frozen into the row the way the stale table was. A cost the tool itself
+  reported is never overwritten.
+
+  On-device models (MLX, GGUF) are now classified as local by every
+  collector, not just Junie — so this change prices your API work without
+  starting to charge you for inference that ran on your own laptop.
+
+  A model with no published rate now reads **n/a** instead of `$0.00`, and
+  `halyard doctor` names those models. `halyard update-pricing` is the way
+  to add one.
+
+- **Two models were missing from the published pricing table (v5.41).**
+  `gemini-2.5-pro` and `gemini-2.5-flash` were written as unquoted dotted
+  TOML keys, which parse as nested tables — so neither had ever existed as
+  a key in the table `update-pricing` fetches. Anyone who had run it was
+  silently getting no rate for those models.
+
 ## [0.2.8] — 2026-09-06
 
 ### Fixed

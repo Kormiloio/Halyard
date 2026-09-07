@@ -2086,17 +2086,29 @@ def _model_table(buckets: Iterable[CostBucket]) -> str:
     bucket_list = list(buckets)
     if not bucket_list:
         return '<p class="empty">No model data yet.</p>'
-    total_cost = sum(b.cost_usd for b in bucket_list) or 1.0
+    # v5.41: a bucket whose model has no rate is unpriced, not free. Its
+    # cost cell reads n/a and it is excluded from the share denominator, so
+    # one unpriced model cannot make every other row read 0%.
+    total_cost = sum(b.cost_usd for b in bucket_list if b.priced)
     rows = []
     for bucket in bucket_list:
-        pct = int((bucket.cost_usd / total_cost) * 100)
-        pct_label = f"{pct}%" if pct > 0 or bucket.cost_usd == 0 else "<1%"
+        pct = int((bucket.cost_usd / total_cost) * 100) if total_cost else 0
+        if not bucket.priced:
+            cost_html = (
+                '<span class="muted" title="No published rate for this model; '
+                'tokens are captured, spend is not priced.">n/a</span>'
+            )
+            share_html = '<span class="muted">n/a</span>'
+        else:
+            cost_html = f"${bucket.cost_usd:.2f}"
+            pct_label = f"{pct}%" if pct > 0 or bucket.cost_usd == 0 else "<1%"
+            share_html = _bar_cell(pct, pct_label)
         rows.append(
             [
                 {"html": _e(bucket.label)},
                 {"cls": "num", "html": str(bucket.sessions)},
-                {"cls": "num", "html": f"${bucket.cost_usd:.2f}"},
-                {"html": _bar_cell(pct, pct_label)},
+                {"cls": "num", "html": cost_html},
+                {"html": share_html},
             ]
         )
     return str(

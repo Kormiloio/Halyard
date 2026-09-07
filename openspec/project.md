@@ -1996,6 +1996,47 @@ layers must read from this local source of truth; they do not replace it.
       **Status: done; 1952 tests passing** (+4). Verified on live data: six
       sessions carry a path where five did, Mycelium among them.
 
+    - **v5.41 — the money column was always zero:** every cost Halyard had
+      ever reported was `$0.00` — 437 sessions in the cache, none with a
+      cost. Two independent causes, both turning *unpriced* into *free*.
+      (1) The bundled rate table was snapshotted 2026-05 and held none of
+      the models in use — `gpt-5.6-sol` (288 sessions), `claude-opus-5`,
+      `gpt-5.6-terra`, `claude-sonnet-5`, `gemini-3.6-flash` — while
+      `calculate_cost` returns `0.0` for an unknown model. Two entries that
+      *were* present carried the previous generation's rates:
+      `claude-opus-4-7` at $15/$75 (Opus 4.1's) and `claude-haiku-4-5` at
+      $0.80/$4.00 (Haiku 3.5's), so where the table answered it could be
+      wrong by 3x. (2) `codex_app` hardcoded `cost_usd=0.0` — 82% of all
+      token volume — as did cursor, copilot, windsurf, vscode_otel, and
+      antigravity. `model_is_known()` existed the whole time and was used
+      only to validate a `settings.json` value, never to flag a session.
+      Fixed by sourcing current rates from the vendors' own pricing pages
+      (cited in `design.md`), correcting the two wrong entries, and adding
+      `resolve_costs` — **read-time** repricing in `parse_sessions` after
+      the v5.40 collapse, so the rows already on disk gain their cost
+      without the append-only ledger being rewritten, and a later rate
+      correction reaches history instead of being frozen into a row the way
+      the stale table was. Codex is deliberately *not* priced in the
+      collector for that reason. Local models had to be generalised in the
+      same change — `_LOCAL_MODEL_MARKERS` moved out of `junie.py` into the
+      shared collector module — because pricing the table without it would
+      not have left the two `muse-glimmer:30b-mlx` sessions at zero, it
+      would have started charging API rates for compute that ran on the
+      user's own laptop. `cost_is_known` derives from the model *name* as
+      well as stored `billing`, so pre-v5.41 local rows read known-free
+      without a re-import. Unpriced now renders `n/a` and is excluded from
+      the share denominator, with a `pricing.unpriced` doctor check naming
+      the models. **A dotted TOML key is a silent unpricing** — the guard
+      test written for the new entries found the bug already shipped:
+      `gemini-2.5-pro` and `gemini-2.5-flash` were bare-dotted in
+      `pricing/models.toml`, so neither had ever existed as a key in the
+      remote table. Spec in
+      `openspec/changes/v5.41-cost-was-always-zero/`.
+      **Status: done; 1982 tests passing** (+30). Verified on live data:
+      the hub reprices from `$0.00` to **$839.70** across 98 rows. Known
+      limitation: Codex is subscription-billed, so its figure is what the
+      tokens would cost at API list rate — consumption, not the invoice.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

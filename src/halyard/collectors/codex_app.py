@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from halyard.ai_log import AI_LOG_FILENAME, AiSession, append_session, find_project_dir
-from halyard.collectors import iter_bounded_lines, normalise_input
+from halyard.collectors import iter_bounded_lines, model_is_local, normalise_input
 from halyard.git_context import commits_in_window, current_branch, infer_project
 from halyard.hub import find_hub
 
@@ -292,10 +292,14 @@ def _parse_session_file(path: Path) -> tuple[AiSession, str | None] | None:
         model=model,
         input_tokens=net_input,
         output_tokens=output_tokens,
+        # v5.41: left at 0.0 deliberately. Codex reports no cost of its own,
+        # so there is nothing better to record here — `resolve_costs` prices
+        # it at read time, which means a rate correction reaches history
+        # instead of being frozen into the row the way the stale table was.
         cost_usd=0.0,
         cache_read=cached_input or None,
         tokens_available=tokens_available,
-        billing="credits",
+        billing="local" if model_is_local(model) else "credits",
         source="sdk",
         tool_calls=tool_calls if tool_calls else None,
         tool_errors=tool_errors if tool_calls else None,

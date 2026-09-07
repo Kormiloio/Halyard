@@ -21,6 +21,11 @@ class CostBucket:
     label: str
     cost_usd: float
     sessions: int
+    # v5.41: False when no session in the bucket has a priced model, so
+    # surfaces render "n/a" rather than "$0.00". A zero reads as "this work
+    # was free"; n/a reads as "this was never priced" — the same distinction
+    # ToolUsageBucket.spend_tracked draws for tools that report no tokens.
+    priced: bool = True
 
 
 @dataclass(frozen=True)
@@ -740,8 +745,15 @@ def _bucket_costs(
     # Pre-calculate costs with Decimal precision
     costs = {label: sum_spend(s_list) for label, s_list in totals.items()}
 
+    from halyard.pricing import cost_is_known
+
     return [
-        CostBucket(label=label, cost_usd=costs[label], sessions=len(totals[label]))
+        CostBucket(
+            label=label,
+            cost_usd=costs[label],
+            sessions=len(totals[label]),
+            priced=any(cost_is_known(s.model, s.billing) for s in totals[label]),
+        )
         for label in sorted(totals.keys(), key=lambda lbl: -costs[lbl])
     ]
 

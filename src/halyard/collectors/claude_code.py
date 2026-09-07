@@ -34,6 +34,7 @@ from halyard.collectors import (
     _MAX_SESSION_SECONDS,
     foreign_harness,
     iter_bounded_lines,
+    model_is_local,
     session_has_evidence,
     session_is_implausible,
     session_is_synthetic_telemetry,
@@ -305,6 +306,13 @@ def _parse_claude_transcript(path: Path) -> tuple[AiSession, str | None] | None:
         cost = calculate_cost(
             model, stats.input_tokens, stats.output_tokens, stats.cache_read, stats.cache_write
         )
+    # v5.41: on-device inference is genuinely free. Two sessions on
+    # `muse-glimmer:30b-mlx` — 2.95M tokens — were recorded billing="api",
+    # which would have started charging API rates once v5.41 priced the
+    # table. Tokens still count toward usage; only spend is excluded.
+    local = model_is_local(model)
+    if local:
+        cost = 0.0
 
     session = AiSession(
         start=stats.start_dt,
@@ -314,6 +322,7 @@ def _parse_claude_transcript(path: Path) -> tuple[AiSession, str | None] | None:
         input_tokens=stats.input_tokens,
         output_tokens=stats.output_tokens,
         cost_usd=cost,
+        billing="local" if local else "api",
         cache_read=stats.cache_read or None,
         cache_write=stats.cache_write or None,
         tokens_available=stats.input_tokens > 0 or stats.output_tokens > 0,
@@ -543,6 +552,10 @@ def handle_stop_hook() -> int:
         )
     else:
         cost = calculate_cost(model, input_tokens, output_tokens, cache_read, cache_write)
+    # v5.41: see the import path above — a local model is billed as local.
+    local = model_is_local(model)
+    if local:
+        cost = 0.0
 
     # v2.24: commit count and code delta
     commit_count = commits_in_window(cwd, start, now)
@@ -580,6 +593,7 @@ def handle_stop_hook() -> int:
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cost_usd=cost,
+        billing="local" if local else "api",
         project=_project,
         cache_read=cache_read or None,
         cache_write=cache_write or None,

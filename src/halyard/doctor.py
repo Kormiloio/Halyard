@@ -71,6 +71,7 @@ def build_doctor_report(
     checks.extend(_ledger_duplicate_checks(project_dir, hub_dir))
     checks.extend(_human_time_coverage_checks(project_dir, hub_dir))
     checks.extend(_truncated_transcript_checks())
+    checks.extend(_unpriced_model_checks(_sessions_for(project_dir, hub_dir)))
     if first_capture:
         checks.append(_first_capture_check(project_dir, hub_dir, now=now or datetime.now()))
 
@@ -1625,6 +1626,52 @@ def _truncated_transcript_checks() -> list[DoctorCheck]:
             fix=(
                 "inspect ~/.halyard/diagnostic.log — a transcript past the parse "
                 "budget is read only up to that point"
+            ),
+        )
+    ]
+
+
+def _unpriced_model_checks(sessions: list[AiSession] | None = None) -> list[DoctorCheck]:
+    """Name models carrying tokens but no published rate (v5.41).
+
+    Before v5.41 an unpriced model was indistinguishable from a free one:
+    `calculate_cost` returned 0.0 for anything missing from the table, and
+    every surface rendered that as "$0.00". The whole table had gone stale,
+    so 437 sessions reported no spend at all and nothing said why.
+
+    Only models that actually carry tokens are reported — a zero-token row
+    has nothing to price, so naming it would be noise. Local models are
+    excluded: their zero is a measurement.
+    """
+    from halyard.pricing import cost_is_known
+
+    if sessions is None:
+        return []
+
+    unpriced: dict[str, int] = {}
+    for s in sessions:
+        if (s.input_tokens or 0) + (s.output_tokens or 0) <= 0:
+            continue
+        if cost_is_known(s.model, s.billing):
+            continue
+        unpriced[s.model or "(unnamed)"] = unpriced.get(s.model or "(unnamed)", 0) + 1
+
+    if not unpriced:
+        return []
+
+    named = ", ".join(f"{m} ({n})" for m, n in sorted(unpriced.items(), key=lambda kv: -kv[1])[:3])
+    return [
+        DoctorCheck(
+            id="pricing.unpriced",
+            label="Unpriced models",
+            status="warning",
+            detail=(
+                f"{sum(unpriced.values())} session(s) on {len(unpriced)} model(s) "
+                f"have no published rate ({named}) — their spend reads n/a, not $0.00"
+            ),
+            fix=(
+                "run 'halyard update-pricing', or add the rate to "
+                "~/.halyard/pricing.toml under [models]"
             ),
         )
     ]

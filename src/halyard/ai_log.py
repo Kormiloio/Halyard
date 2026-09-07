@@ -798,7 +798,10 @@ def parse_sessions(project_dir: Path, *, now: datetime | None = None) -> list[Ai
     # v5.39: resolve mapped paths *before* the collapse, so every row in a
     # job group carries the project and v5.36's inheritance has nothing left
     # to disagree about.
-    return collapse_gemini_sessions(resolve_paths(surfaced))
+    # v5.41: repricing runs *after* the collapse — the canonical row is the
+    # one whose token counts are correct, and pricing a row that is about to
+    # be discarded is wasted work that could also disagree with the survivor.
+    return resolve_costs(collapse_gemini_sessions(resolve_paths(surfaced)))
 
 
 _GEMINI_JOB_PREFIX = "gemini:"
@@ -1011,6 +1014,52 @@ def resolve_paths(sessions: list[AiSession]) -> list[AiSession]:
     for s in sessions:
         slug = mapping.get(s.source_path) if s.source_path and not s.project else None
         out.append(replace(s, project=slug, attr_method="path-map") if slug else s)
+    return out
+
+
+def resolve_costs(sessions: list[AiSession]) -> list[AiSession]:
+    """Price rows whose cost was never computed (v5.41).
+
+    Every cost in this ledger was ``$0.00`` because the pricing table
+    predated every model in use and ``calculate_cost`` returns 0.0 for an
+    unknown model, while most collectors hardcoded zero outright. Storing
+    only the computed figure baked that zero into hundreds of rows
+    permanently.
+
+    Repricing at read time means adding a rate fixes history, exactly as
+    v5.36's slug alias and v5.39's path map do for attribution. The
+    append-only ledger is never rewritten.
+
+    Left alone, in order:
+      - a row that already carries a non-zero cost. The collector had
+        direct evidence then (Junie and Claude Code report a
+        vendor-computed figure); a table lookup now is weaker.
+      - a local-model row. Its zero is a measurement, not a gap.
+      - a row whose model has no rate. Still zero, but ``cost_is_known``
+        reports it as unpriced so surfaces can render "n/a" rather than
+        a confident "$0.00".
+    """
+    from halyard.collectors import model_is_local
+    from halyard.pricing import calculate_cost, cost_is_known
+
+    out: list[AiSession] = []
+    for s in sessions:
+        if (
+            s.cost_usd
+            or s.billing == "local"
+            or model_is_local(s.model)
+            or not cost_is_known(s.model, s.billing)
+        ):
+            out.append(s)
+            continue
+        priced = calculate_cost(
+            s.model,
+            s.input_tokens or 0,
+            s.output_tokens or 0,
+            s.cache_read or 0,
+            s.cache_write or 0,
+        )
+        out.append(replace(s, cost_usd=priced) if priced else s)
     return out
 
 

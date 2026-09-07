@@ -247,3 +247,27 @@ def foreign_harness(payload: dict[str, object]) -> str | None:
     if any(marker in payload for marker in _GROK_PAYLOAD_MARKERS):
         return "grok"
     return None
+
+
+# v5.41: on-device model markers. Written for Junie in v5.38 and applied by
+# that collector alone, which left two `claude-code` sessions on
+# `muse-glimmer:30b-mlx` — 2.95M tokens of local inference — recorded as
+# `billing="api"`. Shared here so every collector answers the question the
+# same way. This had to land with the v5.41 rate table rather than after
+# it: pricing unpriced models without this would not leave those sessions
+# at zero, it would start charging API rates for compute that ran on the
+# user's own laptop.
+_LOCAL_MODEL_MARKERS = ("-mlx", "mlx-", "-gguf", "local/")
+
+
+def model_is_local(model: str | None) -> bool:
+    """Heuristic: an on-device model, so a zero cost is real, not missing.
+
+    Deliberately a name check and never `cost == 0.0`. A *hosted* model
+    reporting zero — a free tier, a billing outage — must not be silently
+    reclassified as local and dropped out of the spend series.
+    """
+    if not model:
+        return False
+    lower = model.lower()
+    return any(marker in lower for marker in _LOCAL_MODEL_MARKERS)
