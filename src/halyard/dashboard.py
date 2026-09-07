@@ -31,6 +31,7 @@ from halyard.reports import (
     CostBucket,
     DashboardState,
     TimeBucket,
+    build_ai_report,
     build_dashboard_state,
     format_minutes,
     parse_timeclock,
@@ -769,6 +770,15 @@ def _render_state(
     health_level = _overall_health(state)
     usage = build_usage_analytics(state.all_sessions, range_key=usage_range, now=state.generated_at)
 
+    # v5.43: `report` is scoped to the current calendar month, which is right
+    # for money and wrong for inventory. Which projects exist and which
+    # models you use are not monthly facts — on the 1st of a month the
+    # month-scoped roster is empty and every project appears to have
+    # vanished. An observed session on 08-27 was invisible on 09-06 for
+    # exactly this reason, and read as an attribution failure. Spend and
+    # period summaries keep `report`; the inventory panels below do not.
+    inventory = build_ai_report(state.project_dir, all_time=True, sessions=state.all_sessions)
+
     # Budget data
     budgets = budget_status()
 
@@ -952,7 +962,7 @@ def _render_state(
         ),
         "voyage_panel": _voyage_panel(state),
         "captains_panel": _captains_quarters_panel(state.project_dir, report.sessions),
-        "friends_panel": _friends_panel(state.project_dir, report.sessions),
+        "friends_panel": _friends_panel(state.project_dir, inventory.sessions),
         "moat_panel": _moat_panel(state),
         "usage_h2": "Models" if usage_tab == "models" else "Overview",
         "range_control": _range_control(
@@ -975,7 +985,7 @@ def _render_state(
         "trail_pill": trail_pill,
         "trail_heatmap": _trail_heatmap_html(wake_sessions, wake_period),
         "tools_pill": tools_pill,
-        "tool_table": _tool_table(report.by_tool_usage),
+        "tool_table": _tool_table(inventory.by_tool_usage),
         "morse_log": _morse("LOG"),
         "sessions_pill": sessions_pill,
         "sessions_table": _sessions_table(report.sessions),
@@ -994,7 +1004,7 @@ def _render_state(
         "projects_pill": projects_pill,
         "bucket_table": _bucket_table(report.by_project, "Project"),
         "models_pill": models_pill,
-        "model_table": _model_table(report.by_model),
+        "model_table": _model_table(inventory.by_model),
         "surface_panel": (_surface_panel(report.by_tool_surface) if report.by_tool_surface else ""),
         "budget_pill": budget_pill,
         "budget_panel": _budget_panel(budgets),
@@ -2107,34 +2117,55 @@ def _model_table(buckets: Iterable[CostBucket]) -> str:
     bucket_list = list(buckets)
     if not bucket_list:
         return '<p class="empty">No model data yet.</p>'
-    # v5.41: a bucket whose model has no rate is unpriced, not free. Its
-    # cost cell reads n/a and it is excluded from the share denominator, so
-    # one unpriced model cannot make every other row read 0%.
-    total_cost = sum(b.cost_usd for b in bucket_list if b.priced)
+    # v5.43: Share is input+output token share, not cost share. Cost was the
+    # wrong denominator for a panel titled Mix — it answers "where did the
+    # money go", drops local and unpriced models out of the comparison, and
+    # before v5.41 made every row read 0% because every cost was $0.00.
+    # Every session has a token count, so no row leaves this denominator.
+    total_work = sum(b.work_tokens for b in bucket_list)
     rows = []
     for bucket in bucket_list:
-        pct = int((bucket.cost_usd / total_cost) * 100) if total_cost else 0
+        pct = int((bucket.work_tokens / total_work) * 100) if total_work else 0
+        pct_label = f"{pct}%" if pct > 0 or bucket.work_tokens == 0 else "<1%"
+        # The cost cell has three states, and only one of them is a number.
+        # v5.41: unpriced — no published rate, so spend is unknown.
+        # v5.43: credits — real work billed to a subscription, not the API.
+        #        `sum_spend` counts only billing == "api", so this bucket
+        #        sums to 0.00; printing that beside 17.4M tokens reads as
+        #        free. Share is unaffected: tokens are known either way.
         if not bucket.priced:
             cost_html = (
                 '<span class="muted" title="No published rate for this model; '
                 'tokens are captured, spend is not priced.">n/a</span>'
             )
-            share_html = '<span class="muted">n/a</span>'
+        elif bucket.local:
+            # A local zero is a measurement, not a gap (v5.41).
+            cost_html = (
+                '<span title="On-device model — genuinely $0.00, not a missing rate.">$0.00</span>'
+            )
+        elif not bucket.api_billed and bucket.work_tokens:
+            cost_html = (
+                '<span class="muted" title="Billed to a subscription or credit '
+                "pool, not the API — tokens are counted, dollars are not API "
+                'spend.">credits</span>'
+            )
         else:
             cost_html = f"${bucket.cost_usd:.2f}"
-            pct_label = f"{pct}%" if pct > 0 or bucket.cost_usd == 0 else "<1%"
-            share_html = _bar_cell(pct, pct_label)
         rows.append(
             [
                 {"html": _e(bucket.label)},
                 {"cls": "num", "html": str(bucket.sessions)},
+                {"cls": "num", "html": _e(compact_number(bucket.work_tokens))},
                 {"cls": "num", "html": cost_html},
-                {"html": share_html},
+                {"html": _bar_cell(pct, pct_label)},
             ]
         )
     return str(
         _panel_macros().data_table(
-            "models", "t,n,n,n", ["Model", "Sessions", "Cost", "Share"], rows
+            "models",
+            "t,n,n,n,n",
+            ["Model", "Sessions", "Tokens", "Cost", "Share"],
+            rows,
         )
     )
 

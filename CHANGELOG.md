@@ -6,6 +6,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Projects and models from last month were invisible (v5.43).** The
+  dashboard report is scoped to the **current calendar month**, so a
+  project last worked on before the 1st simply did not appear — on a clock
+  of September 6th, a session from August 27th was dropped along with 17
+  others. On the 1st of a month the Voyage Roster is empty and every
+  project looks like it has vanished.
+
+  A month is the right window for money and the wrong one for inventory.
+  The Voyage Roster, Models and Tools panels now show all activity; spend
+  and outcome panels keep their window.
+
+- **The Models "Share" column was a fraction of cost (v5.43).** While
+  costs were broken it read `0%` for every row, and even with costs
+  working it dropped local and unpriced models out of the comparison
+  entirely. Share is now input+output token share, with a Tokens column
+  added. Cache reads are excluded deliberately: they are ~97% of typical
+  token volume and track the tool's caching policy rather than work done,
+  and ranking by them inverts which tool appears dominant.
+
+- **A cost of `$0.00` no longer means four different things (v5.43).** The
+  cell now distinguishes real spend (`$12.34`), no published rate (`n/a`),
+  work billed to a subscription or credit pool rather than the API
+  (`credits`), and on-device inference that genuinely cost nothing
+  (`$0.00`).
+
 ## [0.2.10] — 2026-09-06
 
 ### Fixed

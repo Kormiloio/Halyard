@@ -26,6 +26,21 @@ class CostBucket:
     # was free"; n/a reads as "this was never priced" — the same distinction
     # ToolUsageBucket.spend_tracked draws for tools that report no tokens.
     priced: bool = True
+    # v5.43: input + output only. Cache reads are ~97% of token volume and
+    # track conversation length and the tool's caching policy rather than
+    # work done — ranking by them inverts which tool dominates. Defaulted so
+    # the other bucket construction sites are unaffected.
+    work_tokens: int = 0
+    # v5.43: False when nothing in the bucket is API-billed. `sum_spend`
+    # counts only `billing == "api"`, so a Codex bucket (billing="credits")
+    # sums to 0.00 — true as *API* spend, but rendered next to 17.4M tokens
+    # it reads as free. Surfaces label it rather than printing a zero.
+    api_billed: bool = True
+    # v5.43: every session ran on-device. Distinct from `not api_billed`:
+    # a local zero is a *measurement* (v5.41), where a credits bucket has
+    # real spend that simply is not API spend. Conflating them would label
+    # an MLX model as "billed to a subscription".
+    local: bool = False
 
 
 @dataclass(frozen=True)
@@ -745,6 +760,7 @@ def _bucket_costs(
     # Pre-calculate costs with Decimal precision
     costs = {label: sum_spend(s_list) for label, s_list in totals.items()}
 
+    from halyard.collectors import model_is_local
     from halyard.pricing import cost_is_known
 
     return [
@@ -753,6 +769,9 @@ def _bucket_costs(
             cost_usd=costs[label],
             sessions=len(totals[label]),
             priced=any(cost_is_known(s.model, s.billing) for s in totals[label]),
+            work_tokens=sum((s.input_tokens or 0) + (s.output_tokens or 0) for s in totals[label]),
+            api_billed=any(s.billing == "api" for s in totals[label]),
+            local=all(s.billing == "local" or model_is_local(s.model) for s in totals[label]),
         )
         for label in sorted(totals.keys(), key=lambda lbl: -costs[lbl])
     ]

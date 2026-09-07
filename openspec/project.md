@@ -2069,6 +2069,42 @@ layers must read from this local source of truth; they do not replace it.
       head name stays unresolvable — nothing in the ledger records the PR
       number — so "no PR" remains slightly over-reported.
 
+    - **v5.43 — inventory panels showed one calendar month and called it
+      everything:** the user asked three times why the Mycelium project was
+      absent from the dashboard. Attribution had been correct since v5.40 —
+      the ledger read `kormilo:mycelium 1 session`. The cause was unrelated:
+      `build_ai_report(all_time=False)` scopes the report to the **current
+      calendar month**, and the session was 2026-08-27 against a clock of
+      2026-09-06. Ten days ago, and gone. 18 of 115 sessions were being
+      dropped; on the 1st of a month the Voyage Roster is empty and every
+      project appears to have vanished. A month is the right window for
+      money and the wrong one for *inventory* — which projects exist, which
+      models you use, are not monthly facts. Roster, Models and Tools now
+      read an `all_time` report; spend and outcome panels keep the window.
+      **Also fixed the Models share metric:** it was a fraction of *cost*,
+      which read `0%` for every row while v5.41's bug made all costs
+      `$0.00`, and still dropped local and unpriced models out of the
+      comparison. It is now input+output token share — cache reads are
+      96.7% of this machine's volume and track caching policy rather than
+      work, and ranking by total inverts which tool dominates (claude-code
+      67% by total vs codex 78% by in+out). The sibling Tools table had
+      always used a cost-free share, which is why it rendered real numbers
+      while Models showed four zeros — same file, ~25 lines apart. Adding
+      the Tokens column then exposed a third case: 17.4M tokens beside
+      `$0.00` for Codex, because `sum_spend` counts only `billing == "api"`.
+      The cost cell now has four honest states — `$X`, `n/a` (unpriced),
+      `credits` (real spend, not API spend), and `$0.00` (local, a real
+      measurement). `local` is a separate flag from `api_billed` because the
+      first version labelled an MLX model "billed to a subscription". Spec
+      in `openspec/changes/v5.43-inventory-panels-window/`.
+      **Status: done; 2000 tests passing** (+10). Verified on live data:
+      `kormilo:mycelium` appears on the roster, and the Models table ranks
+      by work instead of showing zeros. Separately discovered the user's
+      dashboard process had been up since Tue Sep 1 and was serving
+      pre-v5.39 code, so none of v5.39–v5.42 was visible to them; restarted.
+      Deferred: "At a glance" still reports total tokens including cache and
+      labels a month-scoped spend without naming the period.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only
