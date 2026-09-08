@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **A moored voyage card now shows what it was moored against (v5.44).**
+  The stage is `sessions >= target`, and with no `voyages.toml` every
+  project silently uses a default target of 20 — so a project at 107
+  sessions read `Shipshape · Moored`, i.e. *finished*, while being
+  actively worked on. Active cards already showed their denominator
+  (`2 / 20`); the moored card, whose cause is the least obvious, was the
+  only one that hid it. Both the dashboard card and `halyard voyage` now
+  show `N / target`.
+
+  The target has always been settable per project and still is:
+
+  ```
+  halyard voyage set <project-slug> --sessions <n>
+  ```
+
+  The default stays at 20 deliberately — raising it would re-stage every
+  existing project and un-moor voyages that had legitimately finished.
+
 ## [0.2.11] — 2026-09-06
 
 ### Fixed
