@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.12] — 2026-09-08
+
 ### Changed
 
 - **A moored voyage card now shows what it was moored against (v5.44).**
