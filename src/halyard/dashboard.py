@@ -1284,7 +1284,16 @@ def _friends_panel(project_dir: Path, sessions: list[AiSession]) -> str:
         label = STAGE_LABELS.get(v.stage, v.stage)
         if v.stage == "moored":
             creature = _e(v.creature or "🦭")
+            # v5.44: moored is `sessions >= target`, and the target defaults
+            # to 20 when no voyages.toml exists. An observed project sat at
+            # 107 sessions — 535% of a target nobody set — and read as
+            # "finished" while being actively worked on. Active cards
+            # already show their denominator; this was the one state whose
+            # cause was least obvious and the only one hiding the numbers
+            # that explain it. `halyard voyage set <slug> --sessions <n>`.
+            count = f"{v.session_count} / {v.target_sessions}"
             trait = _e(v.creature_trait or "")
+            trait = f"{trait} · {count}" if trait else count
             cards += f"""
             <div class="friend-card friend-moored">
               <span class="friend-creature">{creature}</span>

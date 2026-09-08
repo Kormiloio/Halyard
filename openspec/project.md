@@ -2105,6 +2105,33 @@ layers must read from this local source of truth; they do not replace it.
       Deferred: "At a glance" still reports total tokens including cache and
       labels a month-scoped spend without naming the period.
 
+    - **v5.44 — a moored card never said what it was moored against:** the
+      user asked why their most active project read `Shipshape · Moored`.
+      The stage is `sessions >= target`, and with no `voyages.toml` every
+      project silently uses `_DEFAULT_TARGET = 20` — theirs sat at 107
+      sessions, **535% of a target nobody set**, labelled as finished while
+      being actively worked on. Nothing was broken: `halyard voyage set
+      <slug> --sessions <n>` has shipped for some time, writes
+      `~/.halyard/hub-data/voyages.toml`, and both it and the dashboard
+      resolve the same dir via `find_project_dir() or find_hub()` —
+      verified rather than assumed, since a mismatch there would have made
+      the command silently useless. The gap was that the card gave no way
+      to work any of that out: active cards already render their
+      denominator (`2 / 20`), and the moored branch — the state whose cause
+      is least obvious — was the only one hiding the two numbers that
+      explain it. Both the web card and the CLI roster now show
+      `N / target`, keeping an earned `creature_trait` where one exists.
+      Deliberately *not* done: raising the default, which would re-stage
+      every existing user's projects and un-moor legitimately finished
+      voyages; and a doctor check, since moored is a correct state and a
+      warning would advise changing a setting to stop a true label
+      appearing. Spec in
+      `openspec/changes/v5.44-moored-card-shows-target/`.
+      **Status: done; 2006 tests passing** (+6). Verified on live data: the
+      user's target set to 500, roster moved to `Anchors Aweigh 108 / 500`.
+      Known property, now visible rather than hidden: past 100% the stage
+      carries no information — 21 sessions and 107 read identically.
+
 ## Deferred or gated
 
 - **v3.0 outcome graph** — code-complete (see roadmap entry 54). The only

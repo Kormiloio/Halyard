@@ -47,9 +47,14 @@ def voyage_list(ctx: typer.Context) -> None:
         bar_filled = min(20, round(20 * v.session_count / max(v.target_sessions, 1)))
         bar = "▓" * bar_filled + "░" * (20 - bar_filled)
         if v.stage == "moored":
+            # v5.44: show the denominator here too. Moored is
+            # `sessions >= target` and the target defaults to 20, so this
+            # badge is the one most likely to surprise — and it was the
+            # only branch hiding the two numbers that explain it.
             console.print(
                 f"  {creature}  [bold]{v.slug}[/]  [green]{label}[/]"
                 + (f"  [dim]{v.creature_trait}[/]" if v.creature_trait else "")
+                + f"  [dim]{v.session_count}/{v.target_sessions}[/]"
             )
         else:
             console.print(
