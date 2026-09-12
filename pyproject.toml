@@ -29,7 +29,7 @@ dependencies = [
     "jinja2>=3.1,<4",
     "dateparser>=1.2,<2",
     "anthropic>=0.40,<1.0",
-    "textual>=0.60,<2.0",
+    "textual>=0.60,<9.0",
     "watchfiles>=1.2.0,<2",
 ]
 
