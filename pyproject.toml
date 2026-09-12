@@ -38,7 +38,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=5.0",
     "hypothesis>=6.0",
-    "ruff==0.15.12",
+    "ruff==0.16.6",
     "mypy>=2.1.0",
     "pip-audit>=2.10.1",  # L-4: CVE scanning for dependencies
     "freezegun>=1.5",  # v5.14: pin wall clock in May-2026-anchored tests
